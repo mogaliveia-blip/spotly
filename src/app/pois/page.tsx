@@ -1,5 +1,5 @@
-// src/app/pois/page.tsx
-import { fetchPois } from '@/lib/data';
+'use client';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -12,12 +12,35 @@ import {
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Eye, PlusCircle } from 'lucide-react';
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AppLayout } from '@/components/layout/app-layout';
+import { useAuth } from '@/hooks/use-auth-user';
+import { fetchPois } from '@/lib/data';
+import type { POI } from '@/lib/types';
 
-async function POIsTable() {
-  const pois = await fetchPois();
+
+function POIsTable() {
+  const [pois, setPois] = useState<POI[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function getPois() {
+      try {
+        const poiData = await fetchPois();
+        setPois(poiData);
+      } catch (error) {
+        console.error("Failed to fetch POIs", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    getPois();
+  }, []);
+
+  if (loading) {
+    return <Skeleton className="h-[300px] w-full" />;
+  }
 
   return (
     <Table>
@@ -50,6 +73,9 @@ async function POIsTable() {
 
 
 export default function POIsPage() {
+    const { role } = useAuth();
+    const canAddPoi = role === 'admin' || role === 'editor';
+
     return (
         <AppLayout>
             <div className="space-y-6">
@@ -59,12 +85,14 @@ export default function POIsPage() {
                         <CardTitle>Points of Interest</CardTitle>
                         <CardDescription>Browse and manage all available POIs.</CardDescription>
                     </div>
-                    <Button asChild>
-                        <Link href="/pois/new">
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Add POI
-                        </Link>
-                    </Button>
+                    {canAddPoi && (
+                        <Button asChild>
+                            <Link href="/pois/new">
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Add POI
+                            </Link>
+                        </Button>
+                    )}
                     </CardHeader>
                     <CardContent>
                         <Suspense fallback={<Skeleton className="h-[300px] w-full" />}>
