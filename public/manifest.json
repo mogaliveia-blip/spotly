@@ -1,0 +1,16 @@
+{
+  "name": "Eventide Guide",
+  "short_name": "Eventide",
+  "description": "Your guide to event points of interest.",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#673AB7",
+  "background_color": "#EEEEEE"
+}

@@ -1,3 +1,58 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "poi-1-header",
+      "description": "Main Stage Header",
+      "imageUrl": "https://images.unsplash.com/photo-1563841930606-67e2bce48b78?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxjb25jZXJ0JTIwc3RhZ2V8ZW58MHx8fHwxNzY3MjU2NTU0fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "concert stage"
+    },
+    {
+      "id": "poi-1-gallery-1",
+      "description": "Crowd at concert",
+      "imageUrl": "https://images.unsplash.com/photo-1682133114083-81319fc857fe?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxmZXN0aXZhbCUyMGNyb3dkfGVufDB8fHx8MTc2NzI5MTc1NXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "festival crowd"
+    },
+    {
+      "id": "poi-1-gallery-2",
+      "description": "Band playing on stage",
+      "imageUrl": "https://images.unsplash.com/photo-1566808907623-51b8fc382454?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxtdXNpYyUyMGJhbmR8ZW58MHx8fHwxNzY3MjU3MDY4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "music band"
+    },
+    {
+      "id": "poi-1-gallery-3",
+      "description": "Night lights at festival",
+      "imageUrl": "https://images.unsplash.com/photo-1742656376567-c7a55b55612b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHxmZXN0aXZhbCUyMGxpZ2h0c3xlbnwwfHx8fDE3NjcxOTI4Njd8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "festival lights"
+    },
+    {
+      "id": "poi-2-header",
+      "description": "Food Truck Alley Header",
+      "imageUrl": "https://images.unsplash.com/photo-1620589125156-fd5028c5e05b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxmb29kJTIwdHJ1Y2tzfGVufDB8fHx8MTc2NzI5MTc1NXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "food trucks"
+    },
+    {
+      "id": "poi-2-gallery-1",
+      "description": "Close up of street food",
+      "imageUrl": "https://images.unsplash.com/photo-1556403806-90f55c9db1e1?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxzdHJlZXQlMjBmb29kfGVufDB8fHx8MTc2NzI1NDMwNXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "street food"
+    },
+    {
+      "id": "poi-2-gallery-2",
+      "description": "People ordering from food truck",
+      "imageUrl": "https://images.unsplash.com/photo-1466978913421-dad2ebd01d17?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxwZW9wbGUlMjBlYXRpbmd8ZW58MHx8fHwxNzY3MjkxNzU2fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "people eating"
+    },
+    {
+      "id": "poi-3-header",
+      "description": "Artisan Market Header",
+      "imageUrl": "https://images.unsplash.com/photo-1510247854398-8e6a1ac45557?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxhcnRpc2FuJTIwbWFya2V0fGVufDB8fHx8MTc2NzE4OTkxMXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "artisan market"
+    },
+    {
+      "id": "poi-3-gallery-1",
+      "description": "Handcrafted jewelry",
+      "imageUrl": "https://images.unsplash.com/photo-1758995116383-f51775896add?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxoYW5kY3JhZnRlZCUyMGpld2Vscnl8ZW58MHx8fHwxNzY3MjkxNzU1fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "handcrafted jewelry"
+    }
+  ]
 }
