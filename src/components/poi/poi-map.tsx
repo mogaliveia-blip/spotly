@@ -7,10 +7,10 @@ import { Button } from '../ui/button';
 import { useRouter } from 'next/navigation';
 import { MapPin, User } from 'lucide-react';
 import { getDistance } from '@/lib/utils';
+import { useGeolocation } from '@/providers/geolocation-provider';
 
 interface POIMapProps {
   pois: POI[];
-  userLocation: { lat: number; lng: number } | null;
 }
 
 const mapStyles = [
@@ -36,9 +36,10 @@ const mapStyles = [
   },
 ];
 
-export function POIMap({ pois, userLocation }: POIMapProps) {
+export function POIMap({ pois }: POIMapProps) {
   const router = useRouter();
   const [selectedPoi, setSelectedPoi] = useState<POI | null>(null);
+  const { userLocation } = useGeolocation();
 
   const defaultCenter = userLocation || (pois.length > 0 ? pois[0].location : { lat: 48.8566, lng: 2.3522 });
 

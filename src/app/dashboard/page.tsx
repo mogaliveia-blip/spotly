@@ -10,13 +10,13 @@ import { PlusCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { fetchPois } from '@/lib/data';
 import type { POI } from '@/lib/types';
-import { useGeolocation } from '@/hooks/use-geolocation';
+import { useGeolocation } from '@/providers/geolocation-provider';
 
 export default function DashboardPage() {
   const { role } = useAuth();
   const [pois, setPois] = useState<POI[]>([]);
   const [loading, setLoading] = useState(true);
-  const { coordinates: userLocation } = useGeolocation();
+  const { userLocation } = useGeolocation();
 
   useEffect(() => {
     async function getPois() {
@@ -54,7 +54,7 @@ export default function DashboardPage() {
         <CardContent>
           <Suspense fallback={<Skeleton className="h-[500px] w-full rounded-lg" />}>
             <div className="h-[500px] w-full overflow-hidden rounded-lg border">
-                {loading ? <Skeleton className="h-full w-full" /> : <POIMap pois={pois} userLocation={userLocation} />}
+                {loading ? <Skeleton className="h-full w-full" /> : <POIMap pois={pois} />}
             </div>
           </Suspense>
         </CardContent>

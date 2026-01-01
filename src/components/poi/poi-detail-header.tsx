@@ -3,7 +3,7 @@ import type { POI } from '@/lib/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Star } from 'lucide-react';
 import { POIMap } from './poi-map';
-import { useGeolocation } from '@/hooks/use-geolocation';
+import { useGeolocation } from '@/providers/geolocation-provider';
 import { getDistance } from '@/lib/utils';
 import { Skeleton } from '../ui/skeleton';
 
@@ -12,7 +12,7 @@ interface POIDetailHeaderProps {
 }
 
 export function POIDetailHeader({ poi }: POIDetailHeaderProps) {
-    const { coordinates: userLocation, loading } = useGeolocation();
+    const { userLocation, loading } = useGeolocation();
 
     const renderStars = (rating: number) => {
         const stars = [];
@@ -42,14 +42,14 @@ export function POIDetailHeader({ poi }: POIDetailHeaderProps) {
                 </span>
             </div>
             {loading && <Skeleton className="h-5 w-24" />}
-            {userLocation && (
+            {!loading && userLocation && (
                 <div className="font-semibold text-sm">
                     À {getDistance(userLocation.lat, userLocation.lng, poi.location.lat, poi.location.lng).toFixed(2)} km de vous
                 </div>
             )}
           </div>
           <div className="h-[300px] md:h-full w-full min-h-[200px]">
-            <POIMap pois={[poi]} userLocation={userLocation} />
+            <POIMap pois={[poi]} />
           </div>
         </div>
       </CardContent>

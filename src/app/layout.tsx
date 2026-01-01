@@ -4,6 +4,7 @@ import { AuthProvider } from '@/providers/auth-provider';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import { MapsApiProvider } from '@/providers/maps-api-provider';
+import { GeolocationProvider } from '@/providers/geolocation-provider';
 
 export const metadata: Metadata = {
   title: 'Eventide Guide',
@@ -30,10 +31,12 @@ export default function RootLayout({
       </head>
       <body className={cn('font-body antialiased')}>
         <MapsApiProvider>
-            <AuthProvider>
+          <AuthProvider>
+            <GeolocationProvider>
               {children}
               <Toaster />
-            </AuthProvider>
+            </GeolocationProvider>
+          </AuthProvider>
         </MapsApiProvider>
       </body>
     </html>
