@@ -20,7 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { useState, useEffect } from 'react';
-import { Loader2, MapPin } from 'lucide-react';
+import { Loader2, MapPin, Crosshair } from 'lucide-react';
 import type { POI } from '@/lib/types';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
@@ -46,6 +46,7 @@ export function POIForm({ poi }: POIFormProps) {
   const [loading, setLoading] = useState(false);
   const { userLocation, loading: geoLoading } = useGeolocation();
   const fallbackCenter = { lat: 48.8566, lng: 2.3522 }; // Paris
+  const [map, setMap] = useState<google.maps.Map | null>(null);
 
   const form = useForm<POIFormValues>({
     resolver: zodResolver(formSchema),
@@ -96,6 +97,13 @@ export function POIForm({ poi }: POIFormProps) {
   
   const mapCenter = userLocation || poi?.location || fallbackCenter;
 
+  const handleRecenter = () => {
+    if (map && userLocation) {
+      map.panTo(userLocation);
+      map.setZoom(14);
+    }
+  };
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
@@ -132,13 +140,14 @@ export function POIForm({ poi }: POIFormProps) {
           <div className="space-y-6">
             <Card>
                 <CardHeader><CardTitle>Emplacement</CardTitle></CardHeader>
-                <CardContent>
+                <CardContent className="relative">
                     <FormLabel>Cliquez sur la carte pour définir l'emplacement</FormLabel>
                     <div className="h-[400px] w-full overflow-hidden rounded-lg border mt-2">
                         {geoLoading ? (
                             <Skeleton className="h-full w-full" />
                         ) : (
                             <Map
+                                ref={setMap}
                                 defaultCenter={mapCenter}
                                 defaultZoom={13}
                                 gestureHandling={'greedy'}
@@ -159,6 +168,13 @@ export function POIForm({ poi }: POIFormProps) {
                         )}
                     </div>
                      <FormMessage>{form.formState.errors.location?.message}</FormMessage>
+                     {userLocation && (
+                        <div className="absolute bottom-4 right-4 z-10">
+                            <Button size="icon" onClick={handleRecenter} type="button" title="Recentrer sur ma position">
+                                <Crosshair className="h-5 w-5" />
+                            </Button>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
           </div>
