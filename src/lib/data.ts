@@ -3,6 +3,9 @@
 
 import type { POI, Review, AppUser, UserRole } from './types';
 import { placeholderImages } from './placeholder-images.json';
+import { db } from './firebase';
+import { doc, setDoc } from 'firebase/firestore';
+
 
 // MOCK DATA
 const mockPois: POI[] = [
@@ -156,4 +159,15 @@ export async function deletePoi(poiId: string): Promise<void> {
         throw new Error("POI not found");
     }
     mockPois.splice(poiIndex, 1);
+}
+
+export async function createUserInFirestore(user: AppUser): Promise<void> {
+  const userRef = doc(db, 'users', user.uid);
+  await setDoc(userRef, {
+    uid: user.uid,
+    email: user.email,
+    displayName: user.displayName,
+    role: user.role,
+    photoURL: user.photoURL || null,
+  });
 }

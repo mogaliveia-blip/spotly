@@ -20,6 +20,7 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { AuthFormWrapper } from './auth-form-wrapper';
 import { Loader2 } from 'lucide-react';
+import { createUserInFirestore } from '@/lib/data';
 
 const formSchema = z.object({
   displayName: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
@@ -49,12 +50,18 @@ export function SignupForm() {
         values.email,
         values.password
       );
+      
       await updateProfile(userCredential.user, {
         displayName: values.displayName,
       });
-      
-      // In a real app, a Cloud Function would listen for this user creation
-      // and set the default 'user' role as a custom claim.
+
+      // Create a corresponding user document in Firestore
+      await createUserInFirestore({
+        uid: userCredential.user.uid,
+        email: userCredential.user.email,
+        displayName: values.displayName,
+        role: 'user',
+      });
       
       toast({
         title: 'Account Created!',
