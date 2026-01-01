@@ -64,7 +64,7 @@ service cloud.firestore {
        ========================= */
     match /pois/{poiId} {
       allow read: if true;
-      allow create: if isSignedIn();
+      allow create: if isEditorOrAdmin();
       allow update, delete: if isEditorOrAdmin();
 
       /* =========================
