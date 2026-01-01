@@ -4,14 +4,16 @@ import { POIMap } from '@/components/poi/poi-map';
 import type { POI } from '@/lib/types';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useSidebar } from '@/components/ui/sidebar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function DashboardPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const selectedPoiId = searchParams.get('poi');
   const { setOpen } = useSidebar();
+  
+  const [pois, setPois] = useState<POI[]>([]);
+  const selectedPoiId = searchParams.get('poi');
   
   // Open sidebar on dashboard by default on desktop
   useEffect(() => {
@@ -36,6 +38,8 @@ export default function DashboardPage() {
       <POIMap 
         selectedPoiId={selectedPoiId} 
         onSelectPoi={handleSelectPoi}
+        pois={pois}
+        setPois={setPois}
       />
     </div>
   );

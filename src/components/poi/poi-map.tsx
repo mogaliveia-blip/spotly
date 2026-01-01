@@ -2,8 +2,7 @@
 
 import type { POI, Review } from '@/lib/types';
 import { Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
-import { useState, useEffect } from 'react';
-import { Button } from '../ui/button';
+import { useState, useEffect, useCallback } from 'react';
 import { MapPin, User, Crosshair, Star } from 'lucide-react';
 import { getDistance, cn } from '@/lib/utils';
 import { useGeolocation } from '@/providers/geolocation-provider';
@@ -14,6 +13,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { ScrollArea } from '../ui/scroll-area';
+import { ReviewForm } from './review-form';
+import { ReviewList } from './review-list';
 
 function renderStars(rating: number) {
     const stars = [];
@@ -28,7 +29,7 @@ function renderStars(rating: number) {
     return stars;
   };
 
-function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSelectPoi: (poi: POI | null) => void, selectedPoiId: string | null }) {
+function MapController({ pois, onSelectPoi, selectedPoiId, onPoiUpdate }: { pois: POI[], onSelectPoi: (poi: POI | null) => void, selectedPoiId: string | null, onPoiUpdate: (poi: POI) => void }) {
   const { userLocation } = useGeolocation();
   const map = useMap();
   const selectedPoi = selectedPoiId ? pois.find(p => p.id === selectedPoiId) || null : null;
@@ -52,6 +53,21 @@ function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSe
       setReviews([]);
     }
   }, [selectedPoiId]);
+
+  const handleReviewAdded = useCallback((newReview: Review) => {
+    setReviews(prevReviews => [newReview, ...prevReviews]);
+    if (selectedPoi) {
+      const oldRatingTotal = selectedPoi.averageRating * selectedPoi.reviewCount;
+      const newReviewCount = selectedPoi.reviewCount + 1;
+      const newAverageRating = (oldRatingTotal + newReview.rating) / newReviewCount;
+      const updatedPoi = {
+        ...selectedPoi,
+        reviewCount: newReviewCount,
+        averageRating: newAverageRating,
+      };
+      onPoiUpdate(updatedPoi);
+    }
+  }, [selectedPoi, onPoiUpdate]);
 
   const handleRecenter = () => {
     if (map && userLocation) {
@@ -89,13 +105,13 @@ function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSe
           pixelOffset={[0, -40]}
           maxWidth={400}
         >
-          <ScrollArea className="h-[350px] w-full">
+          <ScrollArea className="h-[400px] w-full max-w-sm">
             <div className="p-2 pr-4 space-y-4">
                 <div className="space-y-1">
                     <h3 className="font-bold text-lg">{selectedPoi.title}</h3>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <div className="flex items-center gap-1">{renderStars(selectedPoi.averageRating)}</div>
-                        <span>({selectedPoi.reviewCount} {selectedPoi.reviewCount > 1 ? 'avis' : 'avis'})</span>
+                        <span>({selectedPoi.reviewCount} {selectedPoi.reviewCount !== 1 ? 'avis' : 'avis'})</span>
                     </div>
                     {userLocation && (
                         <p className="text-xs text-muted-foreground font-semibold">
@@ -106,31 +122,13 @@ function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSe
                         {selectedPoi.description}
                     </p>
                 </div>
+                
+                <ReviewForm poiId={selectedPoi.id} onReviewAdded={handleReviewAdded} />
+
                 <div>
                     <h4 className="font-semibold text-md mb-2">Avis récents</h4>
                     {reviewsLoading ? <Skeleton className="h-20 w-full" /> : (
-                        <div className="space-y-3">
-                            {reviews.length > 0 ? reviews.slice(0, 3).map(review => (
-                                <Card key={review.id} className="text-xs">
-                                <CardContent className="p-3 flex gap-3">
-                                    <Avatar className="h-8 w-8">
-                                    <AvatarImage src={review.userPhotoURL || undefined} alt={review.userDisplayName} />
-                                    <AvatarFallback>{review.userDisplayName.charAt(0)}</AvatarFallback>
-                                    </Avatar>
-                                    <div className="flex-1">
-                                    <div className="flex items-center justify-between">
-                                        <span className="font-semibold">{review.userDisplayName}</span>
-                                        <span className="text-muted-foreground">
-                                        {format(new Date(review.createdAt), 'PP', { locale: fr })}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center my-1">{renderStars(review.rating)}</div>
-                                    <p className="text-muted-foreground line-clamp-2">{review.comment}</p>
-                                    </div>
-                                </CardContent>
-                                </Card>
-                            )) : <p className="text-xs text-muted-foreground text-center py-4">Aucun avis pour le moment.</p>}
-                        </div>
+                        <ReviewList reviews={reviews} />
                     )}
                 </div>
             </div>
@@ -148,9 +146,8 @@ function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSe
   );
 }
 
-export function POIMap({ selectedPoiId, onSelectPoi }: Omit<POIMapProps, 'onShowDetails'>) {
+export function POIMap({ selectedPoiId, onSelectPoi, pois, setPois }: { selectedPoiId: string | null; onSelectPoi: (poi: POI | null) => void; pois: POI[]; setPois: React.Dispatch<React.SetStateAction<POI[]>> }) {
     const { userLocation, loading: geoLoading } = useGeolocation();
-    const [pois, setPois] = useState<POI[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -165,8 +162,18 @@ export function POIMap({ selectedPoiId, onSelectPoi }: Omit<POIMapProps, 'onShow
                 setLoading(false);
             }
         }
-        getPois();
-    }, []);
+        if (pois.length === 0) {
+            getPois();
+        } else {
+            setLoading(false);
+        }
+    }, [pois.length, setPois]);
+
+    const handlePoiUpdate = (updatedPoi: POI) => {
+        setPois(currentPois => 
+            currentPois.map(p => p.id === updatedPoi.id ? updatedPoi : p)
+        );
+    }
 
     const defaultCenter = userLocation || (pois.length > 0 ? pois[0].location : { lat: 48.8566, lng: 2.3522 });
 
@@ -184,15 +191,14 @@ export function POIMap({ selectedPoiId, onSelectPoi }: Omit<POIMapProps, 'onShow
                 mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
                 className="w-full h-full"
             >
-                <MapController pois={pois} onSelectPoi={onSelectPoi} selectedPoiId={selectedPoiId} />
+                <MapController 
+                    pois={pois} 
+                    onSelectPoi={onSelectPoi} 
+                    selectedPoiId={selectedPoiId}
+                    onPoiUpdate={handlePoiUpdate} 
+                />
             </Map>
         </div>
     )
 }
-interface POIMapProps {
-    selectedPoiId: string | null;
-    onSelectPoi: (poi: POI | null) => void;
-    onShowDetails: (poi: POI) => void;
-}
-
     
