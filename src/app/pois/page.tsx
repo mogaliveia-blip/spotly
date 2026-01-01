@@ -11,18 +11,21 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Eye, PlusCircle } from 'lucide-react';
+import { Eye, PlusCircle, Navigation } from 'lucide-react';
 import { Suspense, useEffect, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AppLayout } from '@/components/layout/app-layout';
 import { useAuth } from '@/hooks/use-auth-user';
 import { fetchPois } from '@/lib/data';
 import type { POI } from '@/lib/types';
+import { useGeolocation } from '@/providers/geolocation-provider';
+import { getDistance } from '@/lib/utils';
 
 
 function POIsTable() {
   const [pois, setPois] = useState<POI[]>([]);
   const [loading, setLoading] = useState(true);
+  const { userLocation, loading: geoLoading } = useGeolocation();
 
   useEffect(() => {
     async function getPois() {
@@ -48,6 +51,7 @@ function POIsTable() {
         <TableRow>
           <TableHead>Titre</TableHead>
           <TableHead className="hidden md:table-cell">Description</TableHead>
+          <TableHead className="hidden sm:table-cell">Distance</TableHead>
           <TableHead>Actions</TableHead>
         </TableRow>
       </TableHeader>
@@ -56,6 +60,20 @@ function POIsTable() {
           <TableRow key={poi.id}>
             <TableCell className="font-medium">{poi.title}</TableCell>
             <TableCell className="hidden md:table-cell truncate max-w-sm">{poi.description}</TableCell>
+            <TableCell className="hidden sm:table-cell">
+              {userLocation ? (
+                <div className="flex items-center gap-2">
+                    <Navigation className="h-4 w-4 text-muted-foreground" />
+                    <span>
+                        {`${getDistance(userLocation.lat, userLocation.lng, poi.location.lat, poi.location.lng).toFixed(2)} km`}
+                    </span>
+                </div>
+              ) : geoLoading ? (
+                <Skeleton className="h-4 w-20" />
+              ) : (
+                'N/A'
+              )}
+            </TableCell>
             <TableCell>
               <Button asChild variant="outline" size="sm">
                 <Link href={`/pois/${poi.id}`}>
