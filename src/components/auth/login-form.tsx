@@ -13,8 +13,16 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } from 'firebase/auth';
+import { useState, useEffect } from 'react';
+import { 
+  signInWithEmailAndPassword, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  getAdditionalUserInfo,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink
+} from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -22,10 +30,15 @@ import { AuthFormWrapper } from './auth-form-wrapper';
 import { Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { createUserInFirestore } from '@/lib/data';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-const formSchema = z.object({
+const passwordSchema = z.object({
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(1, { message: 'Password is required.' }),
+});
+
+const emailLinkSchema = z.object({
+  email: z.string().email({ message: 'Please enter a valid email address.' }),
 });
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -45,16 +58,62 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      email: '',
-      password: '',
-    },
+  const passwordForm = useForm<z.infer<typeof passwordSchema>>({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: { email: '', password: '' },
   });
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
+  const emailLinkForm = useForm<z.infer<typeof emailLinkSchema>>({
+    resolver: zodResolver(emailLinkSchema),
+    defaultValues: { email: '' },
+  });
+
+  useEffect(() => {
+    const handleEmailLinkSignIn = async () => {
+      if (isSignInWithEmailLink(auth, window.location.href)) {
+        setLoading(true);
+        let email = window.localStorage.getItem('emailForSignIn');
+        if (!email) {
+          // This can happen if the user opens the link on a different device.
+          // We can prompt them for their email.
+          email = window.prompt('Please provide your email for confirmation');
+        }
+        if (email) {
+          try {
+            const result = await signInWithEmailLink(auth, email, window.location.href);
+            window.localStorage.removeItem('emailForSignIn');
+            const additionalInfo = getAdditionalUserInfo(result);
+            if (additionalInfo?.isNewUser) {
+              await createUserInFirestore({
+                uid: result.user.uid,
+                email: result.user.email,
+                displayName: result.user.displayName,
+                role: 'user',
+                photoURL: result.user.photoURL,
+              });
+            }
+            router.push(searchParams.get('redirect') || '/dashboard');
+          } catch (error) {
+            toast({
+              title: 'Sign In Failed',
+              description: 'The sign-in link is invalid or has expired. Please try again.',
+              variant: 'destructive',
+            });
+          } finally {
+            setLoading(false);
+          }
+        } else {
+            setLoading(false);
+        }
+      }
+    };
+    handleEmailLinkSignIn();
+  }, [router, toast, searchParams]);
+
+
+  async function onPasswordSubmit(values: z.infer<typeof passwordSchema>) {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, values.email, values.password);
@@ -72,6 +131,32 @@ export function LoginForm() {
       setLoading(false);
     }
   }
+
+  async function onEmailLinkSubmit(values: z.infer<typeof emailLinkSchema>) {
+    setLoading(true);
+    const actionCodeSettings = {
+      url: window.location.href, // Redirect back to the login page
+      handleCodeInApp: true,
+    };
+    try {
+      await sendSignInLinkToEmail(auth, values.email, actionCodeSettings);
+      window.localStorage.setItem('emailForSignIn', values.email);
+      setLinkSent(true);
+      toast({
+        title: 'Check your email',
+        description: `A sign-in link has been sent to ${values.email}.`,
+      });
+    } catch (error: any) {
+        console.error('Email Link Error:', error);
+      toast({
+        title: 'Could not send link',
+        description: 'An unexpected error occurred. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
   
   async function handleGoogleSignIn() {
     setLoading(true);
@@ -81,12 +166,11 @@ export function LoginForm() {
       const additionalInfo = getAdditionalUserInfo(result);
       
       if (additionalInfo?.isNewUser) {
-        // If it's a new user, create a document in Firestore
         await createUserInFirestore({
           uid: result.user.uid,
           email: result.user.email,
           displayName: result.user.displayName,
-          role: 'user', // Default role for new users
+          role: 'user', 
           photoURL: result.user.photoURL,
         });
         toast({
@@ -108,15 +192,12 @@ export function LoginForm() {
     }
   }
 
-
-  // Demo accounts
   const handleDemoLogin = async (email: string) => {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, "password");
       router.push('/dashboard');
     } catch (error) {
-      // In a real app, you might auto-create these demo accounts
       toast({
         title: 'Demo Login Failed',
         description: `Could not log in as ${email}. Ensure demo accounts are set up in your Firebase project with the password 'password'.`,
@@ -135,47 +216,91 @@ export function LoginForm() {
       footerLink="/signup"
       footerLinkText="Sign up"
     >
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <div className="space-y-4">
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="name@example.com"
-                      {...field}
-                      disabled={loading}
+      <Tabs defaultValue="password">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="password">Password</TabsTrigger>
+          <TabsTrigger value="email-link">Email Link</TabsTrigger>
+        </TabsList>
+        <TabsContent value="password">
+          <Form {...passwordForm}>
+            <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-6 pt-4">
+              <div className="space-y-4">
+                <FormField
+                  control={passwordForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="email"
+                          placeholder="name@example.com"
+                          {...field}
+                          disabled={loading}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={passwordForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input type="password" placeholder="••••••••" {...field} disabled={loading} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Sign In
+              </Button>
+            </form>
+          </Form>
+        </TabsContent>
+        <TabsContent value="email-link">
+            {linkSent ? (
+                 <div className="text-center py-8">
+                    <h3 className="text-xl font-semibold">Check your inbox</h3>
+                    <p className="text-muted-foreground mt-2">A sign-in link has been sent to the email address you provided.</p>
+                 </div>
+            ) : (
+                <Form {...emailLinkForm}>
+                    <form onSubmit={emailLinkForm.handleSubmit(onEmailLinkSubmit)} className="space-y-6 pt-4">
+                    <FormField
+                        control={emailLinkForm.control}
+                        name="email"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Email</FormLabel>
+                            <FormControl>
+                            <Input
+                                type="email"
+                                placeholder="name@example.com"
+                                {...field}
+                                disabled={loading}
+                            />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
                     />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="••••••••" {...field} disabled={loading} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Sign In
-          </Button>
-        </form>
-      </Form>
+                    <Button type="submit" className="w-full" disabled={loading}>
+                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Send Sign-In Link
+                    </Button>
+                    </form>
+                </Form>
+            )}
+        </TabsContent>
+      </Tabs>
+      
       <div className="relative my-4">
         <Separator />
         <p className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
