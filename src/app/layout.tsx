@@ -3,7 +3,7 @@ import './globals.css';
 import { AuthProvider } from '@/providers/auth-provider';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
-import { APIProvider } from '@vis.gl/react-google-maps';
+import { MapsApiProvider } from '@/providers/maps-api-provider';
 
 export const metadata: Metadata = {
   title: 'Eventide Guide',
@@ -29,12 +29,12 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icon.svg" />
       </head>
       <body className={cn('font-body antialiased')}>
-        <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!}>
-          <AuthProvider>
-            {children}
-            <Toaster />
-          </AuthProvider>
-        </APIProvider>
+        <MapsApiProvider>
+            <AuthProvider>
+              {children}
+              <Toaster />
+            </AuthProvider>
+        </MapsApiProvider>
       </body>
     </html>
   );
