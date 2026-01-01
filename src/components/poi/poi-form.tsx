@@ -19,9 +19,11 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2, MapPin } from 'lucide-react';
 import type { POI } from '@/lib/types';
+import { useGeolocation } from '@/providers/geolocation-provider';
+import { Skeleton } from '../ui/skeleton';
 
 const formSchema = z.object({
   title: z.string().min(3, { message: 'Le titre doit comporter au moins 3 caractères.' }),
@@ -48,18 +50,27 @@ export function POIForm({ poi }: POIFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const defaultCenter = { lat: 48.8566, lng: 2.3522 }; // Paris
+  const { userLocation, loading: geoLoading } = useGeolocation();
+  const fallbackCenter = { lat: 48.8566, lng: 2.3522 }; // Paris
 
   const form = useForm<POIFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: poi?.title || '',
       description: poi?.description || '',
-      location: poi?.location || defaultCenter,
+      location: poi?.location || userLocation || fallbackCenter,
     },
   });
 
   const selectedLocation = form.watch('location');
+
+  useEffect(() => {
+    // Si nous avons la localisation de l'utilisateur et que le formulaire est toujours sur la valeur par défaut de Paris, mettez à jour.
+    if (userLocation && form.getValues('location').lat === fallbackCenter.lat && form.getValues('location').lng === fallbackCenter.lng) {
+      form.setValue('location', userLocation);
+    }
+  }, [userLocation, form, fallbackCenter]);
+
 
   async function onSubmit(values: POIFormValues) {
     setLoading(true);
@@ -88,6 +99,8 @@ export function POIForm({ poi }: POIFormProps) {
       setLoading(false);
     }
   }
+  
+  const mapCenter = userLocation || poi?.location || fallbackCenter;
 
   return (
     <Form {...form}>
@@ -128,25 +141,29 @@ export function POIForm({ poi }: POIFormProps) {
                 <CardContent>
                     <FormLabel>Cliquez sur la carte pour définir l'emplacement</FormLabel>
                     <div className="h-[400px] w-full overflow-hidden rounded-lg border mt-2">
-                        <Map
-                            defaultCenter={poi?.location || defaultCenter}
-                            defaultZoom={13}
-                            gestureHandling={'greedy'}
-                            disableDefaultUI={true}
-                            mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
-                            styles={mapStyles}
-                            onClick={(e) => {
-                                if (e.detail.latLng) {
-                                    form.setValue('location', e.detail.latLng, { shouldValidate: true });
-                                }
-                            }}
-                        >
-                            <AdvancedMarker position={selectedLocation}>
-                                <div className="text-primary">
-                                    <MapPin size={36} />
-                                </div>
-                            </AdvancedMarker>
-                        </Map>
+                        {geoLoading ? (
+                            <Skeleton className="h-full w-full" />
+                        ) : (
+                            <Map
+                                center={mapCenter}
+                                defaultZoom={13}
+                                gestureHandling={'greedy'}
+                                disableDefaultUI={false}
+                                mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
+                                styles={mapStyles}
+                                onClick={(e) => {
+                                    if (e.detail.latLng) {
+                                        form.setValue('location', e.detail.latLng, { shouldValidate: true });
+                                    }
+                                }}
+                            >
+                                <AdvancedMarker position={selectedLocation}>
+                                    <div className="text-primary">
+                                        <MapPin size={36} />
+                                    </div>
+                                </AdvancedMarker>
+                            </Map>
+                        )}
                     </div>
                      <FormMessage>{form.formState.errors.location?.message}</FormMessage>
                 </CardContent>
