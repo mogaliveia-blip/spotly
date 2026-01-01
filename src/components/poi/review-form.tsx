@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/use-auth-user';
 import { useToast } from '@/hooks/use-toast';
 import { addReview } from '@/lib/data';
 import type { Review } from '@/lib/types';
+import { useRouter } from 'next/navigation';
 
 const reviewSchema = z.object({
   rating: z.number().min(1, { message: 'Veuillez sélectionner une note.' }).max(5),
@@ -29,6 +30,7 @@ interface ReviewFormProps {
 export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [hoverRating, setHoverRating] = useState(0);
 
@@ -58,21 +60,15 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
     };
 
     try {
-        addReview(poiId, reviewData);
-        // Optimistically create the review object for UI update
-        const newReview: Review = {
-            id: new Date().toISOString(), // Temporary ID
-            poiId,
-            createdAt: new Date(),
-            ...reviewData
-        };
-
+        const newReview = await addReview(poiId, reviewData);
         onReviewAdded(newReview);
         form.reset();
         toast({
             title: 'Avis soumis !',
             description: 'Merci pour votre retour.',
         });
+        // Rafraîchir les données de la page pour mettre à jour l'en-tête
+        router.refresh(); 
     } catch (error) {
         toast({
             title: 'Erreur lors de la soumission de l\'avis',

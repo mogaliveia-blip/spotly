@@ -1,6 +1,6 @@
 // src/lib/data.ts
 import { db } from './firebase';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, serverTimestamp, runTransaction, Timestamp } from 'firebase/firestore';
 import type { POI, Review, AppUser, UserRole } from './types';
 import { placeholderImages } from './placeholder-images.json';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -57,21 +57,56 @@ export async function fetchReviewsByPoiId(poiId: string): Promise<Review[]> {
     return reviewList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
-export function addReview(poiId: string, review: Omit<Review, 'id' | 'poiId' | 'createdAt'>): void {
-    const reviewsCollection = collection(db, 'pois', poiId, 'reviews');
-    const newReviewData = {
-        ...review,
-        createdAt: serverTimestamp(),
-    }
-    
-    addDoc(reviewsCollection, newReviewData).catch(async (serverError) => {
-      const permissionError = new FirestorePermissionError({
-        path: `pois/${poiId}/reviews`,
-        operation: 'create',
-        requestResourceData: newReviewData,
+export async function addReview(poiId: string, reviewData: Omit<Review, 'id' | 'poiId' | 'createdAt'>): Promise<Review> {
+  const poiRef = doc(db, 'pois', poiId);
+  const reviewsCollection = collection(db, 'pois', poiId, 'reviews');
+  const newReviewRef = doc(reviewsCollection); // Create a ref with a new ID
+
+  try {
+    const newReview = await runTransaction(db, async (transaction) => {
+      const poiDoc = await transaction.get(poiRef);
+      if (!poiDoc.exists()) {
+        throw "Le POI n'existe pas !";
+      }
+
+      const poiData = poiDoc.data() as POI;
+      const oldRatingTotal = poiData.averageRating * poiData.reviewCount;
+      const newReviewCount = poiData.reviewCount + 1;
+      const newAverageRating = (oldRatingTotal + reviewData.rating) / newReviewCount;
+      
+      const reviewWithTimestamp = {
+        ...reviewData,
+        poiId,
+        createdAt: new Date(), // Use client-side date for optimistic update
+      };
+
+      transaction.update(poiRef, {
+        reviewCount: newReviewCount,
+        averageRating: newAverageRating,
       });
-      errorEmitter.emit('permission-error', permissionError);
+
+      const finalReviewData = { ...reviewData, createdAt: serverTimestamp() };
+      transaction.set(newReviewRef, finalReviewData);
+
+      return {
+        id: newReviewRef.id,
+        ...reviewWithTimestamp
+      };
     });
+    return newReview;
+  } catch (e: any) {
+    console.error("Échec de la transaction d'ajout d'avis : ", e);
+    // Emit a permission error if it's a permission issue, otherwise re-throw.
+    if (e.code && e.code.includes('permission-denied')) {
+        const permissionError = new FirestorePermissionError({
+            path: newReviewRef.path,
+            operation: 'create',
+            requestResourceData: reviewData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+    }
+    throw e; // re-throw other errors
+  }
 }
 
 
