@@ -152,7 +152,7 @@ export function SidebarNav() {
         </div>
       </SidebarHeader>
       
-      <SidebarContent asChild>
+      <SidebarContent>
         <ScrollArea className="h-full">
             <SidebarMenu className="p-2">
             {filteredNavItems.map((item) => (
