@@ -1,6 +1,11 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    /* =========================
+       Fonctions utilitaires
+       ========================= */
 
     function isSignedIn() {
       return request.auth != null;
@@ -9,48 +14,74 @@ service cloud.firestore {
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
-    
+
     function getUserRole(userId) {
-      // Lit le rôle depuis le document de l'utilisateur dans Firestore.
-      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+      let userDoc = get(
+        /databases/$(database)/documents/users/$(userId)
+      );
+      return userDoc.exists ? userDoc.data.role : 'user';
     }
-    
+
     function isAdmin() {
-      if (!isSignedIn()) {
-        return false;
-      }
-      return getUserRole(request.auth.uid) == 'admin';
+      return isSignedIn()
+        && getUserRole(request.auth.uid) == 'admin';
     }
 
     function isEditorOrAdmin() {
-      if (!isSignedIn()) {
-        return false;
-      }
-      let role = getUserRole(request.auth.uid);
-      return role in ['editor', 'admin'];
+      return isSignedIn()
+        && getUserRole(request.auth.uid) in ['editor', 'admin'];
     }
 
-    // Un utilisateur peut créer son propre profil, lire/modifier/supprimer le sien.
-    // Un admin peut lire la liste des utilisateurs.
+    /* =========================
+       USERS
+       ========================= */
     match /users/{userId} {
-      allow read, update, delete: if isOwner(userId);
-      allow list: if isAdmin();
-      // Un nouvel utilisateur peut créer son profil.
-      allow create: if isSignedIn(); 
+
+      // Lecture : soi-même ou admin
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Création : uniquement son propre document
+      allow create: if isSignedIn()
+        && request.auth.uid == userId;
+
+      // Mise à jour du profil (sans rôle)
+      allow update: if isOwner(userId)
+        && !('role' in request.resource.data);
+
+      // Modification du rôle : admin uniquement
+      allow update: if isAdmin()
+        && ('role' in request.resource.data);
+
+      // Suppression : admin uniquement
+      allow delete: if isAdmin();
     }
 
-    // Les POIs sont publics en lecture, mais seuls les éditeurs ou admins peuvent les modifier.
+    /* =========================
+       POIS
+       ========================= */
     match /pois/{poiId} {
+
+      // Lecture publique
       allow read: if true;
+
+      // Création / modification / suppression : editor ou admin
       allow create, update, delete: if isEditorOrAdmin();
 
-      // Les avis sont publics, les utilisateurs peuvent créer les leurs.
-      // Un utilisateur peut modifier/supprimer son propre avis.
+      /* =========================
+         REVIEWS (sous-collection)
+         ========================= */
       match /reviews/{reviewId} {
-          allow read: if true;
-          allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-          // Vérifie que l'utilisateur qui modifie est bien le créateur de l'avis.
-          allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+        // Lecture publique
+        allow read: if true;
+
+        // Création : utilisateur authentifié, propriétaire de l'avis
+        allow create: if isSignedIn()
+          && request.resource.data.userId == request.auth.uid;
+
+        // Modification / suppression : uniquement le propriétaire
+        allow update, delete: if isSignedIn()
+          && resource.data.userId == request.auth.uid;
       }
     }
   }

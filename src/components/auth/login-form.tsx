@@ -135,7 +135,7 @@ export function LoginForm() {
   async function onEmailLinkSubmit(values: z.infer<typeof emailLinkSchema>) {
     setLoading(true);
     const actionCodeSettings = {
-      url: window.location.href, // Redirect back to the login page
+      url: window.location.href.split('?')[0], // Redirect back to the login page without params
       handleCodeInApp: true,
     };
     try {
