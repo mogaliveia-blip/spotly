@@ -20,12 +20,14 @@ import { fetchPois } from '@/lib/data';
 import type { POI } from '@/lib/types';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { getDistance } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 
 
 function POIsTable() {
   const [pois, setPois] = useState<POI[]>([]);
   const [loading, setLoading] = useState(true);
   const { userLocation, loading: geoLoading } = useGeolocation();
+  const router = useRouter();
 
   useEffect(() => {
     async function getPois() {
@@ -40,6 +42,10 @@ function POIsTable() {
     }
     getPois();
   }, []);
+
+  const handleViewClick = (poiId: string) => {
+    router.push(`/dashboard?poi=${poiId}`);
+  };
 
   if (loading) {
     return <Skeleton className="h-[300px] w-full" />;
@@ -75,11 +81,9 @@ function POIsTable() {
               )}
             </TableCell>
             <TableCell>
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/pois/${poi.id}`}>
-                  <Eye className="mr-2 h-4 w-4" />
-                  Voir
-                </Link>
+              <Button variant="outline" size="sm" onClick={() => handleViewClick(poi.id)}>
+                <Eye className="mr-2 h-4 w-4" />
+                Voir
               </Button>
             </TableCell>
           </TableRow>

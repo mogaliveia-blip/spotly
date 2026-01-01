@@ -4,12 +4,14 @@ import { SidebarProvider, Sidebar, SidebarInset } from '@/components/ui/sidebar'
 import { Header } from './header';
 import { SidebarNav } from './sidebar-nav';
 import { useAuth } from '@/hooks/use-auth-user';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
+import { cn } from '@/lib/utils';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -21,6 +23,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     return null; // Or a loading spinner, handled by AuthProvider already
   }
 
+  const isDashboard = pathname.startsWith('/dashboard');
+
   return (
     <SidebarProvider>
       <Sidebar>
@@ -29,7 +33,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <SidebarInset>
         <div className="flex flex-col min-h-screen">
           <Header />
-          <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+          <main className={cn(
+            "flex-1",
+            !isDashboard && "p-4 sm:p-6 lg:p-8"
+          )}>
+            {children}
+          </main>
         </div>
       </SidebarInset>
     </SidebarProvider>

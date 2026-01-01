@@ -1,4 +1,3 @@
-// src/components/poi/poi-reviews.tsx
 'use client';
 
 import { useState } from 'react';
@@ -10,15 +9,10 @@ import { ReviewList } from './review-list';
 interface POIReviewsProps {
   poiId: string;
   initialReviews: Review[];
+  onReviewAdded: (review: Review) => void;
 }
 
-export function POIReviews({ poiId, initialReviews }: POIReviewsProps) {
-  const [reviews, setReviews] = useState<Review[]>(initialReviews);
-
-  const handleReviewAdded = (newReview: Review) => {
-    // Optimistically add the new review to the top of the list
-    setReviews(prevReviews => [newReview, ...prevReviews]);
-  };
+export function POIReviews({ poiId, initialReviews, onReviewAdded }: POIReviewsProps) {
 
   return (
     <Card>
@@ -26,8 +20,8 @@ export function POIReviews({ poiId, initialReviews }: POIReviewsProps) {
         <CardTitle>Avis</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <ReviewForm poiId={poiId} onReviewAdded={handleReviewAdded} />
-        <ReviewList reviews={reviews} />
+        <ReviewForm poiId={poiId} onReviewAdded={onReviewAdded} />
+        <ReviewList reviews={initialReviews} />
       </CardContent>
     </Card>
   );

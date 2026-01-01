@@ -1,64 +1,37 @@
 'use client';
 
 import { POIMap } from '@/components/poi/poi-map';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Suspense, useEffect, useState } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
-import { PlusCircle } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth-user';
-import { fetchPois } from '@/lib/data';
+import { POIList } from '@/components/poi/poi-list';
+import { POIDetailModal } from '@/components/poi/poi-detail-modal';
 import type { POI } from '@/lib/types';
-import { useGeolocation } from '@/providers/geolocation-provider';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
-  const { role } = useAuth();
-  const [pois, setPois] = useState<POI[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { userLocation } = useGeolocation();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedPoiId = searchParams.get('poi');
 
-  useEffect(() => {
-    async function getPois() {
-      try {
-        const poiData = await fetchPois();
-        setPois(poiData);
-      } catch (error) {
-        console.error("Impossible de récupérer les POIs", error);
-      } finally {
-        setLoading(false);
-      }
+  const handleSelectPoi = (poi: POI | null) => {
+    const params = new URLSearchParams(searchParams);
+    if (poi) {
+      params.set('poi', poi.id);
+    } else {
+      params.delete('poi');
     }
-    getPois();
-  }, []);
+    router.replace(`?${params.toString()}`);
+  };
 
-  const canAddPoi = role === 'admin' || role === 'editor';
+  const handleModalClose = () => {
+    handleSelectPoi(null);
+  }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Carte de l'événement</CardTitle>
-            <CardDescription>Explorez tous les points d'intérêt de l'événement.</CardDescription>
-          </div>
-          {canAddPoi && (
-            <Button asChild>
-              <Link href="/pois/new">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Ajouter un POI
-              </Link>
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<Skeleton className="h-[500px] w-full rounded-lg" />}>
-            <div className="h-[500px] w-full overflow-hidden rounded-lg border">
-                {loading ? <Skeleton className="h-full w-full" /> : <POIMap pois={pois} />}
-            </div>
-          </Suspense>
-        </CardContent>
-      </Card>
+    <div className="flex h-[calc(100vh-theme(height.16))] w-full">
+      <POIList onSelectPoi={handleSelectPoi} selectedPoiId={selectedPoiId} />
+      <div className="flex-1 h-full relative">
+        <POIMap selectedPoiId={selectedPoiId} onSelectPoi={handleSelectPoi} />
+      </div>
+      {selectedPoiId && <POIDetailModal poiId={selectedPoiId} onClose={handleModalClose} />}
     </div>
   );
 }
