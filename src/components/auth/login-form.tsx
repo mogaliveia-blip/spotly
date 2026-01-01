@@ -190,22 +190,6 @@ export function LoginForm() {
     }
   }
 
-  const handleDemoLogin = async (email: string) => {
-    setLoading(true);
-    try {
-      await signInWithEmailAndPassword(auth, email, "password");
-      router.push('/dashboard');
-    } catch (error) {
-      toast({
-        title: 'Échec de la connexion de démonstration',
-        description: `Impossible de se connecter en tant que ${email}. Assurez-vous que les comptes de démonstration sont configurés dans votre projet Firebase avec le mot de passe 'password'.`,
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <AuthFormWrapper
       title="Content de vous revoir"
@@ -311,13 +295,6 @@ export function LoginForm() {
         Se connecter avec Google
       </Button>
 
-      <div className="mt-4 space-y-2">
-        <p className="text-center text-sm text-muted-foreground">À des fins de démonstration :</p>
-        <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" onClick={() => handleDemoLogin('editor@test.com')} disabled={loading}>Se connecter en tant qu'éditeur</Button>
-            <Button variant="outline" onClick={() => handleDemoLogin('admin@test.com')} disabled={loading}>Se connecter en tant qu'administrateur</Button>
-        </div>
-      </div>
     </AuthFormWrapper>
   );
 }
