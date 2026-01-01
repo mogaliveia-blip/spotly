@@ -97,7 +97,7 @@ export function POIMap({ selectedPoiId, onSelectPoi }: POIMapProps) {
             try {
                 const poiData = await fetchPois();
                 setPois(poiData);
-            } catch (error) => {
+            } catch (error) {
                 console.error("Impossible de récupérer les POIs", error);
             } finally {
                 setLoading(false);
