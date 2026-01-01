@@ -31,8 +31,6 @@ const formSchema = z.object({
     lat: z.number(),
     lng: z.number(),
   }),
-  headerPhotoUrl: z.string().url({ message: 'Please enter a valid image URL.' }),
-  headerPhotoHint: z.string().min(2, { message: 'Hint must be at least 2 characters.'}),
 });
 
 type POIFormValues = z.infer<typeof formSchema>;
@@ -59,8 +57,6 @@ export function POIForm({ poi }: POIFormProps) {
       title: poi?.title || '',
       description: poi?.description || '',
       location: poi?.location || defaultCenter,
-      headerPhotoUrl: poi?.headerPhotoUrl || '',
-      headerPhotoHint: poi?.headerPhotoHint || '',
     },
   });
 
@@ -69,8 +65,13 @@ export function POIForm({ poi }: POIFormProps) {
   async function onSubmit(values: POIFormValues) {
     setLoading(true);
     try {
-      // For now, gallery is empty. This can be extended later.
-      const poiData = { ...values, galleryUrls: [] };
+      // For now, gallery is empty and photos are blank. This can be extended later.
+      const poiData = { 
+        ...values, 
+        headerPhotoUrl: '',
+        headerPhotoHint: '',
+        galleryUrls: [] 
+      };
       createPoi(poiData);
       
       toast({
@@ -116,30 +117,6 @@ export function POIForm({ poi }: POIFormProps) {
                     <FormItem>
                       <FormLabel>Description</FormLabel>
                       <FormControl><Textarea placeholder="A brief description of the point of interest." {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="headerPhotoUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Header Image URL</FormLabel>
-                      <FormControl><Input placeholder="https://example.com/image.jpg" {...field} /></FormControl>
-                       <FormDescription>Use a service like Unsplash or Picsum Photos.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                 <FormField
-                  control={form.control}
-                  name="headerPhotoHint"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Header Image Hint</FormLabel>
-                      <FormControl><Input placeholder="e.g., concert stage" {...field} /></FormControl>
-                      <FormDescription>Two keywords for AI image search.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
