@@ -84,7 +84,7 @@ export function POIMap({ pois }: POIMapProps) {
       </Map>
       {userLocation && (
         <div className="absolute bottom-4 right-4">
-          <Button size="icon" onClick={handleRecenter} title="Recentrer sur ma position">
+          <Button size="icon" onClick={handleRecenter} type="button" title="Recentrer sur ma position">
             <Crosshair className="h-5 w-5" />
           </Button>
         </div>
