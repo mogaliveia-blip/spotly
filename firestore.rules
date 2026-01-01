@@ -10,27 +10,38 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
     
+    function getUserRole() {
+      // Lit le rôle depuis le document de l'utilisateur dans Firestore.
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
     function isEditorOrAdmin() {
-      // Check the user's custom claim or a role field in their user document
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['editor', 'admin'];
+      if (!isSignedIn()) {
+        return false;
+      }
+      let role = getUserRole();
+      return role in ['editor', 'admin'];
     }
 
-    // Users can create their own profile, and can only read/update/delete their own.
+    // Les utilisateurs peuvent créer leur propre profil, et ne peuvent que lire/modifier/supprimer le leur.
     match /users/{userId} {
       allow read, update, delete: if isOwner(userId);
-      allow create: if isSignedIn();
+      // Un nouvel utilisateur peut créer son profil.
+      allow create: if isSignedIn(); 
     }
 
-    // POIs are public to read, but only editors or admins can modify them.
+    // Les POIs sont publics en lecture, mais seuls les éditeurs ou admins peuvent les modifier.
     match /pois/{poiId} {
       allow read: if true;
       allow create, update, delete: if isEditorOrAdmin();
     }
     
-    // Users can create reviews, and can only modify or delete their own.
+    // Les avis sont publics, les utilisateurs peuvent créer les leurs.
+    // Un utilisateur peut modifier/supprimer son propre avis.
     match /reviews/{reviewId} {
         allow read: if true;
         allow create: if isSignedIn();
+        // Vérifie que l'utilisateur qui modifie est bien le créateur de l'avis.
         allow update, delete: if isOwner(request.resource.data.userId);
     }
   }
