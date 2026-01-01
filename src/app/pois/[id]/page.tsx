@@ -1,4 +1,3 @@
-// src/app/pois/[id]/page.tsx
 import { fetchPoiById, fetchReviewsByPoiId } from '@/lib/data';
 import { notFound } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -11,11 +10,13 @@ import { AppLayout } from '@/components/layout/app-layout';
 
 export default async function PoiDetailPage({ params }: { params: { id: string } }) {
   const poi = await fetchPoiById(params.id);
-  const reviews = await fetchReviewsByPoiId(params.id);
-
+  
   if (!poi) {
     notFound();
   }
+  
+  // fetchReviewsByPoiId is called within POIReviews now to make it a client component
+  const reviews = await fetchReviewsByPoiId(params.id);
 
   return (
     <AppLayout>
@@ -23,9 +24,9 @@ export default async function PoiDetailPage({ params }: { params: { id: string }
         <div className="flex items-center justify-between">
             <h1 className="text-3xl font-bold tracking-tight">{poi.title}</h1>
             <Button asChild variant="outline">
-            <Link href="/pois">
+            <Link href="/dashboard">
                 <ChevronLeft className="mr-2 h-4 w-4" />
-                Retour à la liste des POIs
+                Retour au tableau de bord
             </Link>
             </Button>
         </div>
