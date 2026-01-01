@@ -64,8 +64,11 @@ service cloud.firestore {
       // Lecture publique
       allow read: if true;
 
-      // Création / modification / suppression : editor ou admin
-      allow create, update, delete: if isEditorOrAdmin();
+      // Création : tout utilisateur authentifié
+      allow create: if isSignedIn();
+
+      // Modification / suppression : editor ou admin
+      allow update, delete: if isEditorOrAdmin();
 
       /* =========================
          REVIEWS (sous-collection)
