@@ -51,7 +51,7 @@ export async function fetchReviewsByPoiId(poiId: string): Promise<Review[]> {
     const reviewList = reviewSnapshot.docs.map(doc => {
       const data = doc.data();
       // Handle both Timestamp and Date objects
-      const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt;
+      const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
       return { id: doc.id, ...data, createdAt } as Review;
     });
     return reviewList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
