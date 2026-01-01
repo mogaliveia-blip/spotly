@@ -45,7 +45,7 @@ function MapController({ onRecenter }: { onRecenter: () => void }) {
     return (
       <>
         {userLocation && (
-          <div className="absolute bottom-4 right-4 z-10">
+          <div className="absolute bottom-4 left-4 z-10">
             <Button size="icon" onClick={onRecenter} type="button" title="Recentrer sur ma position">
               <Crosshair className="h-5 w-5" />
             </Button>
