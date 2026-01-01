@@ -48,7 +48,7 @@ export function POIMap({ pois }: POIMapProps) {
       center={defaultCenter}
       defaultZoom={13}
       gestureHandling={'greedy'}
-      disableDefaultUI={true}
+      disableDefaultUI={false}
       mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
       styles={mapStyles}
     >
