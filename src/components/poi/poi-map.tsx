@@ -77,7 +77,7 @@ function MapController({ pois, selectedPoi, onSelectPoi }: { pois: POI[], select
         </InfoWindow>
       )}
       {userLocation && (
-        <div className="absolute bottom-4 right-4">
+        <div className="absolute bottom-4 right-4 z-10">
           <Button size="icon" onClick={handleRecenter} type="button" title="Recentrer sur ma position">
             <Crosshair className="h-5 w-5" />
           </Button>
@@ -97,7 +97,7 @@ export function POIMap({ selectedPoiId, onSelectPoi }: POIMapProps) {
             try {
                 const poiData = await fetchPois();
                 setPois(poiData);
-            } catch (error) {
+            } catch (error) => {
                 console.error("Impossible de récupérer les POIs", error);
             } finally {
                 setLoading(false);
@@ -114,16 +114,15 @@ export function POIMap({ selectedPoiId, onSelectPoi }: POIMapProps) {
     }
 
     return (
-        <div className="relative w-full h-full">
-            <Map
-                defaultCenter={defaultCenter}
-                defaultZoom={13}
-                gestureHandling={'greedy'}
-                disableDefaultUI={false}
-                mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
-            >
-                <MapController pois={pois} selectedPoi={selectedPoi} onSelectPoi={onSelectPoi} />
-            </Map>
-        </div>
+        <Map
+            defaultCenter={defaultCenter}
+            defaultZoom={13}
+            gestureHandling={'greedy'}
+            disableDefaultUI={false}
+            mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
+            className="w-full h-full"
+        >
+            <MapController pois={pois} selectedPoi={selectedPoi} onSelectPoi={onSelectPoi} />
+        </Map>
     )
 }

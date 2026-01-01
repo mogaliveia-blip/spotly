@@ -7,6 +7,7 @@ import {
   SidebarMenuButton,
   SidebarContent,
   SidebarFooter,
+  SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/use-auth-user';
 import {
@@ -15,13 +16,90 @@ import {
   Users,
   Mountain,
   LogOut,
+  PlusCircle,
+  Navigation,
 } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '../ui/button';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import type { POI } from '@/lib/types';
+import { fetchPois } from '@/lib/data';
+import { useGeolocation } from '@/providers/geolocation-provider';
+import { getDistance } from '@/lib/utils';
+import { Skeleton } from '../ui/skeleton';
+import { cn } from '@/lib/utils';
+import { ScrollArea } from '../ui/scroll-area';
+
+function POISidebarList() {
+    const [pois, setPois] = useState<POI[]>([]);
+    const [loading, setLoading] = useState(true);
+    const { userLocation, loading: geoLoading } = useGeolocation();
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const selectedPoiId = searchParams.get('poi');
+
+    useEffect(() => {
+        async function getPois() {
+            try {
+                const poiData = await fetchPois();
+                setPois(poiData);
+            } catch (error) {
+                console.error("Impossible de récupérer les POIs", error);
+            } finally {
+                setLoading(false);
+            }
+        }
+        getPois();
+    }, []);
+
+    const handleSelectPoi = (poi: POI) => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('poi', poi.id);
+        router.push(`${pathname}?${params.toString()}`);
+    };
+    
+    if (loading) {
+        return (
+            <div className="px-2 space-y-2">
+                {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex flex-col gap-1 px-2">
+            {pois.map((poi) => (
+                <button
+                    key={poi.id}
+                    onClick={() => handleSelectPoi(poi)}
+                    className={cn(
+                        'w-full text-left p-2 rounded-md transition-colors text-sm flex flex-col',
+                        selectedPoiId === poi.id
+                            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                            : 'hover:bg-sidebar-accent/50'
+                    )}
+                >
+                    <span className="font-medium">{poi.title}</span>
+                     {userLocation ? (
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Navigation className="h-3 w-3" />
+                            <span>
+                                {`${getDistance(userLocation.lat, userLocation.lng, poi.location.lat, poi.location.lng).toFixed(2)} km`}
+                            </span>
+                        </div>
+                    ) : geoLoading ? (
+                        <Skeleton className="h-3 w-16 mt-1" />
+                    ) : null}
+                </button>
+            ))}
+        </div>
+    )
+}
+
 
 export function SidebarNav() {
   const { role } = useAuth();
@@ -43,8 +121,8 @@ export function SidebarNav() {
     {
       href: '/pois',
       icon: MapPin,
-      label: 'Points d\'intérêt',
-      roles: ['user', 'editor', 'admin'],
+      label: 'Gérer les POIs',
+      roles: ['editor', 'admin'],
     },
     {
       href: '/admin',
@@ -54,22 +132,11 @@ export function SidebarNav() {
     },
   ];
 
-  const filteredNavItems = navItems.filter((item) => {
-    if (!role) return false;
-    // Special case for /pois to avoid duplication if we add a separate management link later
-    if (item.href === '/pois') {
-        const adminPois = navItems.find(i => i.href === '/pois' && i.label === 'Gestion des POIs');
-        if (adminPois && (role === 'editor' || role === 'admin')) {
-            return item.label !== 'Gestion des POIs'; // Show "Points of Interest" for all
-        }
-    }
-    return item.roles.includes(role);
-  }).filter((item, index, self) => 
-    index === self.findIndex((t) => (
-      t.href === item.href && t.label === item.label
-    ))
-  );
+  const canAddPoi = role === 'admin' || role === 'editor';
 
+  const filteredNavItems = navItems.filter((item) => role && item.roles.includes(role));
+
+  const isDashboard = pathname.startsWith('/dashboard');
 
   return (
     <>
@@ -84,23 +151,46 @@ export function SidebarNav() {
           </div>
         </div>
       </SidebarHeader>
-      <SidebarContent>
-        <SidebarMenu>
-          {filteredNavItems.map((item) => (
-            <SidebarMenuItem key={item.href + item.label}>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname.startsWith(item.href)}
-              >
-                <Link href={item.href}>
-                  <item.icon />
-                  <span>{item.label}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
+      
+      <SidebarContent asChild>
+        <ScrollArea className="h-full">
+            <SidebarMenu className="p-2">
+            {filteredNavItems.map((item) => (
+                <SidebarMenuItem key={item.href + item.label}>
+                <SidebarMenuButton
+                    asChild
+                    isActive={pathname.startsWith(item.href)}
+                >
+                    <Link href={item.href}>
+                    <item.icon />
+                    <span>{item.label}</span>
+                    </Link>
+                </SidebarMenuButton>
+                </SidebarMenuItem>
+            ))}
+            </SidebarMenu>
+            
+            {isDashboard && (
+                <>
+                    <SidebarSeparator />
+                    <div className="p-2 space-y-2">
+                        <div className="flex items-center justify-between px-2">
+                            <h3 className="text-sm font-semibold text-muted-foreground">Explorer</h3>
+                             {canAddPoi && (
+                                <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                                    <Link href="/pois/new" title="Ajouter un nouveau POI">
+                                        <PlusCircle className="h-4 w-4" />
+                                    </Link>
+                                </Button>
+                            )}
+                        </div>
+                        <POISidebarList />
+                    </div>
+                </>
+            )}
+        </ScrollArea>
       </SidebarContent>
+
       <SidebarFooter>
         <Button variant="ghost" className="w-full justify-start gap-2" onClick={handleSignOut}>
           <LogOut />

@@ -11,22 +11,20 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Eye, PlusCircle, Navigation } from 'lucide-react';
+import { Eye, PlusCircle, Edit, Trash2 } from 'lucide-react';
 import { Suspense, useEffect, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AppLayout } from '@/components/layout/app-layout';
 import { useAuth } from '@/hooks/use-auth-user';
 import { fetchPois } from '@/lib/data';
 import type { POI } from '@/lib/types';
-import { useGeolocation } from '@/providers/geolocation-provider';
-import { getDistance } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { Badge } from '@/components/ui/badge';
 
 
 function POIsTable() {
   const [pois, setPois] = useState<POI[]>([]);
   const [loading, setLoading] = useState(true);
-  const { userLocation, loading: geoLoading } = useGeolocation();
   const router = useRouter();
 
   useEffect(() => {
@@ -46,6 +44,18 @@ function POIsTable() {
   const handleViewClick = (poiId: string) => {
     router.push(`/dashboard?poi=${poiId}`);
   };
+  
+  const handleEditClick = (poiId: string) => {
+    // Rediriger vers une page d'édition (à créer)
+    // router.push(`/pois/edit/${poiId}`);
+    console.log(`Edit POI ${poiId}`);
+  };
+
+  const handleDeleteClick = (poiId: string) => {
+    // Implémenter la logique de suppression avec confirmation
+    console.log(`Delete POI ${poiId}`);
+  };
+
 
   if (loading) {
     return <Skeleton className="h-[300px] w-full" />;
@@ -57,7 +67,7 @@ function POIsTable() {
         <TableRow>
           <TableHead>Titre</TableHead>
           <TableHead className="hidden md:table-cell">Description</TableHead>
-          <TableHead className="hidden sm:table-cell">Distance</TableHead>
+          <TableHead className="hidden sm:table-cell">Avis</TableHead>
           <TableHead>Actions</TableHead>
         </TableRow>
       </TableHeader>
@@ -67,23 +77,19 @@ function POIsTable() {
             <TableCell className="font-medium">{poi.title}</TableCell>
             <TableCell className="hidden md:table-cell truncate max-w-sm">{poi.description}</TableCell>
             <TableCell className="hidden sm:table-cell">
-              {userLocation ? (
-                <div className="flex items-center gap-2">
-                    <Navigation className="h-4 w-4 text-muted-foreground" />
-                    <span>
-                        {`${getDistance(userLocation.lat, userLocation.lng, poi.location.lat, poi.location.lng).toFixed(2)} km`}
-                    </span>
-                </div>
-              ) : geoLoading ? (
-                <Skeleton className="h-4 w-20" />
-              ) : (
-                'N/A'
-              )}
+                <Badge variant={poi.reviewCount > 0 ? "default" : "secondary"}>
+                    {poi.reviewCount} avis
+                </Badge>
             </TableCell>
-            <TableCell>
+            <TableCell className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => handleViewClick(poi.id)}>
-                <Eye className="mr-2 h-4 w-4" />
-                Voir
+                <Eye className="h-4 w-4" />
+              </Button>
+               <Button variant="outline" size="sm" onClick={() => handleEditClick(poi.id)}>
+                <Edit className="h-4 w-4" />
+              </Button>
+               <Button variant="destructive" size="sm" onClick={() => handleDeleteClick(poi.id)}>
+                <Trash2 className="h-4 w-4" />
               </Button>
             </TableCell>
           </TableRow>
@@ -96,7 +102,7 @@ function POIsTable() {
 
 export default function POIsPage() {
     const { role } = useAuth();
-    const canAddPoi = role === 'admin' || role === 'editor';
+    const canManagePois = role === 'admin' || role === 'editor';
 
     return (
         <AppLayout>
@@ -104,10 +110,10 @@ export default function POIsPage() {
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
                     <div>
-                        <CardTitle>Points d'intérêt</CardTitle>
-                        <CardDescription>Parcourez et gérez tous les POIs disponibles.</CardDescription>
+                        <CardTitle>Gérer les Points d'intérêt</CardTitle>
+                        <CardDescription>Ajoutez, modifiez ou supprimez des POIs.</CardDescription>
                     </div>
-                    {canAddPoi && (
+                    {canManagePois && (
                         <Button asChild>
                             <Link href="/pois/new">
                             <PlusCircle className="mr-2 h-4 w-4" />

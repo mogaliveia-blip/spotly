@@ -1,24 +1,37 @@
 'use client';
 
 import { POIMap } from '@/components/poi/poi-map';
-import { POIList } from '@/components/poi/poi-list';
 import { POIDetailModal } from '@/components/poi/poi-detail-modal';
 import type { POI } from '@/lib/types';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { useSidebar } from '@/components/ui/sidebar';
+import { useEffect } from 'react';
 
 export default function DashboardPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const selectedPoiId = searchParams.get('poi');
+  const { setOpen } = useSidebar();
+
+  // Open sidebar on dashboard by default on desktop
+  useEffect(() => {
+    // This check is to avoid hydration errors, as useSidebar relies on window.
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+        setOpen(true);
+    }
+  }, [setOpen]);
+
 
   const handleSelectPoi = (poi: POI | null) => {
-    const params = new URLSearchParams(searchParams);
+    const params = new URLSearchParams(searchParams.toString());
     if (poi) {
       params.set('poi', poi.id);
     } else {
       params.delete('poi');
     }
-    router.replace(`?${params.toString()}`);
+    // Use router.push to ensure the URL updates and triggers re-renders
+    router.push(`${pathname}?${params.toString()}`);
   };
 
   const handleModalClose = () => {
@@ -26,11 +39,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-theme(height.16))] w-full">
-      <POIList onSelectPoi={handleSelectPoi} selectedPoiId={selectedPoiId} />
-      <div className="flex-1 h-full relative">
-        <POIMap selectedPoiId={selectedPoiId} onSelectPoi={handleSelectPoi} />
-      </div>
+    <div className="h-full w-full">
+      <POIMap selectedPoiId={selectedPoiId} onSelectPoi={handleSelectPoi} />
       {selectedPoiId && <POIDetailModal poiId={selectedPoiId} onClose={handleModalClose} />}
     </div>
   );
