@@ -62,31 +62,19 @@ service cloud.firestore {
     /* =========================
        POIS
        ========================= */
-    // Règle pour autoriser la création sur la collection
+    // Règle pour autoriser la création sur la collection et la lecture
     match /pois/{poiId} {
-
-      // Lecture publique
       allow read: if true;
-
-      // Création : tout utilisateur authentifié
       allow create: if isSignedIn();
-
-      // Modification / suppression : editor ou admin
       allow update, delete: if isEditorOrAdmin();
 
       /* =========================
          REVIEWS (sous-collection)
          ========================= */
       match /reviews/{reviewId} {
-
-        // Lecture publique
         allow read: if true;
-
-        // Création : utilisateur authentifié, propriétaire de l'avis
         allow create: if isSignedIn()
           && request.resource.data.userId == request.auth.uid;
-
-        // Modification / suppression : uniquement le propriétaire
         allow update, delete: if isSignedIn()
           && resource.data.userId == request.auth.uid;
       }
