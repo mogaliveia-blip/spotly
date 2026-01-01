@@ -15,6 +15,7 @@ import { fr } from 'date-fns/locale';
 import { ScrollArea } from '../ui/scroll-area';
 import { ReviewForm } from './review-form';
 import { ReviewList } from './review-list';
+import { Button } from '../ui/button';
 
 function renderStars(rating: number) {
     const stars = [];
