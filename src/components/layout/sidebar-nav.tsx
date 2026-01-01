@@ -76,12 +76,13 @@ export function SidebarNav() {
           {filteredNavItems.map((item) => (
             <SidebarMenuItem key={item.href}>
               <SidebarMenuButton
-                as={Link}
-                href={item.href}
+                asChild
                 isActive={pathname.startsWith(item.href)}
               >
-                <item.icon />
-                <span>{item.label}</span>
+                <Link href={item.href}>
+                  <item.icon />
+                  <span>{item.label}</span>
+                </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
