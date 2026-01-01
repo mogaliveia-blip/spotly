@@ -40,12 +40,6 @@ interface POIFormProps {
   poi?: POI;
 }
 
-const mapStyles = [
-  { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
-  { featureType: 'poi.park', elementType: 'labels.text', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road.local', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-];
-
 export function POIForm({ poi }: POIFormProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -150,7 +144,6 @@ export function POIForm({ poi }: POIFormProps) {
                                 gestureHandling={'greedy'}
                                 disableDefaultUI={false}
                                 mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
-                                styles={mapStyles}
                                 onClick={(e) => {
                                     if (e.detail.latLng) {
                                         form.setValue('location', e.detail.latLng, { shouldValidate: true });

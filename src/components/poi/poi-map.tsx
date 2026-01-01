@@ -13,29 +13,6 @@ interface POIMapProps {
   pois: POI[];
 }
 
-const mapStyles = [
-  {
-    "featureType": "poi.business",
-    "stylers": [
-      { "visibility": "off" }
-    ]
-  },
-  {
-    "featureType": "poi.park",
-    "elementType": "labels.text",
-    "stylers": [
-      { "visibility": "off" }
-    ]
-  },
-   {
-    "featureType": "road.local",
-    "elementType": "labels",
-    "stylers": [
-      { "visibility": "off" }
-    ]
-  },
-];
-
 export function POIMap({ pois }: POIMapProps) {
   const router = useRouter();
   const [selectedPoi, setSelectedPoi] = useState<POI | null>(null);
@@ -50,7 +27,6 @@ export function POIMap({ pois }: POIMapProps) {
       gestureHandling={'greedy'}
       disableDefaultUI={false}
       mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
-      styles={mapStyles}
     >
       {userLocation && (
         <AdvancedMarker position={userLocation}>
