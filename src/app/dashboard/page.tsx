@@ -4,7 +4,7 @@ import { POIMap } from '@/components/poi/poi-map';
 import type { POI } from '@/lib/types';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useSidebar } from '@/components/ui/sidebar';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -31,19 +31,14 @@ export default function DashboardPage() {
     router.replace(`${pathname}?${params.toString()}`);
   };
 
-  const handleShowDetails = (poi: POI) => {
-    // This is where we would open the full modal if we were using one.
-    // For now, it's already selected.
-    console.log("Détails demandés pour :", poi.title);
-  }
-
   return (
     <div className="h-full w-full relative">
       <POIMap 
         selectedPoiId={selectedPoiId} 
         onSelectPoi={handleSelectPoi}
-        onShowDetails={handleShowDetails}
       />
     </div>
   );
 }
+
+    
