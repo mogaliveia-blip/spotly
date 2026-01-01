@@ -15,21 +15,24 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function getUserRole(userId) {
-      let userDoc = get(
-        /databases/$(database)/documents/users/$(userId)
-      );
-      return userDoc.exists ? userDoc.data.role : 'user';
+    function getUserData(userId) {
+        return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    function isRole(role) {
+        return isSignedIn() && getUserData(request.auth.uid).role == role;
+    }
+    
+    function isOneOfRoles(roles) {
+        return isSignedIn() && getUserData(request.auth.uid).role in roles;
     }
 
     function isAdmin() {
-      return isSignedIn()
-        && getUserRole(request.auth.uid) == 'admin';
+      return isOneOfRoles(['admin']);
     }
 
     function isEditorOrAdmin() {
-      return isSignedIn()
-        && getUserRole(request.auth.uid) in ['editor', 'admin'];
+      return isOneOfRoles(['editor', 'admin']);
     }
 
     /* =========================
@@ -59,6 +62,7 @@ service cloud.firestore {
     /* =========================
        POIS
        ========================= */
+    // Règle pour autoriser la création sur la collection
     match /pois/{poiId} {
 
       // Lecture publique
