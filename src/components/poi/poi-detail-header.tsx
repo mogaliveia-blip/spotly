@@ -38,7 +38,7 @@ export function POIDetailHeader({ poi }: POIDetailHeaderProps) {
                     {renderStars(poi.averageRating)}
                 </div>
                 <span className="text-muted-foreground text-sm">
-                    ({poi.reviewCount} {poi.reviewCount === 1 ? 'avis' : 'avis'})
+                    ({poi.reviewCount} {poi.reviewCount <= 1 ? 'avis' : 'avis'})
                 </span>
             </div>
             {loading && <Skeleton className="h-5 w-24" />}
