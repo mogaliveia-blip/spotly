@@ -18,7 +18,7 @@ import { createPoi } from '@/lib/data';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
+import { Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { useState, useEffect } from 'react';
 import { Loader2, MapPin, Crosshair } from 'lucide-react';
 import type { POI } from '@/lib/types';
@@ -40,13 +40,28 @@ interface POIFormProps {
   poi?: POI;
 }
 
+function MapController({ onRecenter }: { onRecenter: () => void }) {
+    const { userLocation } = useGeolocation();
+    return (
+      <>
+        {userLocation && (
+          <div className="absolute bottom-4 right-4 z-10">
+            <Button size="icon" onClick={onRecenter} type="button" title="Recentrer sur ma position">
+              <Crosshair className="h-5 w-5" />
+            </Button>
+          </div>
+        )}
+      </>
+    );
+  }
+
 export function POIForm({ poi }: POIFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const { userLocation, loading: geoLoading } = useGeolocation();
   const fallbackCenter = { lat: 48.8566, lng: 2.3522 }; // Paris
-  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const map = useMap();
 
   const form = useForm<POIFormValues>({
     resolver: zodResolver(formSchema),
@@ -147,7 +162,6 @@ export function POIForm({ poi }: POIFormProps) {
                             <Skeleton className="h-full w-full" />
                         ) : (
                             <Map
-                                ref={setMap}
                                 defaultCenter={mapCenter}
                                 defaultZoom={13}
                                 gestureHandling={'greedy'}
@@ -164,17 +178,11 @@ export function POIForm({ poi }: POIFormProps) {
                                         <MapPin size={36} />
                                     </div>
                                 </AdvancedMarker>
+                                <MapController onRecenter={handleRecenter} />
                             </Map>
                         )}
                     </div>
                      <FormMessage>{form.formState.errors.location?.message}</FormMessage>
-                     {userLocation && (
-                        <div className="absolute bottom-4 right-4 z-10">
-                            <Button size="icon" onClick={handleRecenter} type="button" title="Recentrer sur ma position">
-                                <Crosshair className="h-5 w-5" />
-                            </Button>
-                        </div>
-                    )}
                 </CardContent>
             </Card>
           </div>
