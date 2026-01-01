@@ -35,7 +35,7 @@ export function POIDetailHeader({ poi }: POIDetailHeaderProps) {
                     {renderStars(poi.averageRating)}
                 </div>
                 <span className="text-muted-foreground text-sm">
-                    ({poi.reviewCount} {poi.reviewCount === 1 ? 'review' : 'reviews'})
+                    ({poi.reviewCount} {poi.reviewCount === 1 ? 'avis' : 'avis'})
                 </span>
             </div>
             

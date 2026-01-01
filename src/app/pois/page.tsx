@@ -30,7 +30,7 @@ function POIsTable() {
         const poiData = await fetchPois();
         setPois(poiData);
       } catch (error) {
-        console.error("Failed to fetch POIs", error);
+        console.error("Impossible de récupérer les POIs", error);
       } finally {
         setLoading(false);
       }
@@ -46,7 +46,7 @@ function POIsTable() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Title</TableHead>
+          <TableHead>Titre</TableHead>
           <TableHead className="hidden md:table-cell">Description</TableHead>
           <TableHead>Actions</TableHead>
         </TableRow>
@@ -60,7 +60,7 @@ function POIsTable() {
               <Button asChild variant="outline" size="sm">
                 <Link href={`/pois/${poi.id}`}>
                   <Eye className="mr-2 h-4 w-4" />
-                  View
+                  Voir
                 </Link>
               </Button>
             </TableCell>
@@ -82,14 +82,14 @@ export default function POIsPage() {
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
                     <div>
-                        <CardTitle>Points of Interest</CardTitle>
-                        <CardDescription>Browse and manage all available POIs.</CardDescription>
+                        <CardTitle>Points d'intérêt</CardTitle>
+                        <CardDescription>Parcourez et gérez tous les POIs disponibles.</CardDescription>
                     </div>
                     {canAddPoi && (
                         <Button asChild>
                             <Link href="/pois/new">
                             <PlusCircle className="mr-2 h-4 w-4" />
-                            Add POI
+                            Ajouter un POI
                             </Link>
                         </Button>
                     )}

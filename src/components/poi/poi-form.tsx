@@ -24,8 +24,8 @@ import { Loader2, MapPin } from 'lucide-react';
 import type { POI } from '@/lib/types';
 
 const formSchema = z.object({
-  title: z.string().min(3, { message: 'Title must be at least 3 characters.' }),
-  description: z.string().min(10, { message: 'Description must be at least 10 characters.' }),
+  title: z.string().min(3, { message: 'Le titre doit comporter au moins 3 caractères.' }),
+  description: z.string().min(10, { message: 'La description doit comporter au moins 10 caractères.' }),
   location: z.object({
     lat: z.number(),
     lng: z.number(),
@@ -73,17 +73,15 @@ export function POIForm({ poi }: POIFormProps) {
       createPoi(poiData);
       
       toast({
-        title: 'POI Created!',
-        description: `${values.title} has been added to the map.`,
+        title: 'POI créé !',
+        description: `${values.title} a été ajouté à la carte.`,
       });
       router.push('/dashboard');
-      // The refresh should be handled by Next.js App Router cache invalidation
-      // but we can force it if needed.
       router.refresh(); 
     } catch (error) {
       toast({
-        title: 'Error',
-        description: 'Could not create the POI. Please try again.',
+        title: 'Erreur',
+        description: 'Impossible de créer le POI. Veuillez réessayer.',
         variant: 'destructive',
       });
     } finally {
@@ -97,15 +95,15 @@ export function POIForm({ poi }: POIFormProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-6">
             <Card>
-              <CardHeader><CardTitle>POI Details</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Détails du POI</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <FormField
                   control={form.control}
                   name="title"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Title</FormLabel>
-                      <FormControl><Input placeholder="E.g., Main Stage" {...field} /></FormControl>
+                      <FormLabel>Titre</FormLabel>
+                      <FormControl><Input placeholder="Ex : Scène principale" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -116,7 +114,7 @@ export function POIForm({ poi }: POIFormProps) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Description</FormLabel>
-                      <FormControl><Textarea placeholder="A brief description of the point of interest." {...field} /></FormControl>
+                      <FormControl><Textarea placeholder="Une brève description du point d'intérêt." {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -126,9 +124,9 @@ export function POIForm({ poi }: POIFormProps) {
           </div>
           <div className="space-y-6">
             <Card>
-                <CardHeader><CardTitle>Location</CardTitle></CardHeader>
+                <CardHeader><CardTitle>Emplacement</CardTitle></CardHeader>
                 <CardContent>
-                    <FormLabel>Click on the map to set the location</FormLabel>
+                    <FormLabel>Cliquez sur la carte pour définir l'emplacement</FormLabel>
                     <div className="h-[400px] w-full overflow-hidden rounded-lg border mt-2">
                         <Map
                             defaultCenter={poi?.location || defaultCenter}
@@ -158,7 +156,7 @@ export function POIForm({ poi }: POIFormProps) {
 
         <Button type="submit" disabled={loading}>
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Create POI
+          Créer un POI
         </Button>
       </form>
     </Form>

@@ -37,13 +37,13 @@ export function SidebarNav() {
     {
       href: '/dashboard',
       icon: LayoutDashboard,
-      label: 'Dashboard',
+      label: 'Tableau de bord',
       roles: ['user', 'editor', 'admin'],
     },
     {
       href: '/pois',
       icon: MapPin,
-      label: 'Points of Interest',
+      label: 'Points d\'intérêt',
       roles: ['user', 'editor', 'admin'],
     },
     {
@@ -58,9 +58,9 @@ export function SidebarNav() {
     if (!role) return false;
     // Special case for /pois to avoid duplication if we add a separate management link later
     if (item.href === '/pois') {
-        const adminPois = navItems.find(i => i.href === '/pois' && i.label === 'POI Management');
+        const adminPois = navItems.find(i => i.href === '/pois' && i.label === 'Gestion des POIs');
         if (adminPois && (role === 'editor' || role === 'admin')) {
-            return item.label !== 'POI Management'; // Show "Points of Interest" for all
+            return item.label !== 'Gestion des POIs'; // Show "Points of Interest" for all
         }
     }
     return item.roles.includes(role);
@@ -80,7 +80,7 @@ export function SidebarNav() {
             <h2 className="text-lg font-semibold tracking-tight">
               Eventide Guide
             </h2>
-            <p className="text-sm text-muted-foreground">Welcome!</p>
+            <p className="text-sm text-muted-foreground">Bienvenue !</p>
           </div>
         </div>
       </SidebarHeader>
@@ -104,7 +104,7 @@ export function SidebarNav() {
       <SidebarFooter>
         <Button variant="ghost" className="w-full justify-start gap-2" onClick={handleSignOut}>
           <LogOut />
-          <span>Log Out</span>
+          <span>Se déconnecter</span>
         </Button>
       </SidebarFooter>
     </>

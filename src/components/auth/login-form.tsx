@@ -33,12 +33,12 @@ import { createUserInFirestore } from '@/lib/data';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const passwordSchema = z.object({
-  email: z.string().email({ message: 'Please enter a valid email address.' }),
-  password: z.string().min(1, { message: 'Password is required.' }),
+  email: z.string().email({ message: 'Veuillez saisir une adresse e-mail valide.' }),
+  password: z.string().min(1, { message: 'Le mot de passe est requis.' }),
 });
 
 const emailLinkSchema = z.object({
-  email: z.string().email({ message: 'Please enter a valid email address.' }),
+  email: z.string().email({ message: 'Veuillez saisir une adresse e-mail valide.' }),
 });
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -76,9 +76,7 @@ export function LoginForm() {
         setLoading(true);
         let email = window.localStorage.getItem('emailForSignIn');
         if (!email) {
-          // This can happen if the user opens the link on a different device.
-          // We can prompt them for their email.
-          email = window.prompt('Please provide your email for confirmation');
+          email = window.prompt('Veuillez fournir votre e-mail pour confirmation');
         }
         if (email) {
           try {
@@ -97,8 +95,8 @@ export function LoginForm() {
             router.push(searchParams.get('redirect') || '/dashboard');
           } catch (error) {
             toast({
-              title: 'Sign In Failed',
-              description: 'The sign-in link is invalid or has expired. Please try again.',
+              title: 'Échec de la connexion',
+              description: 'Le lien de connexion est invalide ou a expiré. Veuillez réessayer.',
               variant: 'destructive',
             });
           } finally {
@@ -120,11 +118,11 @@ export function LoginForm() {
       router.push(searchParams.get('redirect') || '/dashboard');
     } catch (error: any) {
       toast({
-        title: 'Login Failed',
+        title: 'Échec de la connexion',
         description:
           error.code === 'auth/invalid-credential'
-            ? 'Invalid email or password.'
-            : 'An unexpected error occurred.',
+            ? 'E-mail ou mot de passe invalide.'
+            : 'Une erreur inattendue est survenue.',
         variant: 'destructive',
       });
     } finally {
@@ -135,7 +133,7 @@ export function LoginForm() {
   async function onEmailLinkSubmit(values: z.infer<typeof emailLinkSchema>) {
     setLoading(true);
     const actionCodeSettings = {
-      url: window.location.href.split('?')[0], // Redirect back to the login page without params
+      url: window.location.href.split('?')[0],
       handleCodeInApp: true,
     };
     try {
@@ -143,14 +141,14 @@ export function LoginForm() {
       window.localStorage.setItem('emailForSignIn', values.email);
       setLinkSent(true);
       toast({
-        title: 'Check your email',
-        description: `A sign-in link has been sent to ${values.email}.`,
+        title: 'Vérifiez vos e-mails',
+        description: `Un lien de connexion a été envoyé à ${values.email}.`,
       });
     } catch (error: any) {
-        console.error('Email Link Error:', error);
+        console.error('Erreur du lien de messagerie :', error);
       toast({
-        title: 'Could not send link',
-        description: 'An unexpected error occurred. Please try again.',
+        title: 'Impossible d\'envoyer le lien',
+        description: 'Une erreur inattendue est survenue. Veuillez réessayer.',
         variant: 'destructive',
       });
     } finally {
@@ -174,8 +172,8 @@ export function LoginForm() {
           photoURL: result.user.photoURL,
         });
         toast({
-          title: 'Account Created!',
-          description: 'Welcome to Eventide Guide.',
+          title: 'Compte créé !',
+          description: 'Bienvenue dans Eventide Guide.',
         });
       }
 
@@ -183,8 +181,8 @@ export function LoginForm() {
     } catch (error: any) {
         console.error(error);
         toast({
-            title: 'Google Sign-In Failed',
-            description: 'Could not sign in with Google. Please try again.',
+            title: 'Échec de la connexion avec Google',
+            description: 'Impossible de se connecter avec Google. Veuillez réessayer.',
             variant: 'destructive',
         });
     } finally {
@@ -199,8 +197,8 @@ export function LoginForm() {
       router.push('/dashboard');
     } catch (error) {
       toast({
-        title: 'Demo Login Failed',
-        description: `Could not log in as ${email}. Ensure demo accounts are set up in your Firebase project with the password 'password'.`,
+        title: 'Échec de la connexion de démonstration',
+        description: `Impossible de se connecter en tant que ${email}. Assurez-vous que les comptes de démonstration sont configurés dans votre projet Firebase avec le mot de passe 'password'.`,
         variant: 'destructive',
       });
     } finally {
@@ -210,16 +208,16 @@ export function LoginForm() {
 
   return (
     <AuthFormWrapper
-      title="Welcome Back"
-      description="Sign in to your Eventide Guide account"
-      footerText="Don't have an account?"
+      title="Content de vous revoir"
+      description="Connectez-vous à votre compte Eventide Guide"
+      footerText="Vous n'avez pas de compte ?"
       footerLink="/signup"
-      footerLinkText="Sign up"
+      footerLinkText="Inscrivez-vous"
     >
       <Tabs defaultValue="password">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="password">Password</TabsTrigger>
-          <TabsTrigger value="email-link">Email Link</TabsTrigger>
+          <TabsTrigger value="password">Mot de passe</TabsTrigger>
+          <TabsTrigger value="email-link">Lien par e-mail</TabsTrigger>
         </TabsList>
         <TabsContent value="password">
           <Form {...passwordForm}>
@@ -230,11 +228,11 @@ export function LoginForm() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email</FormLabel>
+                      <FormLabel>E-mail</FormLabel>
                       <FormControl>
                         <Input
                           type="email"
-                          placeholder="name@example.com"
+                          placeholder="nom@example.com"
                           {...field}
                           disabled={loading}
                         />
@@ -248,7 +246,7 @@ export function LoginForm() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Password</FormLabel>
+                      <FormLabel>Mot de passe</FormLabel>
                       <FormControl>
                         <Input type="password" placeholder="••••••••" {...field} disabled={loading} />
                       </FormControl>
@@ -259,7 +257,7 @@ export function LoginForm() {
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Sign In
+                Se connecter
               </Button>
             </form>
           </Form>
@@ -267,8 +265,8 @@ export function LoginForm() {
         <TabsContent value="email-link">
             {linkSent ? (
                  <div className="text-center py-8">
-                    <h3 className="text-xl font-semibold">Check your inbox</h3>
-                    <p className="text-muted-foreground mt-2">A sign-in link has been sent to the email address you provided.</p>
+                    <h3 className="text-xl font-semibold">Vérifiez votre boîte de réception</h3>
+                    <p className="text-muted-foreground mt-2">Un lien de connexion a été envoyé à l'adresse e-mail que vous avez fournie.</p>
                  </div>
             ) : (
                 <Form {...emailLinkForm}>
@@ -278,11 +276,11 @@ export function LoginForm() {
                         name="email"
                         render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Email</FormLabel>
+                            <FormLabel>E-mail</FormLabel>
                             <FormControl>
                             <Input
                                 type="email"
-                                placeholder="name@example.com"
+                                placeholder="nom@example.com"
                                 {...field}
                                 disabled={loading}
                             />
@@ -293,7 +291,7 @@ export function LoginForm() {
                     />
                     <Button type="submit" className="w-full" disabled={loading}>
                         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Send Sign-In Link
+                        Envoyer le lien de connexion
                     </Button>
                     </form>
                 </Form>
@@ -304,20 +302,20 @@ export function LoginForm() {
       <div className="relative my-4">
         <Separator />
         <p className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
-          OR CONTINUE WITH
+          OU CONTINUER AVEC
         </p>
       </div>
 
       <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={loading}>
         {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GoogleIcon className="mr-2 h-4 w-4" />}
-        Sign in with Google
+        Se connecter avec Google
       </Button>
 
       <div className="mt-4 space-y-2">
-        <p className="text-center text-sm text-muted-foreground">For demo purposes:</p>
+        <p className="text-center text-sm text-muted-foreground">À des fins de démonstration :</p>
         <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" onClick={() => handleDemoLogin('editor@test.com')} disabled={loading}>Login as Editor</Button>
-            <Button variant="outline" onClick={() => handleDemoLogin('admin@test.com')} disabled={loading}>Login as Admin</Button>
+            <Button variant="outline" onClick={() => handleDemoLogin('editor@test.com')} disabled={loading}>Se connecter en tant qu'éditeur</Button>
+            <Button variant="outline" onClick={() => handleDemoLogin('admin@test.com')} disabled={loading}>Se connecter en tant qu'administrateur</Button>
         </div>
       </div>
     </AuthFormWrapper>

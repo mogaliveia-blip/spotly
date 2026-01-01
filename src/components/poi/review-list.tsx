@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Star } from 'lucide-react';
 import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
 
 interface ReviewListProps {
   reviews: Review[];
@@ -11,7 +12,7 @@ interface ReviewListProps {
 
 export function ReviewList({ reviews }: ReviewListProps) {
   if (reviews.length === 0) {
-    return <p className="text-center text-muted-foreground">No reviews yet. Be the first to share your experience!</p>;
+    return <p className="text-center text-muted-foreground">Aucun avis pour le moment. Soyez le premier à partager votre expérience !</p>;
   }
 
   const renderStars = (rating: number) => {
@@ -40,7 +41,7 @@ export function ReviewList({ reviews }: ReviewListProps) {
               <div className="flex items-center justify-between">
                 <span className="font-semibold">{review.userDisplayName}</span>
                 <span className="text-xs text-muted-foreground">
-                  {format(new Date(review.createdAt), 'PP')}
+                  {format(new Date(review.createdAt), 'PP', { locale: fr })}
                 </span>
               </div>
               <div className="flex items-center my-1">{renderStars(review.rating)}</div>

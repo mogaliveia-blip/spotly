@@ -22,7 +22,7 @@ export default function DashboardPage() {
         const poiData = await fetchPois();
         setPois(poiData);
       } catch (error) {
-        console.error("Failed to fetch POIs", error);
+        console.error("Impossible de récupérer les POIs", error);
       } finally {
         setLoading(false);
       }
@@ -37,14 +37,14 @@ export default function DashboardPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Event Map</CardTitle>
-            <CardDescription>Explore all points of interest for the event.</CardDescription>
+            <CardTitle>Carte de l'événement</CardTitle>
+            <CardDescription>Explorez tous les points d'intérêt de l'événement.</CardDescription>
           </div>
           {canAddPoi && (
             <Button asChild>
               <Link href="/pois/new">
                 <PlusCircle className="mr-2 h-4 w-4" />
-                Add POI
+                Ajouter un POI
               </Link>
             </Button>
           )}

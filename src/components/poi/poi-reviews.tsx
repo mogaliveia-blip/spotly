@@ -23,7 +23,7 @@ export function POIReviews({ poiId, initialReviews }: POIReviewsProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Reviews</CardTitle>
+        <CardTitle>Avis</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         <ReviewForm poiId={poiId} onReviewAdded={handleReviewAdded} />

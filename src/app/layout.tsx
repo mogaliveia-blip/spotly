@@ -7,7 +7,7 @@ import { MapsApiProvider } from '@/providers/maps-api-provider';
 
 export const metadata: Metadata = {
   title: 'Eventide Guide',
-  description: 'Your guide to event points of interest.',
+  description: 'Votre guide pour les points d\'intérêt de l\'événement.',
   manifest: '/manifest.json',
 };
 
@@ -17,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="fr" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

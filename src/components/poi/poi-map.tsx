@@ -73,7 +73,7 @@ export function POIMap({ pois }: POIMapProps) {
               {selectedPoi.description}
             </p>
             <Button size="sm" onClick={() => router.push(`/pois/${selectedPoi.id}`)}>
-              View Details
+              Voir les détails
             </Button>
           </div>
         </InfoWindow>

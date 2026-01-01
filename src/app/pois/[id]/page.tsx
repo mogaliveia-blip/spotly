@@ -25,7 +25,7 @@ export default async function PoiDetailPage({ params }: { params: { id: string }
             <Button asChild variant="outline">
             <Link href="/pois">
                 <ChevronLeft className="mr-2 h-4 w-4" />
-                Back to POI List
+                Retour à la liste des POIs
             </Link>
             </Button>
         </div>

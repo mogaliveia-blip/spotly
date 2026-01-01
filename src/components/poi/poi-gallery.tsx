@@ -15,7 +15,7 @@ export function POIGallery({ poi }: POIGalleryProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Gallery</CardTitle>
+        <CardTitle>Galerie</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -23,7 +23,7 @@ export function POIGallery({ poi }: POIGalleryProps) {
             <div key={index} className="relative aspect-square overflow-hidden rounded-lg border">
               <Image
                 src={photo.url}
-                alt={`${poi.title} gallery image ${index + 1}`}
+                alt={`${poi.title} image de la galerie ${index + 1}`}
                 fill
                 className="object-cover"
                 sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 25vw"

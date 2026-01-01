@@ -15,8 +15,8 @@ import { addReview } from '@/lib/data';
 import type { Review } from '@/lib/types';
 
 const reviewSchema = z.object({
-  rating: z.number().min(1, { message: 'Please select a rating.' }).max(5),
-  comment: z.string().min(10, { message: 'Comment must be at least 10 characters.' }),
+  rating: z.number().min(1, { message: 'Veuillez sélectionner une note.' }).max(5),
+  comment: z.string().min(10, { message: 'Le commentaire doit comporter au moins 10 caractères.' }),
 });
 
 type ReviewFormValues = z.infer<typeof reviewSchema>;
@@ -42,8 +42,8 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
   async function onSubmit(values: ReviewFormValues) {
     if (!user) {
       toast({
-        title: 'Authentication required',
-        description: 'You must be logged in to leave a review.',
+        title: 'Authentification requise',
+        description: 'Vous devez être connecté pour laisser un avis.',
         variant: 'destructive',
       });
       return;
@@ -52,7 +52,7 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
     
     const reviewData = {
         userId: user.uid,
-        userDisplayName: user.displayName || 'Anonymous',
+        userDisplayName: user.displayName || 'Anonyme',
         userPhotoURL: user.photoURL || null,
         ...values
     };
@@ -70,13 +70,13 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
         onReviewAdded(newReview);
         form.reset();
         toast({
-            title: 'Review submitted!',
-            description: 'Thank you for your feedback.',
+            title: 'Avis soumis !',
+            description: 'Merci pour votre retour.',
         });
     } catch (error) {
         toast({
-            title: 'Error submitting review',
-            description: 'Please try again later.',
+            title: 'Erreur lors de la soumission de l\'avis',
+            description: 'Veuillez réessayer plus tard.',
             variant: 'destructive',
         });
     } finally {
@@ -85,7 +85,7 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
   }
 
   if (!user) {
-    return <p className="text-center text-muted-foreground">You must be logged in to leave a review.</p>;
+    return <p className="text-center text-muted-foreground">Vous devez être connecté pour laisser un avis.</p>;
   }
 
   return (
@@ -96,7 +96,7 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
           name="rating"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Your Rating</FormLabel>
+              <FormLabel>Votre note</FormLabel>
               <FormControl>
                 <div className="flex items-center gap-1">
                   {[1, 2, 3, 4, 5].map((star) => (
@@ -123,10 +123,10 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
           name="comment"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Your Comment</FormLabel>
+              <FormLabel>Votre commentaire</FormLabel>
               <FormControl>
                 <Textarea
-                  placeholder="Share your experience..."
+                  placeholder="Partagez votre expérience..."
                   {...field}
                   disabled={loading}
                 />
@@ -137,7 +137,7 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
         />
         <Button type="submit" disabled={loading}>
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Submit Review
+          Soumettre l'avis
         </Button>
       </form>
     </Form>

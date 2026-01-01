@@ -23,9 +23,9 @@ import { Loader2 } from 'lucide-react';
 import { createUserInFirestore } from '@/lib/data';
 
 const formSchema = z.object({
-  displayName: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
-  email: z.string().email({ message: 'Please enter a valid email address.' }),
-  password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
+  displayName: z.string().min(2, { message: 'Le nom doit comporter au moins 2 caractères.' }),
+  email: z.string().email({ message: 'Veuillez saisir une adresse e-mail valide.' }),
+  password: z.string().min(6, { message: 'Le mot de passe doit comporter au moins 6 caractères.' }),
 });
 
 export function SignupForm() {
@@ -64,17 +64,17 @@ export function SignupForm() {
       });
       
       toast({
-        title: 'Account Created!',
-        description: 'Welcome to Eventide Guide.',
+        title: 'Compte créé !',
+        description: 'Bienvenue dans Eventide Guide.',
       });
       router.push('/dashboard');
     } catch (error: any) {
       toast({
-        title: 'Sign Up Failed',
+        title: 'Échec de l\'inscription',
         description:
           error.code === 'auth/email-already-in-use'
-            ? 'This email is already associated with an account.'
-            : 'An unexpected error occurred.',
+            ? 'Cet e-mail est déjà associé à un compte.'
+            : 'Une erreur inattendue est survenue.',
         variant: 'destructive',
       });
     } finally {
@@ -84,11 +84,11 @@ export function SignupForm() {
 
   return (
     <AuthFormWrapper
-      title="Create an Account"
-      description="Join Eventide Guide to explore events"
-      footerText="Already have an account?"
+      title="Créer un compte"
+      description="Rejoignez Eventide Guide pour explorer des événements"
+      footerText="Vous avez déjà un compte ?"
       footerLink="/login"
-      footerLinkText="Sign in"
+      footerLinkText="Se connecter"
     >
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -97,9 +97,9 @@ export function SignupForm() {
             name="displayName"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Name</FormLabel>
+                <FormLabel>Nom</FormLabel>
                 <FormControl>
-                  <Input placeholder="Your Name" {...field} disabled={loading} />
+                  <Input placeholder="Votre nom" {...field} disabled={loading} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -110,11 +110,11 @@ export function SignupForm() {
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Email</FormLabel>
+                <FormLabel>E-mail</FormLabel>
                 <FormControl>
                   <Input
                     type="email"
-                    placeholder="name@example.com"
+                    placeholder="nom@example.com"
                     {...field}
                     disabled={loading}
                   />
@@ -128,7 +128,7 @@ export function SignupForm() {
             name="password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Password</FormLabel>
+                <FormLabel>Mot de passe</FormLabel>
                 <FormControl>
                   <Input type="password" placeholder="••••••••" {...field} disabled={loading} />
                 </FormControl>
@@ -138,7 +138,7 @@ export function SignupForm() {
           />
           <Button type="submit" className="w-full" disabled={loading}>
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Create Account
+            Créer un compte
           </Button>
         </form>
       </Form>
