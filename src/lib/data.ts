@@ -1,13 +1,26 @@
-// In a real application, these functions would interact with Firebase Firestore.
-// For this example, we'll use mock data.
-
-import type { POI, Review, AppUser, UserRole } from './types';
-import { placeholderImages } from './placeholder-images.json';
+// src/lib/data.ts
 import { db } from './firebase';
 import { doc, setDoc } from 'firebase/firestore';
+import type { POI, Review, AppUser, UserRole } from './types';
+import { placeholderImages } from './placeholder-images.json';
+
+// REAL FIRESTORE FUNCTION
+export async function createUserInFirestore(user: AppUser): Promise<void> {
+  const userRef = doc(db, 'users', user.uid);
+  // Using setDoc with merge: true is a good practice to avoid overwriting data if the doc exists.
+  await setDoc(userRef, {
+    uid: user.uid,
+    email: user.email,
+    displayName: user.displayName,
+    role: user.role,
+    photoURL: user.photoURL || null,
+  }, { merge: true });
+}
 
 
-// MOCK DATA
+// --- MOCK DATA AND FUNCTIONS FOR POIs and REVIEWS ---
+// In a real application, these would also be converted to use Firestore.
+
 const mockPois: POI[] = [
   {
     id: 'main-stage',
@@ -159,15 +172,4 @@ export async function deletePoi(poiId: string): Promise<void> {
         throw new Error("POI not found");
     }
     mockPois.splice(poiIndex, 1);
-}
-
-export async function createUserInFirestore(user: AppUser): Promise<void> {
-  const userRef = doc(db, 'users', user.uid);
-  await setDoc(userRef, {
-    uid: user.uid,
-    email: user.email,
-    displayName: user.displayName,
-    role: user.role,
-    photoURL: user.photoURL || null,
-  });
 }
