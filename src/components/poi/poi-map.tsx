@@ -13,10 +13,11 @@ import { Skeleton } from '../ui/skeleton';
 interface POIMapProps {
   selectedPoiId: string | null;
   onSelectPoi: (poi: POI | null) => void;
+  onShowDetails: (poi: POI) => void;
 }
 
 
-function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSelectPoi: (poi: POI | null) => void, selectedPoiId: string | null }) {
+function MapController({ pois, onSelectPoi, selectedPoiId, onShowDetails }: { pois: POI[], onSelectPoi: (poi: POI | null) => void, selectedPoiId: string | null, onShowDetails: (poi: POI) => void }) {
   const { userLocation } = useGeolocation();
   const map = useMap();
   const selectedPoi = selectedPoiId ? pois.find(p => p.id === selectedPoiId) || null : null;
@@ -73,7 +74,7 @@ function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSe
                     À {getDistance(userLocation.lat, userLocation.lng, selectedPoi.location.lat, selectedPoi.location.lng).toFixed(2)} km
                 </p>
             )}
-            <Button size="sm" onClick={() => onSelectPoi(selectedPoi)}>
+            <Button size="sm" onClick={() => onShowDetails(selectedPoi)}>
               Voir les détails
             </Button>
           </div>
@@ -90,7 +91,7 @@ function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSe
   );
 }
 
-export function POIMap({ selectedPoiId, onSelectPoi }: POIMapProps) {
+export function POIMap({ selectedPoiId, onSelectPoi, onShowDetails }: POIMapProps) {
     const { userLocation, loading: geoLoading } = useGeolocation();
     const [pois, setPois] = useState<POI[]>([]);
     const [loading, setLoading] = useState(true);
@@ -126,7 +127,7 @@ export function POIMap({ selectedPoiId, onSelectPoi }: POIMapProps) {
                 mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
                 className="w-full h-full"
             >
-                <MapController pois={pois} onSelectPoi={onSelectPoi} selectedPoiId={selectedPoiId} />
+                <MapController pois={pois} onSelectPoi={onSelectPoi} selectedPoiId={selectedPoiId} onShowDetails={onShowDetails} />
             </Map>
         </div>
     )
