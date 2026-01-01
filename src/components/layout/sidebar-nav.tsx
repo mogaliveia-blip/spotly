@@ -43,8 +43,8 @@ export function SidebarNav() {
     {
       href: '/pois',
       icon: MapPin,
-      label: 'POI Management',
-      roles: ['editor', 'admin'],
+      label: 'Points of Interest',
+      roles: ['user', 'editor', 'admin'],
     },
     {
       href: '/admin',
@@ -54,9 +54,22 @@ export function SidebarNav() {
     },
   ];
 
-  const filteredNavItems = navItems.filter((item) =>
-    role ? item.roles.includes(role) : false
+  const filteredNavItems = navItems.filter((item) => {
+    if (!role) return false;
+    // Special case for /pois to avoid duplication if we add a separate management link later
+    if (item.href === '/pois') {
+        const adminPois = navItems.find(i => i.href === '/pois' && i.label === 'POI Management');
+        if (adminPois && (role === 'editor' || role === 'admin')) {
+            return item.label !== 'POI Management'; // Show "Points of Interest" for all
+        }
+    }
+    return item.roles.includes(role);
+  }).filter((item, index, self) => 
+    index === self.findIndex((t) => (
+      t.href === item.href && t.label === item.label
+    ))
   );
+
 
   return (
     <>
@@ -74,7 +87,7 @@ export function SidebarNav() {
       <SidebarContent>
         <SidebarMenu>
           {filteredNavItems.map((item) => (
-            <SidebarMenuItem key={item.href}>
+            <SidebarMenuItem key={item.href + item.label}>
               <SidebarMenuButton
                 asChild
                 isActive={pathname.startsWith(item.href)}
