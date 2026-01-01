@@ -6,7 +6,6 @@ import * as z from 'zod';
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -65,7 +64,6 @@ export function POIForm({ poi }: POIFormProps) {
   async function onSubmit(values: POIFormValues) {
     setLoading(true);
     try {
-      // For now, gallery is empty and photos are blank. This can be extended later.
       const poiData = { 
         ...values, 
         headerPhotoUrl: '',
@@ -79,7 +77,9 @@ export function POIForm({ poi }: POIFormProps) {
         description: `${values.title} has been added to the map.`,
       });
       router.push('/dashboard');
-      router.refresh(); // To show the new POI on the map
+      // The refresh should be handled by Next.js App Router cache invalidation
+      // but we can force it if needed.
+      router.refresh(); 
     } catch (error) {
       toast({
         title: 'Error',
