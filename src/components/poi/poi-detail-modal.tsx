@@ -96,7 +96,7 @@ export function POIDetailModal({ poiId, onClose }: POIDetailModalProps) {
            </div>
         ) : (
           <>
-            <DialogHeader className="p-6 pb-4 border-b">
+             <DialogHeader className="p-6 pb-4 border-b">
               <DialogTitle className="text-3xl font-bold tracking-tight">{poi.title}</DialogTitle>
               <DialogDescription asChild>
                 <div className="flex items-center gap-4 pt-2">
@@ -104,7 +104,7 @@ export function POIDetailModal({ poiId, onClose }: POIDetailModalProps) {
                         {renderStars(poi.averageRating)}
                     </div>
                     <span className="text-muted-foreground text-sm">
-                        ({poi.reviewCount} {poi.reviewCount <= 1 ? 'avis' : 'avis'})
+                         ({poi.reviewCount} {poi.reviewCount <= 1 ? 'avis' : 'avis'})
                     </span>
                     {!geoLoading && userLocation && (
                         <Badge variant="secondary">

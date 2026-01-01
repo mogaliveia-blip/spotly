@@ -5,5 +5,6 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <AppLayout variant="dashboard">{children}</AppLayout>;
+  // The dashboard variant is no longer needed, as the layout is handled by the page itself
+  return <AppLayout>{children}</AppLayout>;
 }

@@ -15,9 +15,12 @@ interface POIMapProps {
   onSelectPoi: (poi: POI | null) => void;
 }
 
-function MapController({ pois, selectedPoi, onSelectPoi }: { pois: POI[], selectedPoi: POI | null, onSelectPoi: (poi: POI | null) => void }) {
+
+function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSelectPoi: (poi: POI | null) => void, selectedPoiId: string | null }) {
   const { userLocation } = useGeolocation();
   const map = useMap();
+  const selectedPoi = selectedPoiId ? pois.find(p => p.id === selectedPoiId) || null : null;
+
 
   useEffect(() => {
     if (selectedPoi && map) {
@@ -31,12 +34,6 @@ function MapController({ pois, selectedPoi, onSelectPoi }: { pois: POI[], select
       map.setZoom(14);
     }
   };
-  
-  const handleViewDetails = (poi: POI) => {
-    // For now, this just logs, but it could open a modal or navigate.
-    console.log("Viewing details for:", poi.title);
-  };
-
 
   return (
     <>
@@ -76,7 +73,7 @@ function MapController({ pois, selectedPoi, onSelectPoi }: { pois: POI[], select
                     À {getDistance(userLocation.lat, userLocation.lng, selectedPoi.location.lat, selectedPoi.location.lng).toFixed(2)} km
                 </p>
             )}
-            <Button size="sm" onClick={() => handleViewDetails(selectedPoi)}>
+            <Button size="sm" onClick={() => onSelectPoi(selectedPoi)}>
               Voir les détails
             </Button>
           </div>
@@ -100,6 +97,7 @@ export function POIMap({ selectedPoiId, onSelectPoi }: POIMapProps) {
 
     useEffect(() => {
         async function getPois() {
+            setLoading(true);
             try {
                 const poiData = await fetchPois();
                 setPois(poiData);
@@ -112,7 +110,6 @@ export function POIMap({ selectedPoiId, onSelectPoi }: POIMapProps) {
         getPois();
     }, []);
 
-    const selectedPoi = selectedPoiId ? pois.find(p => p.id === selectedPoiId) || null : null;
     const defaultCenter = userLocation || (pois.length > 0 ? pois[0].location : { lat: 48.8566, lng: 2.3522 });
 
     if (loading || geoLoading) {
@@ -120,15 +117,17 @@ export function POIMap({ selectedPoiId, onSelectPoi }: POIMapProps) {
     }
 
     return (
-        <Map
-            defaultCenter={defaultCenter}
-            defaultZoom={13}
-            gestureHandling={'greedy'}
-            disableDefaultUI={false}
-            mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
-            className="w-full h-full"
-        >
-            <MapController pois={pois} selectedPoi={selectedPoi} onSelectPoi={onSelectPoi} />
-        </Map>
+        <div className="w-full h-full rounded-lg overflow-hidden border">
+            <Map
+                defaultCenter={defaultCenter}
+                defaultZoom={13}
+                gestureHandling={'greedy'}
+                disableDefaultUI={false}
+                mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
+                className="w-full h-full"
+            >
+                <MapController pois={pois} onSelectPoi={onSelectPoi} selectedPoiId={selectedPoiId} />
+            </Map>
+        </div>
     )
 }
