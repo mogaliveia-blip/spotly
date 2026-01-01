@@ -31,6 +31,12 @@ function MapController({ pois, selectedPoi, onSelectPoi }: { pois: POI[], select
       map.setZoom(14);
     }
   };
+  
+  const handleViewDetails = (poi: POI) => {
+    // For now, this just logs, but it could open a modal or navigate.
+    console.log("Viewing details for:", poi.title);
+  };
+
 
   return (
     <>
@@ -70,7 +76,7 @@ function MapController({ pois, selectedPoi, onSelectPoi }: { pois: POI[], select
                     À {getDistance(userLocation.lat, userLocation.lng, selectedPoi.location.lat, selectedPoi.location.lng).toFixed(2)} km
                 </p>
             )}
-            <Button size="sm" onClick={() => onSelectPoi(selectedPoi)}>
+            <Button size="sm" onClick={() => handleViewDetails(selectedPoi)}>
               Voir les détails
             </Button>
           </div>
@@ -88,7 +94,7 @@ function MapController({ pois, selectedPoi, onSelectPoi }: { pois: POI[], select
 }
 
 export function POIMap({ selectedPoiId, onSelectPoi }: POIMapProps) {
-    const { userLocation } = useGeolocation();
+    const { userLocation, loading: geoLoading } = useGeolocation();
     const [pois, setPois] = useState<POI[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -109,7 +115,7 @@ export function POIMap({ selectedPoiId, onSelectPoi }: POIMapProps) {
     const selectedPoi = selectedPoiId ? pois.find(p => p.id === selectedPoiId) || null : null;
     const defaultCenter = userLocation || (pois.length > 0 ? pois[0].location : { lat: 48.8566, lng: 2.3522 });
 
-    if (loading) {
+    if (loading || geoLoading) {
         return <Skeleton className="w-full h-full" />;
     }
 

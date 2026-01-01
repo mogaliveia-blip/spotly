@@ -1,7 +1,6 @@
 'use client';
 
 import { POIMap } from '@/components/poi/poi-map';
-import { POIDetailModal } from '@/components/poi/poi-detail-modal';
 import type { POI } from '@/lib/types';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useSidebar } from '@/components/ui/sidebar';
@@ -41,7 +40,6 @@ export default function DashboardPage() {
   return (
     <div className="h-full w-full">
       <POIMap selectedPoiId={selectedPoiId} onSelectPoi={handleSelectPoi} />
-      {selectedPoiId && <POIDetailModal poiId={selectedPoiId} onClose={handleModalClose} />}
     </div>
   );
 }
