@@ -6,6 +6,7 @@ import { createContext, useEffect, useState, useContext, ReactNode } from 'react
 import { auth } from '@/lib/firebase';
 import type { AppUser, UserRole } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
+import FirebaseErrorListener from '@/components/FirebaseErrorListener';
 
 interface AuthContextType {
   user: AppUser | null;
@@ -73,7 +74,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
   }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+        {children}
+        <FirebaseErrorListener />
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {

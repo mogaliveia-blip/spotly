@@ -3,19 +3,30 @@ import { db } from './firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc } from 'firebase/firestore';
 import type { POI, Review, AppUser, UserRole } from './types';
 import { placeholderImages } from './placeholder-images.json';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+
 
 // --- VRAIES FONCTIONS FIRESTORE ---
 
-export async function createUserInFirestore(user: AppUser): Promise<void> {
+export function createUserInFirestore(user: AppUser): void {
   const userRef = doc(db, 'users', user.uid);
-  // Utiliser setDoc avec merge: true est une bonne pratique pour éviter d'écraser des données si le doc existe.
-  await setDoc(userRef, {
+  const userData = {
     uid: user.uid,
     email: user.email,
     displayName: user.displayName,
     role: user.role,
     photoURL: user.photoURL || null,
-  }, { merge: true });
+  };
+
+  setDoc(userRef, userData, { merge: true }).catch(async (serverError) => {
+    const permissionError = new FirestorePermissionError({
+      path: userRef.path,
+      operation: 'create',
+      requestResourceData: userData,
+    });
+    errorEmitter.emit('permission-error', permissionError);
+  });
 }
 
 export async function fetchPois(): Promise<POI[]> {
