@@ -139,7 +139,7 @@ export function POIForm({ poi }: POIFormProps) {
                             <Skeleton className="h-full w-full" />
                         ) : (
                             <Map
-                                center={mapCenter}
+                                defaultCenter={mapCenter}
                                 defaultZoom={13}
                                 gestureHandling={'greedy'}
                                 disableDefaultUI={false}

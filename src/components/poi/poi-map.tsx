@@ -22,7 +22,7 @@ export function POIMap({ pois }: POIMapProps) {
 
   return (
     <Map
-      center={defaultCenter}
+      defaultCenter={defaultCenter}
       defaultZoom={13}
       gestureHandling={'greedy'}
       disableDefaultUI={false}
