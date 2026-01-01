@@ -20,7 +20,6 @@ export function createUserInFirestore(user: Omit<AppUser, 'role'> & { role?: Use
   };
 
   setDoc(userRef, userData, { merge: true }).catch(async (serverError) => {
-    console.error("Error creating user in Firestore:", serverError);
     const permissionError = new FirestorePermissionError({
       path: userRef.path,
       operation: 'create',
@@ -66,7 +65,6 @@ export function addReview(poiId: string, review: Omit<Review, 'id' | 'poiId' | '
     }
     
     addDoc(reviewsCollection, newReviewData).catch(async (serverError) => {
-      console.error("Error adding review:", serverError);
       const permissionError = new FirestorePermissionError({
         path: `pois/${poiId}/reviews`,
         operation: 'create',
@@ -86,7 +84,6 @@ export async function fetchUsers(): Promise<AppUser[]> {
 export function updateUserRole(uid: string, role: UserRole): void {
     const userRef = doc(db, 'users', uid);
     updateDoc(userRef, { role }).catch(async (serverError) => {
-      console.error("Error updating user role:", serverError);
       const permissionError = new FirestorePermissionError({
         path: userRef.path,
         operation: 'update',
@@ -105,7 +102,6 @@ export function createPoi(poiData: Omit<POI, 'id' | 'averageRating' | 'reviewCou
     }
     
     addDoc(poiCollection, newPoiData).catch(async (serverError) => {
-      console.error("Error creating POI:", serverError);
       const permissionError = new FirestorePermissionError({
         path: 'pois',
         operation: 'create',
@@ -118,7 +114,6 @@ export function createPoi(poiData: Omit<POI, 'id' | 'averageRating' | 'reviewCou
 export function updatePoi(poiId: string, poiData: Partial<POI>): void {
     const poiRef = doc(db, 'pois', poiId);
     updateDoc(poiRef, poiData).catch(async (serverError) => {
-      console.error("Error updating POI:", serverError);
       const permissionError = new FirestorePermissionError({
         path: poiRef.path,
         operation: 'update',
@@ -131,7 +126,6 @@ export function updatePoi(poiId: string, poiData: Partial<POI>): void {
 export function deletePoi(poiId: string): void {
     const poiRef = doc(db, 'pois', poiId);
     deleteDoc(poiRef).catch(async (serverError) => {
-      console.error("Error deleting POI:", serverError);
       const permissionError = new FirestorePermissionError({
         path: poiRef.path,
         operation: 'delete',
