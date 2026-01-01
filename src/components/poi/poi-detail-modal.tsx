@@ -8,6 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -94,24 +95,26 @@ export function POIDetailModal({ poiId, onClose }: POIDetailModalProps) {
            </div>
         ) : (
           <>
-            <DialogHeader className="p-6 pb-4">
+            <DialogHeader className="p-6 pb-4 border-b">
               <DialogTitle className="text-3xl font-bold tracking-tight">{poi.title}</DialogTitle>
-              <div className="flex items-center gap-4 pt-2">
-                    <div className="flex items-center">
-                        {renderStars(poi.averageRating)}
-                    </div>
-                    <span className="text-muted-foreground text-sm">
-                        ({poi.reviewCount} {poi.reviewCount <= 1 ? 'avis' : 'avis'})
-                    </span>
-                    {!geoLoading && userLocation && (
-                        <Badge variant="secondary">
-                            {getDistance(userLocation.lat, userLocation.lng, poi.location.lat, poi.location.lng).toFixed(2)} km
-                        </Badge>
-                    )}
-                </div>
+              <DialogDescription asChild>
+                <div className="flex items-center gap-4 pt-2">
+                      <div className="flex items-center">
+                          {renderStars(poi.averageRating)}
+                      </div>
+                      <span className="text-muted-foreground text-sm">
+                          ({poi.reviewCount} {poi.reviewCount <= 1 ? 'avis' : 'avis'})
+                      </span>
+                      {!geoLoading && userLocation && (
+                          <Badge variant="secondary">
+                              {getDistance(userLocation.lat, userLocation.lng, poi.location.lat, poi.location.lng).toFixed(2)} km
+                          </Badge>
+                      )}
+                  </div>
+              </DialogDescription>
             </DialogHeader>
             <ScrollArea className="flex-1">
-                <div className="px-6 pb-6 space-y-6">
+                <div className="px-6 pb-6 space-y-6 pt-6">
                     <p className="text-muted-foreground">{poi.description}</p>
                     <POIGallery poi={poi} />
                     <POIReviews poiId={poi.id} initialReviews={reviews} onReviewAdded={handleReviewAdded} />
