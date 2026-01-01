@@ -62,7 +62,6 @@ service cloud.firestore {
     /* =========================
        POIS
        ========================= */
-    // Règle pour autoriser la création sur la collection et la lecture
     match /pois/{poiId} {
       allow read: if true;
       allow create: if isSignedIn();
