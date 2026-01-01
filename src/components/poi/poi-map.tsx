@@ -8,10 +8,6 @@ import { getDistance, cn } from '@/lib/utils';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { fetchPois, fetchReviewsByPoiId } from '@/lib/data';
 import { Skeleton } from '../ui/skeleton';
-import { Card, CardContent } from '../ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
 import { ScrollArea } from '../ui/scroll-area';
 import { ReviewForm } from './review-form';
 import { ReviewList } from './review-list';
@@ -137,7 +133,7 @@ function MapController({ pois, onSelectPoi, selectedPoiId, onPoiUpdate }: { pois
         </InfoWindow>
       )}
       {userLocation && (
-        <div className="absolute bottom-4 right-4 z-10">
+        <div className="absolute bottom-4 left-4 z-10">
           <Button size="icon" onClick={handleRecenter} type="button" title="Recentrer sur ma position">
             <Crosshair className="h-5 w-5" />
           </Button>
