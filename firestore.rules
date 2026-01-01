@@ -10,22 +10,31 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
     
-    function getUserRole() {
+    function getUserRole(userId) {
       // Lit le rôle depuis le document de l'utilisateur dans Firestore.
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
     }
     
+    function isAdmin() {
+      if (!isSignedIn()) {
+        return false;
+      }
+      return getUserRole(request.auth.uid) == 'admin';
+    }
+
     function isEditorOrAdmin() {
       if (!isSignedIn()) {
         return false;
       }
-      let role = getUserRole();
+      let role = getUserRole(request.auth.uid);
       return role in ['editor', 'admin'];
     }
 
-    // Les utilisateurs peuvent créer leur propre profil, et ne peuvent que lire/modifier/supprimer le leur.
+    // Un utilisateur peut créer son propre profil, lire/modifier/supprimer le sien.
+    // Un admin peut lire la liste des utilisateurs.
     match /users/{userId} {
       allow read, update, delete: if isOwner(userId);
+      allow list: if isAdmin();
       // Un nouvel utilisateur peut créer son profil.
       allow create: if isSignedIn(); 
     }
@@ -34,15 +43,15 @@ service cloud.firestore {
     match /pois/{poiId} {
       allow read: if true;
       allow create, update, delete: if isEditorOrAdmin();
-    }
-    
-    // Les avis sont publics, les utilisateurs peuvent créer les leurs.
-    // Un utilisateur peut modifier/supprimer son propre avis.
-    match /reviews/{reviewId} {
-        allow read: if true;
-        allow create: if isSignedIn();
-        // Vérifie que l'utilisateur qui modifie est bien le créateur de l'avis.
-        allow update, delete: if isOwner(request.resource.data.userId);
+
+      // Les avis sont publics, les utilisateurs peuvent créer les leurs.
+      // Un utilisateur peut modifier/supprimer son propre avis.
+      match /reviews/{reviewId} {
+          allow read: if true;
+          allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+          // Vérifie que l'utilisateur qui modifie est bien le créateur de l'avis.
+          allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      }
     }
   }
 }
