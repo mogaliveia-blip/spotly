@@ -11,21 +11,25 @@ service cloud.firestore {
     }
     
     function isEditorOrAdmin() {
+      // Check the user's custom claim or a role field in their user document
       return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['editor', 'admin'];
     }
 
+    // Users can create their own profile, and can only read/update/delete their own.
     match /users/{userId} {
       allow read, update, delete: if isOwner(userId);
       allow create: if isSignedIn();
     }
 
+    // POIs are public to read, but only editors or admins can modify them.
     match /pois/{poiId} {
       allow read: if true;
       allow create, update, delete: if isEditorOrAdmin();
     }
     
+    // Users can create reviews, and can only modify or delete their own.
     match /reviews/{reviewId} {
-        allow read, list: if true;
+        allow read: if true;
         allow create: if isSignedIn();
         allow update, delete: if isOwner(request.resource.data.userId);
     }
