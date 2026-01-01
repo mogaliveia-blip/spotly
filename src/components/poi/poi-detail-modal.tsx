@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -99,18 +100,18 @@ export function POIDetailModal({ poiId, onClose }: POIDetailModalProps) {
               <DialogTitle className="text-3xl font-bold tracking-tight">{poi.title}</DialogTitle>
               <DialogDescription asChild>
                 <div className="flex items-center gap-4 pt-2">
-                      <div className="flex items-center">
-                          {renderStars(poi.averageRating)}
-                      </div>
-                      <span className="text-muted-foreground text-sm">
-                          ({poi.reviewCount} {poi.reviewCount <= 1 ? 'avis' : 'avis'})
-                      </span>
-                      {!geoLoading && userLocation && (
-                          <Badge variant="secondary">
-                              {getDistance(userLocation.lat, userLocation.lng, poi.location.lat, poi.location.lng).toFixed(2)} km
-                          </Badge>
-                      )}
-                  </div>
+                    <div className="flex items-center">
+                        {renderStars(poi.averageRating)}
+                    </div>
+                    <span className="text-muted-foreground text-sm">
+                        ({poi.reviewCount} {poi.reviewCount <= 1 ? 'avis' : 'avis'})
+                    </span>
+                    {!geoLoading && userLocation && (
+                        <Badge variant="secondary">
+                            {getDistance(userLocation.lat, userLocation.lng, poi.location.lat, poi.location.lng).toFixed(2)} km
+                        </Badge>
+                    )}
+                </div>
               </DialogDescription>
             </DialogHeader>
             <ScrollArea className="flex-1">
