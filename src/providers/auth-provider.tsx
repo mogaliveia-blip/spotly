@@ -3,10 +3,11 @@
 import type { User as FirebaseUser } from 'firebase/auth';
 import { onIdTokenChanged } from 'firebase/auth';
 import { createContext, useEffect, useState, useContext, ReactNode } from 'react';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import type { AppUser, UserRole } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
 import FirebaseErrorListener from '@/components/FirebaseErrorListener';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface AuthContextType {
   user: AppUser | null;
@@ -33,26 +34,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(true);
       if (firebaseUser) {
         setFirebaseUser(firebaseUser);
-        const tokenResult = await firebaseUser.getIdTokenResult();
-        const userRole = (tokenResult.claims.role as UserRole) || 'user';
         
-        // Mock roles for demonstration as custom claims are set on the backend
-        // In a real app, you'd rely on tokenResult.claims.role
-        const mockRoles: { [key: string]: UserRole } = {
-          'admin@test.com': 'admin',
-          'editor@test.com': 'editor',
-        };
-        const finalRole = mockRoles[firebaseUser.email || ''] || userRole;
+        // Fetch user role from Firestore
+        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        const userDoc = await getDoc(userDocRef);
+        const userRole = userDoc.exists() ? (userDoc.data().role as UserRole) || 'user' : 'user';
 
         const appUser: AppUser = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
           photoURL: firebaseUser.photoURL,
-          role: finalRole,
+          role: userRole,
         };
         setUser(appUser);
-        setRole(finalRole);
+        setRole(userRole);
       } else {
         setFirebaseUser(null);
         setUser(null);
