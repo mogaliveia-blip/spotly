@@ -5,7 +5,6 @@ import { onIdTokenChanged } from 'firebase/auth';
 import { createContext, useEffect, useState, useContext, ReactNode } from 'react';
 import { auth, db } from '@/lib/firebase';
 import type { AppUser, UserRole } from '@/lib/types';
-import { Loader2 } from 'lucide-react';
 import FirebaseErrorListener from '@/components/FirebaseErrorListener';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -61,15 +60,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const value = { user, firebaseUser, loading, role };
-
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    );
-  }
-
+  
+  // By returning the provider directly, the content is always rendered.
+  // The 'loading' state is still managed and can be used by child components
+  // to conditionally render content (e.g., show a spinner inside a component
+  // while waiting for user data), but it no longer blocks the entire page.
   return (
     <AuthContext.Provider value={value}>
         {children}
