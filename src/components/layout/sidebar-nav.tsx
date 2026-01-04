@@ -109,7 +109,8 @@ export function SidebarNav() {
 
   const handleSignOut = async () => {
     await signOut(auth);
-    router.push('/login');
+    router.push('/dashboard');
+    router.refresh();
   };
 
   const navItems = [

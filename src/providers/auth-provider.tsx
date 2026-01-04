@@ -61,10 +61,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const value = { user, firebaseUser, loading, role };
   
-  // By returning the provider directly, the content is always rendered.
-  // The 'loading' state is still managed and can be used by child components
-  // to conditionally render content (e.g., show a spinner inside a component
-  // while waiting for user data), but it no longer blocks the entire page.
   return (
     <AuthContext.Provider value={value}>
         {children}
