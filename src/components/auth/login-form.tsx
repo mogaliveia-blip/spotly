@@ -75,9 +75,9 @@ export function LoginForm() {
   useEffect(() => {
     const handleRedirectResult = async () => {
       try {
-        setLoading(true);
         const result = await getRedirectResult(auth);
         if (result) {
+          setLoading(true);
           const additionalInfo = getAdditionalUserInfo(result);
           if (additionalInfo?.isNewUser) {
             await createUserInFirestore({
@@ -102,7 +102,10 @@ export function LoginForm() {
           variant: 'destructive',
         });
       } finally {
-        setLoading(false);
+        // Only set loading to false if there wasn't a result, otherwise we navigate away
+        if (!auth.currentUser) {
+            setLoading(false);
+        }
       }
     };
     handleRedirectResult();
@@ -137,8 +140,7 @@ export function LoginForm() {
               description: 'Le lien de connexion est invalide ou a expiré. Veuillez réessayer.',
               variant: 'destructive',
             });
-          } finally {
-            setLoading(false);
+             setLoading(false);
           }
         } else {
             setLoading(false);
@@ -171,7 +173,7 @@ export function LoginForm() {
   async function onEmailLinkSubmit(values: z.infer<typeof emailLinkSchema>) {
     setLoading(true);
     const actionCodeSettings = {
-      url: window.location.origin + '/login', // Use origin and path
+      url: window.location.href, // Use the current URL for the redirect
       handleCodeInApp: true,
     };
     try {
