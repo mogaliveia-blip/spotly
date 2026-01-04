@@ -4,62 +4,7 @@ import { UserNav } from './user-nav';
 import { Mountain } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { LoginForm } from '../auth/login-form';
-import { SignupForm } from '../auth/signup-form';
-import { useState } from 'react';
-import { Card } from '../ui/card';
-
-function AuthDialog() {
-  const [open, setOpen] = useState(false);
-  const [isLoginView, setIsLoginView] = useState(true);
-
-  const handleSuccess = () => {
-    setOpen(false);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>Se connecter</Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md p-0">
-         <DialogHeader className="text-center p-6 pb-0">
-            <div className="mb-4 flex justify-center">
-                <Mountain className="h-10 w-10 text-primary" />
-            </div>
-            <DialogTitle className="text-2xl">
-                {isLoginView ? 'Content de vous revoir' : 'Créer un compte'}
-            </DialogTitle>
-            <DialogDescription>
-                {isLoginView ? 'Connectez-vous à votre compte Eventide Guide' : 'Rejoignez Eventide Guide pour explorer des événements'}
-            </DialogDescription>
-        </DialogHeader>
-        <Card className="w-full border-0 shadow-none">
-          {isLoginView ? (
-            <LoginForm 
-              onSuccess={handleSuccess} 
-              onSwitchToSignup={() => setIsLoginView(false)}
-            />
-          ) : (
-            <SignupForm 
-              onSuccess={handleSuccess}
-              onSwitchToLogin={() => setIsLoginView(true)}
-            />
-          )}
-        </Card>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
+import { AuthDialog } from '../auth/auth-dialog';
 
 export function Header() {
   const { user } = useAuth();
@@ -74,7 +19,7 @@ export function Header() {
         {user ? (
           <UserNav />
         ) : (
-          <AuthDialog />
+          <AuthDialog trigger={<Button>Se connecter</Button>} />
         )}
       </div>
     </header>

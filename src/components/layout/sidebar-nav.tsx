@@ -17,11 +17,12 @@ import {
   Mountain,
   PlusCircle,
   Navigation,
+  Unlock,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '../ui/button';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import type { POI } from '@/lib/types';
 import { fetchPois } from '@/lib/data';
 import { useGeolocation } from '@/providers/geolocation-provider';
@@ -29,6 +30,8 @@ import { getDistance } from '@/lib/utils';
 import { Skeleton } from '../ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
+import { Card, CardDescription } from '../ui/card';
+import { AuthDialog } from '../auth/auth-dialog';
 
 function POISidebarList() {
     const [pois, setPois] = useState<POI[]>([]);
@@ -38,6 +41,7 @@ function POISidebarList() {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const selectedPoiId = searchParams.get('poi');
+    const { user } = useAuth();
 
     useEffect(() => {
         async function getPois() {
@@ -58,6 +62,13 @@ function POISidebarList() {
         params.set('poi', poi.id);
         router.push(`${pathname}?${params.toString()}`);
     };
+
+    const visiblePois = useMemo(() => {
+      if (user) {
+        return pois;
+      }
+      return pois.slice(0, 2);
+    }, [pois, user]);
     
     if (loading) {
         return (
@@ -68,8 +79,9 @@ function POISidebarList() {
     }
 
     return (
+      <>
         <div className="flex flex-col gap-1 px-2">
-            {pois.map((poi) => (
+            {visiblePois.map((poi) => (
                 <button
                     key={poi.id}
                     onClick={() => handleSelectPoi(poi)}
@@ -94,6 +106,22 @@ function POISidebarList() {
                 </button>
             ))}
         </div>
+        {!user && pois.length > 2 && (
+          <div className="p-2">
+            <Card className="p-3 text-center bg-sidebar-accent/50 border-sidebar-border">
+              <CardDescription className="text-xs">
+                Connectez-vous pour découvrir tous les points d'intérêt.
+              </CardDescription>
+              <AuthDialog trigger={
+                <Button size="sm" className="mt-3 w-full">
+                  <Unlock className="mr-2 h-4 w-4" />
+                  Découvrir
+                </Button>
+              }/>
+            </Card>
+          </div>
+        )}
+      </>
     )
 }
 

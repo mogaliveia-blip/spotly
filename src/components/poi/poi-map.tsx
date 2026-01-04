@@ -2,7 +2,7 @@
 
 import type { POI, Review } from '@/lib/types';
 import { Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapPin, User, Crosshair, Star } from 'lucide-react';
 import { getDistance, cn } from '@/lib/utils';
 import { useGeolocation } from '@/providers/geolocation-provider';
@@ -13,55 +13,7 @@ import { ReviewForm } from './review-form';
 import { ReviewList } from './review-list';
 import { Button } from '../ui/button';
 import { useAuth } from '@/hooks/use-auth-user';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Card } from '../ui/card';
-import { LoginForm } from '../auth/login-form';
-import { SignupForm } from '../auth/signup-form';
-import { Mountain } from 'lucide-react';
-
-
-function AuthDialog({ trigger }: { trigger: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const [isLoginView, setIsLoginView] = useState(true);
-
-  const handleSuccess = () => {
-    setOpen(false);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md p-0">
-        <DialogHeader className="text-center p-6 pb-0">
-            <div className="mb-4 flex justify-center">
-                <Mountain className="h-10 w-10 text-primary" />
-            </div>
-            <DialogTitle className="text-2xl">
-                {isLoginView ? 'Content de vous revoir' : 'Créer un compte'}
-            </DialogTitle>
-            <DialogDescription>
-                {isLoginView ? 'Connectez-vous à votre compte Eventide Guide' : 'Rejoignez Eventide Guide pour explorer des événements'}
-            </DialogDescription>
-        </DialogHeader>
-        <Card className="w-full border-0 shadow-none">
-          {isLoginView ? (
-            <LoginForm 
-              onSuccess={handleSuccess} 
-              onSwitchToSignup={() => setIsLoginView(false)}
-            />
-          ) : (
-            <SignupForm 
-              onSuccess={handleSuccess}
-              onSwitchToLogin={() => setIsLoginView(true)}
-            />
-          )}
-        </Card>
-      </DialogContent>
-    </Dialog>
-  );
-}
+import { AuthDialog } from '../auth/auth-dialog';
 
 
 function renderStars(rating: number) {
@@ -209,6 +161,7 @@ function MapController({ pois, onSelectPoi, selectedPoiId, onPoiUpdate }: { pois
 export function POIMap({ selectedPoiId, onSelectPoi, pois, setPois }: { selectedPoiId: string | null; onSelectPoi: (poi: POI | null) => void; pois: POI[]; setPois: React.Dispatch<React.SetStateAction<POI[]>> }) {
     const { userLocation, loading: geoLoading } = useGeolocation();
     const [loading, setLoading] = useState(true);
+    const { user } = useAuth();
 
     useEffect(() => {
         async function getPois() {
@@ -235,6 +188,13 @@ export function POIMap({ selectedPoiId, onSelectPoi, pois, setPois }: { selected
         );
     }
 
+    const visiblePois = useMemo(() => {
+        if (user) {
+            return pois;
+        }
+        return pois.slice(0, 2);
+    }, [pois, user]);
+
     const defaultCenter = userLocation || (pois.length > 0 ? pois[0].location : { lat: 48.8566, lng: 2.3522 });
 
     if (loading || geoLoading) {
@@ -252,7 +212,7 @@ export function POIMap({ selectedPoiId, onSelectPoi, pois, setPois }: { selected
                 className="w-full h-full"
             >
                 <MapController 
-                    pois={pois} 
+                    pois={visiblePois} 
                     onSelectPoi={onSelectPoi} 
                     selectedPoiId={selectedPoiId}
                     onPoiUpdate={handlePoiUpdate} 
