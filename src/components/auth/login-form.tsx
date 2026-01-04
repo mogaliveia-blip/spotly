@@ -58,8 +58,8 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(true); // Start loading to check for redirect
-  const [formLoading, setFormLoading] = useState(false); // For form submissions
+  const [loading, setLoading] = useState(true);
+  const [formLoading, setFormLoading] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
 
   const passwordForm = useForm<z.infer<typeof passwordSchema>>({
@@ -72,81 +72,62 @@ export function LoginForm() {
     defaultValues: { email: '' },
   });
   
-  // Handle redirect result from Google Sign-In or Email Link
   useEffect(() => {
-    const handleRedirect = async () => {
-      // Check for email link sign in
-      if (isSignInWithEmailLink(auth, window.location.href)) {
-        let email = window.localStorage.getItem('emailForSignIn');
-        if (!email) {
-          email = window.prompt('Veuillez fournir votre e-mail pour confirmation');
-        }
-        if (email) {
-          try {
+    const handleLoginRedirect = async () => {
+      try {
+        // Handle Email Link Sign-in
+        if (isSignInWithEmailLink(auth, window.location.href)) {
+          let email = window.localStorage.getItem('emailForSignIn');
+          if (!email) {
+            email = window.prompt('Veuillez fournir votre e-mail pour confirmation');
+          }
+          if (email) {
             const result = await signInWithEmailLink(auth, email, window.location.href);
             window.localStorage.removeItem('emailForSignIn');
-            const additionalInfo = getAdditionalUserInfo(result);
-            if (additionalInfo?.isNewUser) {
+            if (getAdditionalUserInfo(result)?.isNewUser) {
               await createUserInFirestore({
                 uid: result.user.uid,
                 email: result.user.email,
                 displayName: result.user.displayName,
-                role: 'user',
                 photoURL: result.user.photoURL,
+                role: 'user',
               });
             }
-            router.push(searchParams.get('redirect') || '/dashboard');
-            return; // Exit after redirect
-          } catch (error) {
-            toast({
-              title: 'Échec de la connexion',
-              description: 'Le lien de connexion est invalide ou a expiré. Veuillez réessayer.',
-              variant: 'destructive',
-            });
-            setLoading(false); // Stop loading on error
+            router.replace(searchParams.get('redirect') || '/dashboard');
+            return;
           }
-        } else {
-          setLoading(false); // Stop loading if email is not provided
         }
-        return;
-      }
 
-      // Check for Google redirect result
-      try {
+        // Handle Google Sign-in
         const result = await getRedirectResult(auth);
         if (result) {
-          const additionalInfo = getAdditionalUserInfo(result);
-          if (additionalInfo?.isNewUser) {
+          if (getAdditionalUserInfo(result)?.isNewUser) {
             await createUserInFirestore({
               uid: result.user.uid,
               email: result.user.email,
               displayName: result.user.displayName,
-              role: 'user',
               photoURL: result.user.photoURL,
+              role: 'user',
             });
-            toast({
-              title: 'Compte créé !',
-              description: 'Bienvenue dans Eventide Guide.',
-            });
+            toast({ title: 'Compte créé !', description: 'Bienvenue dans Eventide Guide.' });
           }
-          router.push(searchParams.get('redirect') || '/dashboard');
-          return; // Exit after redirect
-        } else {
-            // No redirect result, so we are not in a post-login flow.
-            setLoading(false);
+          router.replace(searchParams.get('redirect') || '/dashboard');
+          return;
         }
       } catch (error: any) {
-        console.error('Erreur de connexion Google:', error);
         toast({
-          title: 'Échec de la connexion avec Google',
-          description: error.message || 'Impossible de se connecter avec Google. Veuillez réessayer.',
+          title: 'Échec de la connexion',
+          description: error.message || 'Une erreur est survenue lors de la tentative de connexion.',
           variant: 'destructive',
         });
-        setLoading(false); // Stop loading on error
+      } finally {
+        // If we're not being redirected, stop loading.
+        setLoading(false);
       }
     };
-    handleRedirect();
-  }, [router, toast, searchParams]);
+
+    handleLoginRedirect();
+  }, [router, searchParams, toast]);
 
 
   async function onPasswordSubmit(values: z.infer<typeof passwordSchema>) {
@@ -171,7 +152,7 @@ export function LoginForm() {
   async function onEmailLinkSubmit(values: z.infer<typeof emailLinkSchema>) {
     setFormLoading(true);
     const actionCodeSettings = {
-      url: window.location.origin + '/login', // Redirect back to login page
+      url: window.location.origin + (searchParams.get('redirect') ? `?redirect=${searchParams.get('redirect')}`: '/login'),
       handleCodeInApp: true,
     };
     try {
@@ -266,7 +247,7 @@ export function LoginForm() {
             {linkSent ? (
                  <div className="text-center py-8">
                     <h3 className="text-xl font-semibold">Vérifiez votre boîte de réception</h3>
-                    <p className="text-muted-foreground mt-2">Un lien de connexion a été envoyé à l'adresse e-mail que vous avez fournie.</p>
+                    <p className="text-muted-foreground mt-2">Un lien de connexion a été envoyé à l'adresse e-mail que vous fournie.</p>
                  </div>
             ) : (
                 <Form {...emailLinkForm}>
