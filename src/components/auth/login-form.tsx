@@ -58,7 +58,8 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start loading to check for redirect
+  const [formLoading, setFormLoading] = useState(false); // For form submissions
   const [linkSent, setLinkSent] = useState(false);
 
   const passwordForm = useForm<z.infer<typeof passwordSchema>>({
@@ -71,50 +72,11 @@ export function LoginForm() {
     defaultValues: { email: '' },
   });
   
-  // Handle redirect result from Google Sign-In
+  // Handle redirect result from Google Sign-In or Email Link
   useEffect(() => {
-    const handleRedirectResult = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result) {
-          setLoading(true);
-          const additionalInfo = getAdditionalUserInfo(result);
-          if (additionalInfo?.isNewUser) {
-            await createUserInFirestore({
-              uid: result.user.uid,
-              email: result.user.email,
-              displayName: result.user.displayName,
-              role: 'user',
-              photoURL: result.user.photoURL,
-            });
-            toast({
-              title: 'Compte créé !',
-              description: 'Bienvenue dans Eventide Guide.',
-            });
-          }
-          router.push(searchParams.get('redirect') || '/dashboard');
-        }
-      } catch (error: any) {
-        console.error('Erreur de connexion Google:', error);
-        toast({
-          title: 'Échec de la connexion avec Google',
-          description: error.message || 'Impossible de se connecter avec Google. Veuillez réessayer.',
-          variant: 'destructive',
-        });
-      } finally {
-        // Only set loading to false if there wasn't a result, otherwise we navigate away
-        if (!auth.currentUser) {
-            setLoading(false);
-        }
-      }
-    };
-    handleRedirectResult();
-  }, [router, toast, searchParams]);
-
-  useEffect(() => {
-    const handleEmailLinkSignIn = async () => {
+    const handleRedirect = async () => {
+      // Check for email link sign in
       if (isSignInWithEmailLink(auth, window.location.href)) {
-        setLoading(true);
         let email = window.localStorage.getItem('emailForSignIn');
         if (!email) {
           email = window.prompt('Veuillez fournir votre e-mail pour confirmation');
@@ -134,25 +96,61 @@ export function LoginForm() {
               });
             }
             router.push(searchParams.get('redirect') || '/dashboard');
+            return; // Exit after redirect
           } catch (error) {
             toast({
               title: 'Échec de la connexion',
               description: 'Le lien de connexion est invalide ou a expiré. Veuillez réessayer.',
               variant: 'destructive',
             });
-             setLoading(false);
+            setLoading(false); // Stop loading on error
           }
         } else {
+          setLoading(false); // Stop loading if email is not provided
+        }
+        return;
+      }
+
+      // Check for Google redirect result
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const additionalInfo = getAdditionalUserInfo(result);
+          if (additionalInfo?.isNewUser) {
+            await createUserInFirestore({
+              uid: result.user.uid,
+              email: result.user.email,
+              displayName: result.user.displayName,
+              role: 'user',
+              photoURL: result.user.photoURL,
+            });
+            toast({
+              title: 'Compte créé !',
+              description: 'Bienvenue dans Eventide Guide.',
+            });
+          }
+          router.push(searchParams.get('redirect') || '/dashboard');
+          return; // Exit after redirect
+        } else {
+            // No redirect result, so we are not in a post-login flow.
             setLoading(false);
         }
+      } catch (error: any) {
+        console.error('Erreur de connexion Google:', error);
+        toast({
+          title: 'Échec de la connexion avec Google',
+          description: error.message || 'Impossible de se connecter avec Google. Veuillez réessayer.',
+          variant: 'destructive',
+        });
+        setLoading(false); // Stop loading on error
       }
     };
-    handleEmailLinkSignIn();
+    handleRedirect();
   }, [router, toast, searchParams]);
 
 
   async function onPasswordSubmit(values: z.infer<typeof passwordSchema>) {
-    setLoading(true);
+    setFormLoading(true);
     try {
       await signInWithEmailAndPassword(auth, values.email, values.password);
       router.push(searchParams.get('redirect') || '/dashboard');
@@ -166,14 +164,14 @@ export function LoginForm() {
         variant: 'destructive',
       });
     } finally {
-      setLoading(false);
+      setFormLoading(false);
     }
   }
 
   async function onEmailLinkSubmit(values: z.infer<typeof emailLinkSchema>) {
-    setLoading(true);
+    setFormLoading(true);
     const actionCodeSettings = {
-      url: window.location.href, // Use the current URL for the redirect
+      url: window.location.origin + '/login', // Redirect back to login page
       handleCodeInApp: true,
     };
     try {
@@ -192,14 +190,13 @@ export function LoginForm() {
         variant: 'destructive',
       });
     } finally {
-      setLoading(false);
+      setFormLoading(false);
     }
   }
   
   async function handleGoogleSignIn() {
-    setLoading(true);
+    setLoading(true); // Show loader while redirecting
     const provider = new GoogleAuthProvider();
-    // We initiate the redirect here. The result is handled by the useEffect hook.
     await signInWithRedirect(auth, provider);
   }
 
@@ -237,7 +234,7 @@ export function LoginForm() {
                           type="email"
                           placeholder="nom@example.com"
                           {...field}
-                          disabled={loading}
+                          disabled={formLoading}
                         />
                       </FormControl>
                       <FormMessage />
@@ -251,15 +248,15 @@ export function LoginForm() {
                     <FormItem>
                       <FormLabel>Mot de passe</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="••••••••" {...field} disabled={loading} />
+                        <Input type="password" placeholder="••••••••" {...field} disabled={formLoading} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" className="w-full" disabled={formLoading}>
+                {formLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Se connecter
               </Button>
             </form>
@@ -285,15 +282,15 @@ export function LoginForm() {
                                 type="email"
                                 placeholder="nom@example.com"
                                 {...field}
-                                disabled={loading}
+                                disabled={formLoading}
                             />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
                         )}
                     />
-                    <Button type="submit" className="w-full" disabled={loading}>
-                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Button type="submit" className="w-full" disabled={formLoading}>
+                        {formLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Envoyer le lien de connexion
                     </Button>
                     </form>
@@ -309,7 +306,7 @@ export function LoginForm() {
         </p>
       </div>
 
-      <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={loading}>
+      <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={formLoading}>
         <GoogleIcon className="mr-2 h-4 w-4" />
         Se connecter avec Google
       </Button>
@@ -318,3 +315,5 @@ export function LoginForm() {
     </AuthFormWrapper>
   );
 }
+
+    
