@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { addReview } from '@/lib/data';
 import type { Review } from '@/lib/types';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 const reviewSchema = z.object({
   rating: z.number().min(1, { message: 'Veuillez sélectionner une note.' }).max(5),
@@ -81,7 +82,14 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
   }
 
   if (!user) {
-    return <p className="text-center text-muted-foreground">Vous devez être connecté pour laisser un avis.</p>;
+    return (
+        <div className="text-center text-sm text-muted-foreground border rounded-md p-4">
+            <p>Vous souhaitez partager votre expérience ?</p>
+            <Button variant="link" asChild className="p-0 h-auto">
+                <Link href="/login">Connectez-vous pour laisser un avis.</Link>
+            </Button>
+        </div>
+    );
   }
 
   return (

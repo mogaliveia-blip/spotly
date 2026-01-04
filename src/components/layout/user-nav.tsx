@@ -16,9 +16,10 @@ import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { LogOut, User as UserIcon } from 'lucide-react';
+import Link from 'next/link';
 
 export function UserNav() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const router = useRouter();
 
   const handleSignOut = async () => {
@@ -27,7 +28,11 @@ export function UserNav() {
   };
 
   if (!user) {
-    return null;
+    return (
+        <Button asChild>
+            <Link href="/login">Se connecter</Link>
+        </Button>
+    )
   }
   
   const fallback = user.displayName?.charAt(0) || user.email?.charAt(0) || '?';

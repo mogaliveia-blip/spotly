@@ -4,22 +4,14 @@ import { SidebarProvider, Sidebar, SidebarInset } from '@/components/ui/sidebar'
 import { Header } from './header';
 import { SidebarNav } from './sidebar-nav';
 import { useAuth } from '@/hooks/use-auth-user';
-import { useRouter, usePathname } from 'next/navigation';
-import { useEffect } from 'react';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.replace(`/login?redirect=${pathname}`);
-    }
-  }, [user, loading, router, pathname]);
-
-  if (loading || !user) {
-    return null; // Or a loading spinner, handled by AuthProvider already
+  const { loading } = useAuth();
+  
+  // We no longer redirect here. The layout now supports both authenticated and unauthenticated users.
+  // The loading check can be useful to avoid flashing content.
+  if (loading) {
+    return null; // Or a global loading spinner
   }
 
   return (

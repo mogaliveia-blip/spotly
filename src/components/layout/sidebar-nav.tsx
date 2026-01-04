@@ -18,6 +18,7 @@ import {
   LogOut,
   PlusCircle,
   Navigation,
+  LogIn
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -102,7 +103,7 @@ function POISidebarList() {
 
 
 export function SidebarNav() {
-  const { role } = useAuth();
+  const { user, role } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -116,25 +117,32 @@ export function SidebarNav() {
       href: '/dashboard',
       icon: LayoutDashboard,
       label: 'Tableau de bord',
-      roles: ['user', 'editor', 'admin'],
+      auth: true, // Visible to all, but we may want to distinguish later
     },
     {
       href: '/pois',
       icon: MapPin,
       label: 'Gérer les POIs',
       roles: ['editor', 'admin'],
+      auth: true,
     },
     {
       href: '/admin',
       icon: Users,
       label: 'Admin',
       roles: ['admin'],
+      auth: true,
     },
   ];
 
   const canAddPoi = role === 'admin' || role === 'editor';
 
-  const filteredNavItems = navItems.filter((item) => role && item.roles.includes(role));
+  const filteredNavItems = navItems.filter(item => {
+      if (!item.auth) return true; // Public items
+      if (!user) return false; // Auth-only items for logged-out users
+      if (item.roles) return role && item.roles.includes(role); // Role-based items
+      return true; // For auth items without specific roles
+  });
 
   const isDashboard = pathname.startsWith('/dashboard');
 
@@ -147,7 +155,9 @@ export function SidebarNav() {
             <h2 className="text-lg font-semibold tracking-tight">
               Eventide Guide
             </h2>
-            <p className="text-sm text-muted-foreground">Bienvenue !</p>
+            <p className="text-sm text-muted-foreground">
+              {user ? `Bienvenue, ${user.displayName?.split(' ')[0] || 'Utilisateur'} !` : 'Bienvenue !'}
+            </p>
           </div>
         </div>
       </SidebarHeader>
@@ -192,10 +202,19 @@ export function SidebarNav() {
       </SidebarContent>
 
       <SidebarFooter>
-        <Button variant="ghost" className="w-full justify-start gap-2" onClick={handleSignOut}>
-          <LogOut />
-          <span>Se déconnecter</span>
-        </Button>
+        {user ? (
+            <Button variant="ghost" className="w-full justify-start gap-2" onClick={handleSignOut}>
+              <LogOut />
+              <span>Se déconnecter</span>
+            </Button>
+        ) : (
+            <Button variant="ghost" className="w-full justify-start gap-2" asChild>
+                <Link href="/login">
+                    <LogIn />
+                    <span>Se connecter</span>
+                </Link>
+            </Button>
+        )}
       </SidebarFooter>
     </>
   );

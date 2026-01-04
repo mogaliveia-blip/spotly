@@ -12,6 +12,8 @@ import { ScrollArea } from '../ui/scroll-area';
 import { ReviewForm } from './review-form';
 import { ReviewList } from './review-list';
 import { Button } from '../ui/button';
+import { useAuth } from '@/hooks/use-auth-user';
+import Link from 'next/link';
 
 function renderStars(rating: number) {
     const stars = [];
@@ -27,6 +29,7 @@ function renderStars(rating: number) {
   };
 
 function MapController({ pois, onSelectPoi, selectedPoiId, onPoiUpdate }: { pois: POI[], onSelectPoi: (poi: POI | null) => void, selectedPoiId: string | null, onPoiUpdate: (poi: POI) => void }) {
+  const { user } = useAuth();
   const { userLocation } = useGeolocation();
   const map = useMap();
   const selectedPoi = selectedPoiId ? pois.find(p => p.id === selectedPoiId) || null : null;
@@ -120,7 +123,16 @@ function MapController({ pois, onSelectPoi, selectedPoiId, onPoiUpdate }: { pois
                     </p>
                 </div>
                 
-                <ReviewForm poiId={selectedPoi.id} onReviewAdded={handleReviewAdded} />
+                {user ? (
+                    <ReviewForm poiId={selectedPoi.id} onReviewAdded={handleReviewAdded} />
+                ) : (
+                    <div className="text-center text-sm text-muted-foreground border rounded-md p-4">
+                        <p>Vous souhaitez partager votre expérience ?</p>
+                        <Button variant="link" asChild className="p-0 h-auto">
+                            <Link href="/login">Connectez-vous pour laisser un avis.</Link>
+                        </Button>
+                    </div>
+                )}
 
                 <div>
                     <h4 className="font-semibold text-md mb-2">Avis récents</h4>

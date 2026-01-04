@@ -3,25 +3,16 @@
 import { useAuth } from '@/hooks/use-auth-user';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
 
+// This page now simply redirects everyone to the dashboard.
+// The dashboard and its layout will handle logic for authenticated vs. unauthenticated users.
 export default function Home() {
-  const { user, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading) {
-      if (user) {
-        router.replace('/dashboard');
-      } else {
-        router.replace('/login');
-      }
-    }
-  }, [user, loading, router]);
+    router.replace('/dashboard');
+  }, [router]);
 
-  return (
-    <div className="flex h-screen items-center justify-center bg-background">
-      <Loader2 className="h-12 w-12 animate-spin text-primary" />
-    </div>
-  );
+  // Render nothing as the redirect happens immediately.
+  return null;
 }
