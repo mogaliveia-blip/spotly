@@ -75,10 +75,13 @@ export function LoginForm() {
   useEffect(() => {
     const handleLoginRedirect = async () => {
       try {
+        setLoading(true); // Start loading when checking for redirect
         let isRedirecting = false;
+
         // Handle Email Link Sign-in
         if (isSignInWithEmailLink(auth, window.location.href)) {
           isRedirecting = true;
+          setLoading(true);
           let email = window.localStorage.getItem('emailForSignIn');
           if (!email) {
             email = window.prompt('Veuillez fournir votre e-mail pour confirmation');
@@ -96,7 +99,9 @@ export function LoginForm() {
               });
             }
             router.replace(searchParams.get('redirect') || '/dashboard');
-            return; // Exit after successful redirect
+            return; // Exit after successful redirect, loading state is handled by page transition
+          } else {
+             setLoading(false); // No email provided, stop loading
           }
         }
 
@@ -104,6 +109,7 @@ export function LoginForm() {
         const result = await getRedirectResult(auth);
         if (result) {
           isRedirecting = true;
+          setLoading(true);
           if (getAdditionalUserInfo(result)?.isNewUser) {
             await createUserInFirestore({
               uid: result.user.uid,
@@ -134,7 +140,8 @@ export function LoginForm() {
     };
 
     handleLoginRedirect();
-  }, [router, searchParams, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
   async function onPasswordSubmit(values: z.infer<typeof passwordSchema>) {
@@ -159,7 +166,7 @@ export function LoginForm() {
   async function onEmailLinkSubmit(values: z.infer<typeof emailLinkSchema>) {
     setFormLoading(true);
     const actionCodeSettings = {
-      url: window.location.origin + '/login' + (searchParams.get('redirect') ? `?redirect=${searchParams.get('redirect')}`: ''),
+      url: window.location.href, // Use the current URL
       handleCodeInApp: true,
     };
     try {
