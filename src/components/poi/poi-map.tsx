@@ -13,10 +13,11 @@ import { ReviewForm } from './review-form';
 import { ReviewList } from './review-list';
 import { Button } from '../ui/button';
 import { useAuth } from '@/hooks/use-auth-user';
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Card } from '../ui/card';
 import { LoginForm } from '../auth/login-form';
 import { SignupForm } from '../auth/signup-form';
+import { Mountain } from 'lucide-react';
 
 
 function AuthDialog({ trigger }: { trigger: React.ReactNode }) {
@@ -33,7 +34,18 @@ function AuthDialog({ trigger }: { trigger: React.ReactNode }) {
         {trigger}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md p-0">
-        <Card className="w-full border-0">
+        <DialogHeader className="text-center p-6 pb-0">
+            <div className="mb-4 flex justify-center">
+                <Mountain className="h-10 w-10 text-primary" />
+            </div>
+            <DialogTitle className="text-2xl">
+                {isLoginView ? 'Content de vous revoir' : 'Créer un compte'}
+            </DialogTitle>
+            <DialogDescription>
+                {isLoginView ? 'Connectez-vous à votre compte Eventide Guide' : 'Rejoignez Eventide Guide pour explorer des événements'}
+            </DialogDescription>
+        </DialogHeader>
+        <Card className="w-full border-0 shadow-none">
           {isLoginView ? (
             <LoginForm 
               onSuccess={handleSuccess} 

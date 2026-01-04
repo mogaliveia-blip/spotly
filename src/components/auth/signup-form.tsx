@@ -97,13 +97,6 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
 
   return (
     <>
-      <CardHeader className="text-center p-6">
-        <div className="mb-4 flex justify-center">
-          <Mountain className="h-10 w-10 text-primary" />
-        </div>
-        <CardTitle className="text-2xl">Créer un compte</CardTitle>
-        <CardDescription>Rejoignez Eventide Guide pour explorer des événements</CardDescription>
-      </CardHeader>
       <CardContent className="p-6 pt-0">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

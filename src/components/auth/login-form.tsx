@@ -76,13 +76,6 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
 
   return (
     <>
-      <CardHeader className="text-center p-6">
-        <div className="mb-4 flex justify-center">
-          <Mountain className="h-10 w-10 text-primary" />
-        </div>
-        <CardTitle className="text-2xl">Content de vous revoir</CardTitle>
-        <CardDescription>Connectez-vous à votre compte Eventide Guide</CardDescription>
-      </CardHeader>
       <CardContent className="p-6 pt-0">
         <Form {...passwordForm}>
           <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-6">
