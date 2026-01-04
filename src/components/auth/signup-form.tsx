@@ -18,9 +18,16 @@ import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { AuthFormWrapper } from './auth-form-wrapper';
 import { Loader2 } from 'lucide-react';
 import { createUserInFirestore } from '@/lib/data';
+import {
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from '@/components/ui/card';
+import { Mountain } from 'lucide-react';
 
 const formSchema = z.object({
   displayName: z.string().min(2, { message: 'Le nom doit comporter au moins 2 caractères.' }),
@@ -28,7 +35,12 @@ const formSchema = z.object({
   password: z.string().min(6, { message: 'Le mot de passe doit comporter au moins 6 caractères.' }),
 });
 
-export function SignupForm() {
+interface SignupFormProps {
+  onSuccess?: () => void;
+  onSwitchToLogin?: () => void;
+}
+
+export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -67,7 +79,8 @@ export function SignupForm() {
         title: 'Compte créé !',
         description: 'Bienvenue dans Eventide Guide.',
       });
-      router.push('/dashboard');
+      router.refresh();
+      onSuccess?.();
     } catch (error: any) {
       toast({
         title: 'Échec de l\'inscription',
@@ -83,65 +96,76 @@ export function SignupForm() {
   }
 
   return (
-    <AuthFormWrapper
-      title="Créer un compte"
-      description="Rejoignez Eventide Guide pour explorer des événements"
-      footerText="Vous avez déjà un compte ?"
-      footerLink="/login"
-      footerLinkText="Se connecter"
-    >
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          <FormField
-            control={form.control}
-            name="displayName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Nom</FormLabel>
-                <FormControl>
-                  <Input placeholder="Votre nom" {...field} disabled={loading} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="email"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>E-mail</FormLabel>
-                <FormControl>
-                  <Input
-                    type="email"
-                    placeholder="nom@example.com"
-                    {...field}
-                    disabled={loading}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="password"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Mot de passe</FormLabel>
-                <FormControl>
-                  <Input type="password" placeholder="••••••••" {...field} disabled={loading} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Créer un compte
+    <>
+      <CardHeader className="text-center p-6">
+        <div className="mb-4 flex justify-center">
+          <Mountain className="h-10 w-10 text-primary" />
+        </div>
+        <CardTitle className="text-2xl">Créer un compte</CardTitle>
+        <CardDescription>Rejoignez Eventide Guide pour explorer des événements</CardDescription>
+      </CardHeader>
+      <CardContent className="p-6 pt-0">
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="displayName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nom</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Votre nom" {...field} disabled={loading} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>E-mail</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder="nom@example.com"
+                      {...field}
+                      disabled={loading}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Mot de passe</FormLabel>
+                  <FormControl>
+                    <Input type="password" placeholder="••••••••" {...field} disabled={loading} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Créer un compte
+            </Button>
+          </form>
+        </Form>
+      </CardContent>
+      <CardFooter className="p-6 pt-0">
+        <div className="mt-4 text-center text-sm w-full">
+          Vous avez déjà un compte ?{' '}
+          <Button variant="link" className="p-0 h-auto" onClick={onSwitchToLogin}>
+            Se connecter
           </Button>
-        </form>
-      </Form>
-    </AuthFormWrapper>
+        </div>
+      </CardFooter>
+    </>
   );
 }

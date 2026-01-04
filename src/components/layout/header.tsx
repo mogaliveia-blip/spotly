@@ -4,7 +4,48 @@ import { UserNav } from './user-nav';
 import { Mountain } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { Button } from '@/components/ui/button';
-import Link from 'next/link';
+import {
+  Dialog,
+  DialogContent,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { LoginForm } from '../auth/login-form';
+import { SignupForm } from '../auth/signup-form';
+import { useState } from 'react';
+import { Card } from '../ui/card';
+
+function AuthDialog() {
+  const [open, setOpen] = useState(false);
+  const [isLoginView, setIsLoginView] = useState(true);
+
+  const handleSuccess = () => {
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button>Se connecter</Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md p-0">
+        <Card className="w-full border-0">
+          {isLoginView ? (
+            <LoginForm 
+              onSuccess={handleSuccess} 
+              onSwitchToSignup={() => setIsLoginView(false)}
+            />
+          ) : (
+            <SignupForm 
+              onSuccess={handleSuccess}
+              onSwitchToLogin={() => setIsLoginView(true)}
+            />
+          )}
+        </Card>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 
 export function Header() {
   const { user } = useAuth();
@@ -19,9 +60,7 @@ export function Header() {
         {user ? (
           <UserNav />
         ) : (
-          <Button asChild>
-            <Link href="/login">Se connecter</Link>
-          </Button>
+          <AuthDialog />
         )}
       </div>
     </header>

@@ -14,23 +14,34 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
-import { 
-  signInWithEmailAndPassword
-} from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { AuthFormWrapper } from './auth-form-wrapper';
 import { Loader2 } from 'lucide-react';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Mountain } from 'lucide-react';
+import Link from 'next/link';
 
 const passwordSchema = z.object({
   email: z.string().email({ message: 'Veuillez saisir une adresse e-mail valide.' }),
   password: z.string().min(1, { message: 'Le mot de passe est requis.' }),
 });
 
-export function LoginForm() {
+interface LoginFormProps {
+  onSuccess?: () => void;
+  onSwitchToSignup?: () => void;
+}
+
+export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [formLoading, setFormLoading] = useState(false);
 
@@ -43,7 +54,12 @@ export function LoginForm() {
     setFormLoading(true);
     try {
       await signInWithEmailAndPassword(auth, values.email, values.password);
-      router.push(searchParams.get('redirect') || '/dashboard');
+      toast({
+        title: 'Connexion réussie !',
+        description: 'Content de vous revoir.',
+      });
+      router.refresh(); // Refresh server components to get new user state
+      onSuccess?.(); // Close modal on success
     } catch (error: any) {
       toast({
         title: 'Échec de la connexion',
@@ -59,54 +75,65 @@ export function LoginForm() {
   }
 
   return (
-    <AuthFormWrapper
-      title="Content de vous revoir"
-      description="Connectez-vous à votre compte Eventide Guide"
-      footerText="Vous n'avez pas de compte ?"
-      footerLink="/signup"
-      footerLinkText="Inscrivez-vous"
-    >
-      <Form {...passwordForm}>
-        <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-6 pt-4">
-          <div className="space-y-4">
-            <FormField
-              control={passwordForm.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>E-mail</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="nom@example.com"
-                      {...field}
-                      disabled={formLoading}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={passwordForm.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Mot de passe</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="••••••••" {...field} disabled={formLoading} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-          <Button type="submit" className="w-full" disabled={formLoading}>
-            {formLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Se connecter
+    <>
+      <CardHeader className="text-center p-6">
+        <div className="mb-4 flex justify-center">
+          <Mountain className="h-10 w-10 text-primary" />
+        </div>
+        <CardTitle className="text-2xl">Content de vous revoir</CardTitle>
+        <CardDescription>Connectez-vous à votre compte Eventide Guide</CardDescription>
+      </CardHeader>
+      <CardContent className="p-6 pt-0">
+        <Form {...passwordForm}>
+          <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-6">
+            <div className="space-y-4">
+              <FormField
+                control={passwordForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>E-mail</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="nom@example.com"
+                        {...field}
+                        disabled={formLoading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={passwordForm.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Mot de passe</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="••••••••" {...field} disabled={formLoading} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={formLoading}>
+              {formLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Se connecter
+            </Button>
+          </form>
+        </Form>
+      </CardContent>
+      <CardFooter className="p-6 pt-0">
+        <div className="mt-4 text-center text-sm w-full">
+          Vous n'avez pas de compte ?{' '}
+          <Button variant="link" className="p-0 h-auto" onClick={onSwitchToSignup}>
+            Inscrivez-vous
           </Button>
-        </form>
-      </Form>
-    </AuthFormWrapper>
+        </div>
+      </CardFooter>
+    </>
   );
 }

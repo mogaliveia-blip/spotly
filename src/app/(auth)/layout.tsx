@@ -4,9 +4,6 @@ export default function AuthLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      {children}
-    </div>
-  );
+  // This layout is simplified as the auth forms are now primarily shown in modals.
+  return <>{children}</>;
 }

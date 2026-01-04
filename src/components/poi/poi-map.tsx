@@ -13,7 +13,44 @@ import { ReviewForm } from './review-form';
 import { ReviewList } from './review-list';
 import { Button } from '../ui/button';
 import { useAuth } from '@/hooks/use-auth-user';
-import Link from 'next/link';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Card } from '../ui/card';
+import { LoginForm } from '../auth/login-form';
+import { SignupForm } from '../auth/signup-form';
+
+
+function AuthDialog({ trigger }: { trigger: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [isLoginView, setIsLoginView] = useState(true);
+
+  const handleSuccess = () => {
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {trigger}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md p-0">
+        <Card className="w-full border-0">
+          {isLoginView ? (
+            <LoginForm 
+              onSuccess={handleSuccess} 
+              onSwitchToSignup={() => setIsLoginView(false)}
+            />
+          ) : (
+            <SignupForm 
+              onSuccess={handleSuccess}
+              onSwitchToLogin={() => setIsLoginView(true)}
+            />
+          )}
+        </Card>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 
 function renderStars(rating: number) {
     const stars = [];
@@ -128,9 +165,11 @@ function MapController({ pois, onSelectPoi, selectedPoiId, onPoiUpdate }: { pois
                 ) : (
                     <div className="text-center text-sm text-muted-foreground border rounded-md p-4">
                         <p>Vous souhaitez partager votre expérience ?</p>
-                        <Button variant="link" asChild className="p-0 h-auto">
-                            <Link href="/login">Connectez-vous pour laisser un avis.</Link>
-                        </Button>
+                         <AuthDialog trigger={
+                            <Button variant="link" className="p-0 h-auto">
+                                Connectez-vous pour laisser un avis.
+                            </Button>
+                         } />
                     </div>
                 )}
 
@@ -210,4 +249,3 @@ export function POIMap({ selectedPoiId, onSelectPoi, pois, setPois }: { selected
         </div>
     )
 }
-    
