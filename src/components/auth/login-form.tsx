@@ -75,8 +75,10 @@ export function LoginForm() {
   useEffect(() => {
     const handleLoginRedirect = async () => {
       try {
+        let isRedirecting = false;
         // Handle Email Link Sign-in
         if (isSignInWithEmailLink(auth, window.location.href)) {
+          isRedirecting = true;
           let email = window.localStorage.getItem('emailForSignIn');
           if (!email) {
             email = window.prompt('Veuillez fournir votre e-mail pour confirmation');
@@ -94,13 +96,14 @@ export function LoginForm() {
               });
             }
             router.replace(searchParams.get('redirect') || '/dashboard');
-            return;
+            return; // Exit after successful redirect
           }
         }
 
         // Handle Google Sign-in
         const result = await getRedirectResult(auth);
         if (result) {
+          isRedirecting = true;
           if (getAdditionalUserInfo(result)?.isNewUser) {
             await createUserInFirestore({
               uid: result.user.uid,
@@ -112,17 +115,21 @@ export function LoginForm() {
             toast({ title: 'Compte créé !', description: 'Bienvenue dans Eventide Guide.' });
           }
           router.replace(searchParams.get('redirect') || '/dashboard');
-          return;
+          return; // Exit after successful redirect
         }
+        
+        // If we are not processing any redirect, stop loading and show form.
+        if (!isRedirecting) {
+          setLoading(false);
+        }
+
       } catch (error: any) {
         toast({
           title: 'Échec de la connexion',
           description: error.message || 'Une erreur est survenue lors de la tentative de connexion.',
           variant: 'destructive',
         });
-      } finally {
-        // If we're not being redirected, stop loading.
-        setLoading(false);
+        setLoading(false); // Stop loading on error
       }
     };
 
@@ -152,7 +159,7 @@ export function LoginForm() {
   async function onEmailLinkSubmit(values: z.infer<typeof emailLinkSchema>) {
     setFormLoading(true);
     const actionCodeSettings = {
-      url: window.location.origin + (searchParams.get('redirect') ? `?redirect=${searchParams.get('redirect')}`: '/login'),
+      url: window.location.origin + '/login' + (searchParams.get('redirect') ? `?redirect=${searchParams.get('redirect')}`: ''),
       handleCodeInApp: true,
     };
     try {
@@ -296,5 +303,3 @@ export function LoginForm() {
     </AuthFormWrapper>
   );
 }
-
-    
