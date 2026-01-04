@@ -15,16 +15,12 @@ import {
   MapPin,
   Users,
   Mountain,
-  LogOut,
   PlusCircle,
   Navigation,
-  LogIn
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '../ui/button';
-import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
 import { useEffect, useState } from 'react';
 import type { POI } from '@/lib/types';
 import { fetchPois } from '@/lib/data';
@@ -105,13 +101,6 @@ function POISidebarList() {
 export function SidebarNav() {
   const { user, role } = useAuth();
   const pathname = usePathname();
-  const router = useRouter();
-
-  const handleSignOut = async () => {
-    await signOut(auth);
-    router.push('/dashboard');
-    router.refresh();
-  };
 
   const navItems = [
     {
@@ -203,19 +192,7 @@ export function SidebarNav() {
       </SidebarContent>
 
       <SidebarFooter>
-        {user ? (
-            <Button variant="ghost" className="w-full justify-start gap-2" onClick={handleSignOut}>
-              <LogOut />
-              <span>Se déconnecter</span>
-            </Button>
-        ) : (
-            <Button variant="ghost" className="w-full justify-start gap-2" asChild>
-                <Link href="/login">
-                    <LogIn />
-                    <span>Se connecter</span>
-                </Link>
-            </Button>
-        )}
+        {/* The user nav in the header now handles login/logout */}
       </SidebarFooter>
     </>
   );
