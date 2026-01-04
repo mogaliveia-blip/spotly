@@ -75,9 +75,8 @@ export function LoginForm() {
   useEffect(() => {
     const handleLoginRedirect = async () => {
       try {
-        setLoading(true); // Start loading when checking for redirect
         let isRedirecting = false;
-
+        
         // Handle Email Link Sign-in
         if (isSignInWithEmailLink(auth, window.location.href)) {
           isRedirecting = true;
@@ -99,9 +98,9 @@ export function LoginForm() {
               });
             }
             router.replace(searchParams.get('redirect') || '/dashboard');
-            return; // Exit after successful redirect, loading state is handled by page transition
+            return;
           } else {
-             setLoading(false); // No email provided, stop loading
+             setLoading(false);
           }
         }
 
@@ -121,10 +120,9 @@ export function LoginForm() {
             toast({ title: 'Compte créé !', description: 'Bienvenue dans Eventide Guide.' });
           }
           router.replace(searchParams.get('redirect') || '/dashboard');
-          return; // Exit after successful redirect
+          return;
         }
         
-        // If we are not processing any redirect, stop loading and show form.
         if (!isRedirecting) {
           setLoading(false);
         }
@@ -135,7 +133,7 @@ export function LoginForm() {
           description: error.message || 'Une erreur est survenue lors de la tentative de connexion.',
           variant: 'destructive',
         });
-        setLoading(false); // Stop loading on error
+        setLoading(false);
       }
     };
 
