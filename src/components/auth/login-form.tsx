@@ -17,7 +17,8 @@ import { useState, useEffect } from 'react';
 import { 
   signInWithEmailAndPassword, 
   GoogleAuthProvider, 
-  signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   getAdditionalUserInfo,
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
@@ -69,6 +70,43 @@ export function LoginForm() {
     resolver: zodResolver(emailLinkSchema),
     defaultValues: { email: '' },
   });
+  
+  // Handle redirect result from Google Sign-In
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        setLoading(true);
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const additionalInfo = getAdditionalUserInfo(result);
+          if (additionalInfo?.isNewUser) {
+            await createUserInFirestore({
+              uid: result.user.uid,
+              email: result.user.email,
+              displayName: result.user.displayName,
+              role: 'user',
+              photoURL: result.user.photoURL,
+            });
+            toast({
+              title: 'Compte créé !',
+              description: 'Bienvenue dans Eventide Guide.',
+            });
+          }
+          router.push(searchParams.get('redirect') || '/dashboard');
+        }
+      } catch (error: any) {
+        console.error('Erreur de connexion Google:', error);
+        toast({
+          title: 'Échec de la connexion avec Google',
+          description: error.message || 'Impossible de se connecter avec Google. Veuillez réessayer.',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    handleRedirectResult();
+  }, [router, toast, searchParams]);
 
   useEffect(() => {
     const handleEmailLinkSignIn = async () => {
@@ -133,7 +171,7 @@ export function LoginForm() {
   async function onEmailLinkSubmit(values: z.infer<typeof emailLinkSchema>) {
     setLoading(true);
     const actionCodeSettings = {
-      url: window.location.href.split('?')[0],
+      url: window.location.origin + '/login', // Use origin and path
       handleCodeInApp: true,
     };
     try {
@@ -158,36 +196,9 @@ export function LoginForm() {
   
   async function handleGoogleSignIn() {
     setLoading(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const additionalInfo = getAdditionalUserInfo(result);
-      
-      if (additionalInfo?.isNewUser) {
-        await createUserInFirestore({
-          uid: result.user.uid,
-          email: result.user.email,
-          displayName: result.user.displayName,
-          role: 'user', 
-          photoURL: result.user.photoURL,
-        });
-        toast({
-          title: 'Compte créé !',
-          description: 'Bienvenue dans Eventide Guide.',
-        });
-      }
-
-      router.push(searchParams.get('redirect') || '/dashboard');
-    } catch (error: any) {
-        console.error(error);
-        toast({
-            title: 'Échec de la connexion avec Google',
-            description: 'Impossible de se connecter avec Google. Veuillez réessayer.',
-            variant: 'destructive',
-        });
-    } finally {
-        setLoading(false);
-    }
+    const provider = new GoogleAuthProvider();
+    // We initiate the redirect here. The result is handled by the useEffect hook.
+    await signInWithRedirect(auth, provider);
   }
 
   return (
@@ -198,6 +209,12 @@ export function LoginForm() {
       footerLink="/signup"
       footerLinkText="Inscrivez-vous"
     >
+      {loading ? (
+        <div className="flex justify-center items-center p-8">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </div>
+      ) : (
+      <>
       <Tabs defaultValue="password">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="password">Mot de passe</TabsTrigger>
@@ -291,10 +308,11 @@ export function LoginForm() {
       </div>
 
       <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={loading}>
-        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GoogleIcon className="mr-2 h-4 w-4" />}
+        <GoogleIcon className="mr-2 h-4 w-4" />
         Se connecter avec Google
       </Button>
-
+      </>
+      )}
     </AuthFormWrapper>
   );
 }
