@@ -174,9 +174,10 @@ export async function createPoi(poiData: Omit<POI, 'id'>): Promise<string> {
         requestResourceData: poiData,
       });
       errorEmitter.emit('permission-error', permissionError);
-      throw serverError;
+      throw serverError; // Rethrow to be caught by the form
     }
 }
+
 
 export async function updatePoi(poiId: string, poiData: Partial<POI>): Promise<void> {
     const poiRef = doc(db, 'pois', poiId);

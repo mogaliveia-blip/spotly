@@ -144,12 +144,11 @@ export function POIForm({ poiId }: POIFormProps) {
       if (!isEditMode) {
         const newPoiData: Omit<POI, 'id'> = {
           ...values,
-          headerPhotoUrl: '', // Will be set after upload
-          galleryUrls: [], // Will be set after upload
+          headerPhotoUrl: '',
+          galleryUrls: [],
           averageRating: 0,
           reviewCount: 0,
         };
-        // This is where we get the ID for a new POI
         poiIdToUpdate = await createPoi(newPoiData); 
       }
 
