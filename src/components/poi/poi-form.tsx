@@ -150,13 +150,12 @@ export function POIForm({ poiId }: POIFormProps) {
 
   async function onSubmit(values: POIFormValues) {
     setFormIsLoading(true);
-
     try {
       let poiIdToUpdate = poiId;
-
-      // 1) Créer le POI si on est en mode création (sans images)
+  
+      // 1. Create POI document if in creation mode
       if (!isEditMode) {
-        const basePoiData: Omit<POI, 'id'> = {
+        const newPoiData: Omit<POI, 'id'> = {
           title: values.title,
           description: values.description,
           location: values.location,
@@ -165,36 +164,32 @@ export function POIForm({ poiId }: POIFormProps) {
           averageRating: 0,
           reviewCount: 0,
         };
-        poiIdToUpdate = await createPoi(basePoiData);
+        poiIdToUpdate = await createPoi(newPoiData);
       }
-
+  
       if (!poiIdToUpdate) {
         throw new Error('ID du POI manquant.');
       }
-
-      // 2) Upload de l’image d’en-tête (si modifiée)
+  
+      // 2. Upload header image if a new one is selected
       let finalHeaderUrl = values.headerPhotoUrl || '';
       if (headerImageFile) {
         const headerPath = `poi-images/${poiIdToUpdate}/header.jpg`;
         const { url } = await uploadFile(headerImageFile, headerPath);
         finalHeaderUrl = url;
       }
-
-      // 3) Upload des nouvelles images de galerie
+  
+      // 3. Upload new gallery images
       const existingGallery = values.galleryUrls ?? [];
       const newGalleryUploads = await Promise.all(
-        galleryImageFiles.map(async (file) => {
+        galleryImageFiles.map(file => {
           const uniquePath = `poi-images/${poiIdToUpdate}/gallery/${crypto.randomUUID()}`;
-          return uploadFile(file, uniquePath); // { url, path }
+          return uploadFile(file, uniquePath);
         })
       );
-
-      const finalGalleryUrls = [
-        ...existingGallery,
-        ...newGalleryUploads,
-      ];
-
-      // 4) Mise à jour Firestore (champs explicitement listés)
+      const finalGalleryUrls = [...existingGallery, ...newGalleryUploads];
+  
+      // 4. Update Firestore with all data
       await updatePoi(poiIdToUpdate, {
         title: values.title,
         description: values.description,
@@ -202,14 +197,14 @@ export function POIForm({ poiId }: POIFormProps) {
         headerPhotoUrl: finalHeaderUrl,
         galleryUrls: finalGalleryUrls,
       });
-
+  
       toast({
         title: isEditMode ? 'POI mis à jour !' : 'POI créé !',
         description: `${values.title} a été sauvegardé.`,
       });
-
       router.refresh();
       router.push('/pois');
+  
     } catch (error) {
       console.error('Erreur lors de la sauvegarde du POI', error);
       toast({
@@ -218,7 +213,7 @@ export function POIForm({ poiId }: POIFormProps) {
         variant: 'destructive',
       });
       setFormIsLoading(false); // Make sure to unlock form on error
-    } 
+    }
   }
 
 
