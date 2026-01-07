@@ -180,14 +180,14 @@ export function POIForm({ poiId }: POIFormProps) {
             galleryUrls: finalGalleryUrls,
         };
         
-        updatePoi(currentPoiId, finalPoiData);
+        await updatePoi(currentPoiId, finalPoiData);
 
         toast({
             title: isEditMode ? 'POI mis à jour !' : 'POI créé !',
             description: `${values.title} a été sauvegardé.`,
         });
 
-        router.push('/dashboard');
+        router.push('/pois');
         router.refresh(); 
     } catch (error) {
         console.error("Erreur lors de la sauvegarde du POI", error);
@@ -298,7 +298,7 @@ export function POIForm({ poiId }: POIFormProps) {
                            </Button>
                         </div>
                       ))}
-                       <label htmlFor="gallery-upload" className="cursor-pointer aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-muted-foreground hover:bg-accent">
+                       <label htmlFor="gallery-upload" className="cursor-pointer aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-muted-foreground hover:bg-accent/50">
                           <ImagePlus className="h-8 w-8" />
                           <span className="text-xs text-center mt-1">Ajouter</span>
                        </label>

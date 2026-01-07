@@ -162,9 +162,12 @@ export function updateUserRole(uid: string, role: UserRole): void {
     });
 }
 
-export function createPoi(poiData: Omit<POI, 'id'>): Promise<string> {
+export async function createPoi(poiData: Omit<POI, 'id'>): Promise<string> {
     const poiCollection = collection(db, 'pois');
-    return addDoc(poiCollection, poiData).then(docRef => docRef.id).catch(async (serverError) => {
+    try {
+      const docRef = await addDoc(poiCollection, poiData);
+      return docRef.id;
+    } catch (serverError: any) {
       const permissionError = new FirestorePermissionError({
         path: 'pois',
         operation: 'create',
@@ -172,19 +175,22 @@ export function createPoi(poiData: Omit<POI, 'id'>): Promise<string> {
       });
       errorEmitter.emit('permission-error', permissionError);
       throw serverError;
-    });
+    }
 }
 
-export function updatePoi(poiId: string, poiData: Partial<POI>): void {
+export async function updatePoi(poiId: string, poiData: Partial<POI>): Promise<void> {
     const poiRef = doc(db, 'pois', poiId);
-    updateDoc(poiRef, poiData).catch(async (serverError) => {
+    try {
+      await updateDoc(poiRef, poiData);
+    } catch (serverError: any) {
       const permissionError = new FirestorePermissionError({
         path: poiRef.path,
         operation: 'update',
         requestResourceData: poiData,
       });
       errorEmitter.emit('permission-error', permissionError);
-    });
+      throw serverError;
+    }
 }
 
 export function deletePoi(poiId: string): void {
