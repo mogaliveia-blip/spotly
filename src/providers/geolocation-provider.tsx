@@ -35,7 +35,22 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
       };
 
       const onError = (error: GeolocationPositionError) => {
-        console.error("Erreur de géolocalisation:", error.message);
+        let errorMessage = "Une erreur de géolocalisation est survenue.";
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = "La permission de géolocalisation a été refusée.";
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = "L'information de localisation n'est pas disponible.";
+            break;
+          case error.TIMEOUT:
+            errorMessage = "La demande de géolocalisation a expiré.";
+            break;
+          default:
+            errorMessage = `Une erreur inconnue est survenue (code: ${error.code}).`;
+            break;
+        }
+        console.error("Erreur de géolocalisation:", errorMessage, error.message);
         setState({
           userLocation: null,
           loading: false,
