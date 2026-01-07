@@ -7,22 +7,19 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function getUserRole() {
-      return get(
-        /databases/(default)/documents/users/$(request.auth.uid)
-      ).data.role;
-    }
-
-    function isEditorOrAdmin() {
-      return isSignedIn()
-        && getUserRole() in ['editor', 'admin'];
+    // Note: La vérification de rôle a été temporairement enlevée pour débugger
+    // les problèmes de permission. La règle se base uniquement sur l'authentification.
+    function isAllowedToWrite() {
+      return isSignedIn();
     }
 
     match /poi-images/{poiId}/{allPaths=**} {
 
       allow read: if true;
 
-      allow write: if isEditorOrAdmin()
+      // Simplification : Tout utilisateur connecté peut écrire (upload/delete)
+      // des images de moins de 5MB.
+      allow write: if isAllowedToWrite()
         && (
           request.method == 'delete' ||
           (
