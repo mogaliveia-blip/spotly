@@ -54,12 +54,12 @@ service cloud.firestore {
           (
             // S'il n'y a aucun utilisateur, le premier DOIT avoir le rôle d'admin.
             // On vérifie la taille de la collection `users`.
-            get(/databases/$(database)/documents/users).size() == 0 &&
+            get(/databases/$(database)/documents/users/$(userId)).size() == 0 &&
             request.resource.data.role == 'admin'
           ) ||
           (
             // Les utilisateurs suivants doivent se voir attribuer le rôle 'user'.
-            get(/databases/$(database)/documents/users).size() > 0 &&
+            get(/databases/$(database)/documents/users/$(userId)).size() > 0 &&
             request.resource.data.role == 'user'
           )
         );
