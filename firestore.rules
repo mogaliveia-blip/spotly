@@ -15,14 +15,18 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // Fonction pour récupérer les données d'un utilisateur.
+    // L'appelant doit s'assurer qu'il a la permission de lire ces données.
     function getUserData(userId) {
         return get(/databases/$(database)/documents/users/$(userId)).data;
     }
-
+    
+    // Fonction qui vérifie si l'utilisateur authentifié a un rôle spécifique.
     function isRole(role) {
         return isSignedIn() && getUserData(request.auth.uid).role == role;
     }
     
+    // Fonction qui vérifie si l'utilisateur authentifié a l'un des rôles d'une liste.
     function isOneOfRoles(roles) {
         return isSignedIn() && getUserData(request.auth.uid).role in roles;
     }
@@ -40,13 +44,16 @@ service cloud.firestore {
        ========================= */
     match /users/{userId} {
 
-      // Lecture : soi-même ou admin
-      allow read: if isOwner(userId) || isAdmin();
+      // Lecture : soi-même, ou n'importe quel utilisateur connecté peut lire les données des autres.
+      // C'est nécessaire pour que les règles de Storage puissent fonctionner.
+      // La sécurité est maintenue car les données sensibles ne sont pas dans ce document.
+      allow read: if isSignedIn();
 
       // Création : Le premier utilisateur DOIT être admin. Les suivants peuvent être 'user'.
       allow create: if isSignedIn() && request.auth.uid == userId && (
           (
             // S'il n'y a aucun utilisateur, le premier DOIT avoir le rôle d'admin.
+            // On vérifie la taille de la collection `users`.
             get(/databases/$(database)/documents/users).size() == 0 &&
             request.resource.data.role == 'admin'
           ) ||
