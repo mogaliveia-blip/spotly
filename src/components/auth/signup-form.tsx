@@ -82,6 +82,9 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
         role: roleToAssign,
       });
       
+      // Force a token refresh to ensure custom claims are available immediately.
+      await userCredential.user.getIdToken(true);
+
       toast({
         title: 'Compte créé !',
         description: isFirstUser 

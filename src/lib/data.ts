@@ -17,7 +17,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebas
 export async function uploadFile(file: File, path: string): Promise<{ url: string, path: string }> {
   const storageRef = ref(storage, path);
   // uploadBytes returns an UploadResult, and we should use its reference for getDownloadURL
-  const uploadResult = await uploadBytes(storageRef, file, { contentType: file.type });
+  const uploadResult = await uploadBytes(storageRef, file, { contentType: file.type || 'image/jpeg' });
   const url = await getDownloadURL(uploadResult.ref);
   return { url, path: uploadResult.ref.fullPath };
 }
@@ -43,24 +43,29 @@ export async function deleteFileByPath(filePath: string): Promise<void> {
 
 // --- FIRESTORE FUNCTIONS ---
 
-export function createUserInFirestore(user: Omit<AppUser, 'role'> & { role?: UserRole }): void {
+export async function createUserInFirestore(
+  user: Omit<AppUser, 'role'> & { role?: UserRole }
+): Promise<void> {
   const userRef = doc(db, 'users', user.uid);
   const userData = {
     uid: user.uid,
     email: user.email,
     displayName: user.displayName,
-    role: user.role || 'user', // Default to 'user' role
+    role: user.role || 'user',
     photoURL: user.photoURL || null,
   };
 
-  setDoc(userRef, userData, { merge: true }).catch(async (serverError) => {
+  try {
+    await setDoc(userRef, userData, { merge: true });
+  } catch (serverError) {
     const permissionError = new FirestorePermissionError({
       path: userRef.path,
       operation: 'create',
       requestResourceData: userData,
     });
     errorEmitter.emit('permission-error', permissionError);
-  });
+    throw serverError;
+  }
 }
 
 export async function fetchPois(): Promise<POI[]> {
