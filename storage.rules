@@ -3,23 +3,33 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Toutes les images des POI (header + galerie)
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserRole() {
+      return get(
+        /databases/(default)/documents/users/$(request.auth.uid)
+      ).data.role;
+    }
+
+    function isEditorOrAdmin() {
+      return isSignedIn()
+        && getUserRole() in ['editor', 'admin'];
+    }
+
     match /poi-images/{poiId}/{allPaths=**} {
+
       allow read: if true;
 
-      // Seuls les éditeurs ou administrateurs peuvent écrire (upload/delete).
-      // On vérifie le rôle directement en lisant le document utilisateur dans Firestore.
-      allow write: if request.auth != null && 
-                    get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['editor', 'admin'] &&
-                    (
-                      // Pour un delete, on autorise si l'utilisateur a le bon rôle.
-                      request.method == 'delete' ||
-                      // Pour un upload (create/update), on vérifie aussi la taille et le type.
-                      (
-                        request.resource.size < 5 * 1024 * 1024
-                        && request.resource.contentType.matches('image/.*')
-                      )
-                    );
+      allow write: if isEditorOrAdmin()
+        && (
+          request.method == 'delete' ||
+          (
+            request.resource.size < 5 * 1024 * 1024
+            && request.resource.contentType.matches('image/.*')
+          )
+        );
     }
   }
 }

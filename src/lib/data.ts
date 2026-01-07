@@ -16,6 +16,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
  */
 export async function uploadFile(file: File, path: string): Promise<{ url: string, path: string }> {
   const storageRef = ref(storage, path);
+  // Explicitly set the content type for robustness with Storage Rules
   await uploadBytes(storageRef, file, { contentType: file.type });
   const url = await getDownloadURL(storageRef);
   return { url, path: storageRef.fullPath };
