@@ -1,13 +1,45 @@
 // src/lib/data.ts
-import { db } from './firebase';
+import { db, storage } from './firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, serverTimestamp, runTransaction, Timestamp } from 'firebase/firestore';
 import type { POI, Review, AppUser, UserRole } from './types';
-import { placeholderImages } from './placeholder-images.json';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+
+// --- STORAGE FUNCTIONS ---
+
+/**
+ * Uploads a file to Firebase Storage.
+ * @param file The file to upload.
+ * @param path The path in Storage where the file will be saved.
+ * @returns A promise that resolves with the download URL and the full path of the uploaded file.
+ */
+export async function uploadFile(file: File, path: string): Promise<{ url: string, path: string }> {
+  const storageRef = ref(storage, path);
+  await uploadBytes(storageRef, file);
+  const url = await getDownloadURL(storageRef);
+  return { url, path: storageRef.fullPath };
+}
+
+/**
+ * Deletes a file from Firebase Storage using its full path.
+ * @param filePath The full path of the file to delete.
+ */
+export async function deleteFileByPath(filePath: string): Promise<void> {
+    const storageRef = ref(storage, filePath);
+    try {
+        await deleteObject(storageRef);
+    } catch (error: any) {
+        // It's not critical if the file doesn't exist, so we can ignore 'object-not-found' errors.
+        if (error.code !== 'storage/object-not-found') {
+            console.error("Erreur lors de la suppression du fichier:", error);
+            throw error;
+        }
+    }
+}
 
 
-// --- VRAIES FONCTIONS FIRESTORE ---
+// --- FIRESTORE FUNCTIONS ---
 
 export function createUserInFirestore(user: Omit<AppUser, 'role'> & { role?: UserRole }): void {
   const userRef = doc(db, 'users', user.uid);
@@ -60,53 +92,55 @@ export async function fetchReviewsByPoiId(poiId: string): Promise<Review[]> {
 export async function addReview(poiId: string, reviewData: Omit<Review, 'id' | 'poiId' | 'createdAt'>): Promise<Review> {
   const poiRef = doc(db, 'pois', poiId);
   const reviewsCollection = collection(db, 'pois', poiId, 'reviews');
-  const newReviewRef = doc(reviewsCollection); // Create a ref with a new ID
+  
+  // 1. Add the review to the subcollection
+  const reviewWithTimestamp = {
+      ...reviewData,
+      poiId,
+      createdAt: serverTimestamp(),
+  };
+  const newReviewRef = await addDoc(reviewsCollection, reviewWithTimestamp).catch(e => {
+    if (e.code && e.code.includes('permission-denied')) {
+        const permissionError = new FirestorePermissionError({
+            path: `pois/${poiId}/reviews`,
+            operation: 'create',
+            requestResourceData: reviewData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+    }
+    throw e;
+  });
 
+  // 2. Update the aggregate data on the POI document in a transaction
   try {
-    const newReview = await runTransaction(db, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
       const poiDoc = await transaction.get(poiRef);
       if (!poiDoc.exists()) {
         throw "Le POI n'existe pas !";
       }
 
       const poiData = poiDoc.data() as POI;
-      const oldRatingTotal = poiData.averageRating * poiData.reviewCount;
-      const newReviewCount = poiData.reviewCount + 1;
+      const newReviewCount = (poiData.reviewCount || 0) + 1;
+      const oldRatingTotal = (poiData.averageRating || 0) * (poiData.reviewCount || 0);
       const newAverageRating = (oldRatingTotal + reviewData.rating) / newReviewCount;
-      
-      const reviewWithTimestamp = {
-        ...reviewData,
-        poiId,
-        createdAt: new Date(), // Use client-side date for optimistic update
-      };
 
       transaction.update(poiRef, {
         reviewCount: newReviewCount,
         averageRating: newAverageRating,
       });
-
-      const finalReviewData = { ...reviewData, createdAt: serverTimestamp() };
-      transaction.set(newReviewRef, finalReviewData);
-
-      return {
-        id: newReviewRef.id,
-        ...reviewWithTimestamp
-      };
     });
-    return newReview;
-  } catch (e: any) {
-    console.error("Échec de la transaction d'ajout d'avis : ", e);
-    // Emit a permission error if it's a permission issue, otherwise re-throw.
-    if (e.code && e.code.includes('permission-denied')) {
-        const permissionError = new FirestorePermissionError({
-            path: newReviewRef.path,
-            operation: 'create',
-            requestResourceData: reviewData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-    }
-    throw e; // re-throw other errors
+  } catch (e) {
+      console.error("Échec de la mise à jour de l'évaluation moyenne, mais l'avis a été ajouté.", e);
+      // The review is already added, so we don't throw. We can handle this state later if needed.
   }
+
+  // 3. Return the optimistic review object
+  return {
+      id: newReviewRef.id,
+      ...reviewData,
+      createdAt: new Date(), // Use local date for immediate UI update
+      poiId,
+  };
 }
 
 
@@ -128,21 +162,16 @@ export function updateUserRole(uid: string, role: UserRole): void {
     });
 }
 
-export function createPoi(poiData: Omit<POI, 'id' | 'averageRating' | 'reviewCount'>): void {
+export function createPoi(poiData: Omit<POI, 'id'>): Promise<string> {
     const poiCollection = collection(db, 'pois');
-    const newPoiData = {
-        ...poiData,
-        averageRating: 0,
-        reviewCount: 0,
-    }
-    
-    addDoc(poiCollection, newPoiData).catch(async (serverError) => {
+    return addDoc(poiCollection, poiData).then(docRef => docRef.id).catch(async (serverError) => {
       const permissionError = new FirestorePermissionError({
         path: 'pois',
         operation: 'create',
-        requestResourceData: newPoiData,
+        requestResourceData: poiData,
       });
       errorEmitter.emit('permission-error', permissionError);
+      throw serverError;
     });
 }
 
@@ -160,6 +189,7 @@ export function updatePoi(poiId: string, poiData: Partial<POI>): void {
 
 export function deletePoi(poiId: string): void {
     const poiRef = doc(db, 'pois', poiId);
+    // TODO: Delete associated images in Storage using a Cloud Function.
     deleteDoc(poiRef).catch(async (serverError) => {
       const permissionError = new FirestorePermissionError({
         path: poiRef.path,

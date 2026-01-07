@@ -16,8 +16,7 @@ export interface POI {
   title: string;
   description: string;
   headerPhotoUrl: string;
-  headerPhotoHint: string;
-  galleryUrls: { url: string; hint: string }[];
+  galleryUrls: { url: string; path: string }[];
   location: {
     lat: number;
     lng: number;

@@ -3,39 +3,18 @@
 import type { POI, Review } from '@/lib/types';
 import { Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { MapPin, User, Crosshair, Star } from 'lucide-react';
-import { getDistance, cn } from '@/lib/utils';
+import { User, Crosshair, MapPin } from 'lucide-react';
 import { useGeolocation } from '@/providers/geolocation-provider';
-import { fetchPois, fetchReviewsByPoiId } from '@/lib/data';
 import { Skeleton } from '../ui/skeleton';
-import { ScrollArea } from '../ui/scroll-area';
-import { ReviewForm } from './review-form';
-import { ReviewList } from './review-list';
 import { Button } from '../ui/button';
 import { useAuth } from '@/hooks/use-auth-user';
-import { AuthDialog } from '../auth/auth-dialog';
+import { POIDetails } from './poi-details';
 
 
-function renderStars(rating: number) {
-    const stars = [];
-    for (let i = 1; i <= 5; i++) {
-      stars.push(
-        <Star
-          key={i}
-          className={cn('h-4 w-4', i <= rating ? 'text-accent fill-accent' : 'text-muted-foreground')}
-        />
-      );
-    }
-    return stars;
-  };
-
-function MapController({ pois, onSelectPoi, selectedPoiId, onPoiUpdate }: { pois: POI[], onSelectPoi: (poi: POI | null) => void, selectedPoiId: string | null, onPoiUpdate: (poi: POI) => void }) {
-  const { user } = useAuth();
+function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSelectPoi: (poi: POI | null) => void, selectedPoiId: string | null }) {
   const { userLocation } = useGeolocation();
   const map = useMap();
   const selectedPoi = selectedPoiId ? pois.find(p => p.id === selectedPoiId) || null : null;
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   useEffect(() => {
     if (selectedPoi && map) {
@@ -43,32 +22,6 @@ function MapController({ pois, onSelectPoi, selectedPoiId, onPoiUpdate }: { pois
     }
   }, [selectedPoi, map]);
 
-  useEffect(() => {
-    if (selectedPoiId) {
-      setReviewsLoading(true);
-      fetchReviewsByPoiId(selectedPoiId)
-        .then(setReviews)
-        .catch(err => console.error("Impossible de charger les avis pour le POI", err))
-        .finally(() => setReviewsLoading(false));
-    } else {
-      setReviews([]);
-    }
-  }, [selectedPoiId]);
-
-  const handleReviewAdded = useCallback((newReview: Review) => {
-    setReviews(prevReviews => [newReview, ...prevReviews]);
-    if (selectedPoi) {
-      const oldRatingTotal = selectedPoi.averageRating * selectedPoi.reviewCount;
-      const newReviewCount = selectedPoi.reviewCount + 1;
-      const newAverageRating = (oldRatingTotal + newReview.rating) / newReviewCount;
-      const updatedPoi = {
-        ...selectedPoi,
-        reviewCount: newReviewCount,
-        averageRating: newAverageRating,
-      };
-      onPoiUpdate(updatedPoi);
-    }
-  }, [selectedPoi, onPoiUpdate]);
 
   const handleRecenter = () => {
     if (map && userLocation) {
@@ -106,45 +59,7 @@ function MapController({ pois, onSelectPoi, selectedPoiId, onPoiUpdate }: { pois
           pixelOffset={[0, -40]}
           maxWidth={400}
         >
-          <ScrollArea className="h-[400px] w-full max-w-sm">
-            <div className="p-2 pr-4 space-y-4">
-                <div className="space-y-1">
-                    <h3 className="font-bold text-lg">{selectedPoi.title}</h3>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">{renderStars(selectedPoi.averageRating)}</div>
-                        <span>({selectedPoi.reviewCount} {selectedPoi.reviewCount !== 1 ? 'avis' : 'avis'})</span>
-                    </div>
-                    {userLocation && (
-                        <p className="text-xs text-muted-foreground font-semibold">
-                            À {getDistance(userLocation.lat, userLocation.lng, selectedPoi.location.lat, selectedPoi.location.lng).toFixed(2)} km
-                        </p>
-                    )}
-                    <p className="text-sm text-muted-foreground pt-2">
-                        {selectedPoi.description}
-                    </p>
-                </div>
-                
-                {user ? (
-                    <ReviewForm poiId={selectedPoi.id} onReviewAdded={handleReviewAdded} />
-                ) : (
-                    <div className="text-center text-sm text-muted-foreground border rounded-md p-4">
-                        <p>Vous souhaitez partager votre expérience ?</p>
-                         <AuthDialog trigger={
-                            <Button variant="link" className="p-0 h-auto">
-                                Connectez-vous pour laisser un avis.
-                            </Button>
-                         } />
-                    </div>
-                )}
-
-                <div>
-                    <h4 className="font-semibold text-md mb-2">Avis récents</h4>
-                    {reviewsLoading ? <Skeleton className="h-20 w-full" /> : (
-                        <ReviewList reviews={reviews} />
-                    )}
-                </div>
-            </div>
-          </ScrollArea>
+          <POIDetails poi={selectedPoi} />
         </InfoWindow>
       )}
       {userLocation && (
@@ -163,35 +78,21 @@ export function POIMap({ selectedPoiId, onSelectPoi, pois, setPois }: { selected
     const [loading, setLoading] = useState(true);
     const { user } = useAuth();
 
-    useEffect(() => {
-        async function getPois() {
-            setLoading(true);
-            try {
-                const poiData = await fetchPois();
-                setPois(poiData);
-            } catch (error) {
-                console.error("Impossible de récupérer les POIs", error);
-            } finally {
-                setLoading(false);
-            }
-        }
-        if (pois.length === 0) {
-            getPois();
-        } else {
-            setLoading(false);
-        }
-    }, [pois.length, setPois]);
+    // This effect is removed because pois are now fetched in the parent dashboard page.
+    // This component now only displays the pois it receives.
 
-    const handlePoiUpdate = (updatedPoi: POI) => {
-        setPois(currentPois => 
-            currentPois.map(p => p.id === updatedPoi.id ? updatedPoi : p)
-        );
-    }
+    useEffect(() => {
+      if (pois.length > 0) {
+        setLoading(false);
+      }
+    }, [pois]);
+
 
     const visiblePois = useMemo(() => {
         if (user) {
             return pois;
         }
+        // Limit visible POIs for non-authenticated users
         return pois.slice(0, 2);
     }, [pois, user]);
 
@@ -215,7 +116,6 @@ export function POIMap({ selectedPoiId, onSelectPoi, pois, setPois }: { selected
                     pois={visiblePois} 
                     onSelectPoi={onSelectPoi} 
                     selectedPoiId={selectedPoiId}
-                    onPoiUpdate={handlePoiUpdate} 
                 />
             </Map>
         </div>

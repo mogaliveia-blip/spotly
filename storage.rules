@@ -1,0 +1,34 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isEditorOrAdmin() {
+      return isSignedIn() && getUserData().role in ['editor', 'admin'];
+    }
+
+    // Fichiers d'images pour les POIs
+    match /poi-images/{poiId}/{fileName} {
+      allow read: if true;
+      allow write: if isEditorOrAdmin()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+    
+    // Fichiers de la galerie d'un POI
+    match /poi-images/{poiId}/gallery/{imageId} {
+       allow read: if true;
+       allow write: if isEditorOrAdmin()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

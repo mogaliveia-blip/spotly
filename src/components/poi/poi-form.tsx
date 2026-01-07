@@ -1,11 +1,13 @@
+// src/components/poi/poi-form.tsx
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -14,17 +16,18 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { createPoi, updatePoi, fetchPoiById } from '@/lib/data';
+import { createPoi, updatePoi, fetchPoiById, uploadFile, deleteFileByPath } from '@/lib/data';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { useState, useEffect } from 'react';
-import { Loader2, MapPin, Crosshair } from 'lucide-react';
+import { Loader2, MapPin, Crosshair, ImagePlus, X } from 'lucide-react';
 import type { POI } from '@/lib/types';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
 import { mapsConfig } from '@/lib/firebase-config';
+import Image from 'next/image';
 
 const formSchema = z.object({
   title: z.string().min(3, { message: 'Le titre doit comporter au moins 3 caractères.' }),
@@ -33,6 +36,11 @@ const formSchema = z.object({
     lat: z.number(),
     lng: z.number(),
   }),
+  headerPhotoUrl: z.string().optional(),
+  galleryUrls: z.array(z.object({
+    url: z.string(),
+    path: z.string(),
+  })).optional(),
 });
 
 type POIFormValues = z.infer<typeof formSchema>;
@@ -65,7 +73,6 @@ function MapController() {
   );
 }
 
-
 export function POIForm({ poiId }: POIFormProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -82,10 +89,23 @@ export function POIForm({ poiId }: POIFormProps) {
       title: '',
       description: '',
       location: userLocation || fallbackCenter,
+      headerPhotoUrl: '',
+      galleryUrls: [],
     },
   });
-  
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: 'galleryUrls'
+  });
+
   const selectedLocation = form.watch('location');
+  const headerPhotoUrl = form.watch('headerPhotoUrl');
+
+  // Local state for file previews
+  const [headerImageFile, setHeaderImageFile] = useState<File | null>(null);
+  const [galleryImageFiles, setGalleryImageFiles] = useState<File[]>([]);
+
 
   useEffect(() => {
     async function getPoi() {
@@ -106,84 +126,105 @@ export function POIForm({ poiId }: POIFormProps) {
           setPageIsLoading(false);
         }
       } else {
-        // Mode création, utiliser la géolocalisation si disponible
-        if (userLocation) {
-            form.setValue('location', userLocation);
-        }
+        if (userLocation) form.setValue('location', userLocation);
         setPageIsLoading(false);
       }
     }
     
-    // Attendre la fin du chargement de la géoloc pour charger les données
-    if(!geoLoading) {
-      getPoi();
-    }
+    if(!geoLoading) getPoi();
   }, [poiId, form, router, toast, geoLoading, userLocation]);
 
 
   async function onSubmit(values: POIFormValues) {
     setFormIsLoading(true);
+    let currentPoiId = poiId;
+
     try {
-      if (isEditMode) {
-        updatePoi(poiId, values);
-        toast({
-          title: 'POI mis à jour !',
-          description: `${values.title} a été mis à jour.`,
-        });
-      } else {
-         const poiData = { 
-            ...values, 
-            headerPhotoUrl: '',
-            headerPhotoHint: '',
-            galleryUrls: [],
-            averageRating: 0,
-            reviewCount: 0,
+        // --- Step 1: Create or Update POI document in Firestore to get an ID ---
+        if (!isEditMode) {
+            const newPoiData: Omit<POI, 'id'> = {
+                ...values,
+                headerPhotoUrl: '',
+                galleryUrls: [],
+                averageRating: 0,
+                reviewCount: 0,
+            };
+            currentPoiId = await createPoi(newPoiData);
+        }
+
+        if (!currentPoiId) {
+            throw new Error("ID du POI manquant.");
+        }
+        
+        // --- Step 2: Upload images to Storage ---
+        let headerUrl = values.headerPhotoUrl || '';
+        if (headerImageFile) {
+            const path = `poi-images/${currentPoiId}/header.jpg`;
+            const { url } = await uploadFile(headerImageFile, path);
+            headerUrl = url;
+        }
+
+        const newGalleryUploads = await Promise.all(
+            galleryImageFiles.map(file => {
+                const path = `poi-images/${currentPoiId}/gallery/${Date.now()}-${file.name}`;
+                return uploadFile(file, path);
+            })
+        );
+        
+        const finalGalleryUrls = [...(values.galleryUrls || []), ...newGalleryUploads];
+        
+        // --- Step 3: Update Firestore with image URLs ---
+        const finalPoiData = {
+            ...values,
+            headerPhotoUrl: headerUrl,
+            galleryUrls: finalGalleryUrls,
         };
-        createPoi(poiData);
+        
+        updatePoi(currentPoiId, finalPoiData);
+
         toast({
-          title: 'POI créé !',
-          description: `${values.title} a été ajouté à la carte.`,
+            title: isEditMode ? 'POI mis à jour !' : 'POI créé !',
+            description: `${values.title} a été sauvegardé.`,
         });
-      }
-     
-      router.push('/dashboard');
-      router.refresh(); 
+
+        router.push('/dashboard');
+        router.refresh(); 
     } catch (error) {
-      toast({
-        title: 'Erreur',
-        description: `Impossible de ${isEditMode ? 'mettre à jour' : 'créer'} le POI. Veuillez réessayer.`,
-        variant: 'destructive',
-      });
+        console.error("Erreur lors de la sauvegarde du POI", error);
+        toast({
+            title: 'Erreur',
+            description: `Impossible de ${isEditMode ? 'mettre à jour' : 'créer'} le POI. Veuillez réessayer.`,
+            variant: 'destructive',
+        });
     } finally {
-      setFormIsLoading(false);
+        setFormIsLoading(false);
     }
   }
 
-  const mapCenter = form.getValues('location');
-  
+  const handleGalleryFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      setGalleryImageFiles(Array.from(event.target.files));
+    }
+  };
+
+  const handleRemoveGalleryImage = async (index: number, path: string) => {
+    try {
+      await deleteFileByPath(path);
+      remove(index);
+      toast({ title: 'Image supprimée', description: 'Image retirée de la galerie.' });
+    } catch (error) {
+      toast({ title: 'Erreur', description: 'Impossible de supprimer l\'image.', variant: 'destructive'});
+    }
+  }
+
   if (pageIsLoading || geoLoading) {
     return (
       <div className="space-y-8">
+          <Skeleton className="h-10 w-32 ml-auto" />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="space-y-6">
-            <Card>
-              <CardHeader><CardTitle>Détails du POI</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-20 w-full" />
-              </CardContent>
-            </Card>
-          </div>
-          <div className="space-y-6">
-            <Card>
-                <CardHeader><CardTitle>Emplacement</CardTitle></CardHeader>
-                <CardContent className="relative">
-                    <Skeleton className="h-[400px] w-full" />
-                </CardContent>
-            </Card>
-          </div>
+            <Skeleton className="h-96 w-full" />
+            <Skeleton className="h-96 w-full" />
         </div>
-        <Skeleton className="h-10 w-32" />
       </div>
     );
   }
@@ -192,44 +233,94 @@ export function POIForm({ poiId }: POIFormProps) {
     <APIProvider apiKey={mapsConfig.apiKey}>
         <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* Colonne 1: Détails & Galerie */}
+            <div className="lg:col-span-2 space-y-6">
                 <Card>
-                <CardHeader><CardTitle>Détails du POI</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                    <FormField
-                    control={form.control}
-                    name="title"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Titre</FormLabel>
-                        <FormControl><Input placeholder="Ex : Scène principale" {...field} /></FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
-                    <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl><Textarea placeholder="Une brève description du point d'intérêt." {...field} /></FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
-                </CardContent>
+                  <CardHeader><CardTitle>Détails du POI</CardTitle></CardHeader>
+                  <CardContent className="space-y-4">
+                      <FormField control={form.control} name="title" render={({ field }) => (
+                          <FormItem>
+                          <FormLabel>Titre</FormLabel>
+                          <FormControl><Input placeholder="Ex : Scène principale" {...field} /></FormControl>
+                          <FormMessage />
+                          </FormItem>
+                      )} />
+                      <FormField control={form.control} name="description" render={({ field }) => (
+                          <FormItem>
+                          <FormLabel>Description</FormLabel>
+                          <FormControl><Textarea placeholder="Une brève description du point d'intérêt." {...field} rows={5} /></FormControl>
+                          <FormMessage />
+                          </FormItem>
+                      )} />
+                  </CardContent>
                 </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Image d'en-tête</CardTitle>
+                    <CardDescription>Cette image sera affichée en grand sur la page du POI.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FormField control={form.control} name="headerPhotoUrl" render={() => (
+                      <FormItem>
+                        <FormControl>
+                          <Input type="file" accept="image/*" onChange={(e) => setHeaderImageFile(e.target.files?.[0] || null)} className="hidden" id="header-upload" />
+                        </FormControl>
+                        <div className="relative aspect-video w-full border-2 border-dashed rounded-lg flex items-center justify-center">
+                          {(headerPhotoUrl || headerImageFile) ? (
+                            <Image src={headerImageFile ? URL.createObjectURL(headerImageFile) : headerPhotoUrl!} alt="Aperçu de l'en-tête" fill className="object-cover rounded-lg" />
+                          ) : (
+                            <label htmlFor="header-upload" className="cursor-pointer text-center text-muted-foreground p-4">
+                              <ImagePlus className="mx-auto h-12 w-12" />
+                              <p>Cliquez pour ajouter une image</p>
+                            </label>
+                          )}
+                        </div>
+                      </FormItem>
+                    )} />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Galerie d'images</CardTitle>
+                    <CardDescription>Ajoutez des images supplémentaires pour illustrer le POI.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {fields.map((field, index) => (
+                        <div key={field.id} className="relative aspect-square group">
+                           <Image src={field.url} alt={`Galerie ${index+1}`} fill className="object-cover rounded-md border" />
+                           <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveGalleryImage(index, field.path)}>
+                              <X className="h-4 w-4" />
+                           </Button>
+                        </div>
+                      ))}
+                       <label htmlFor="gallery-upload" className="cursor-pointer aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-muted-foreground hover:bg-accent">
+                          <ImagePlus className="h-8 w-8" />
+                          <span className="text-xs text-center mt-1">Ajouter</span>
+                       </label>
+                       <Input id="gallery-upload" type="file" multiple accept="image/*" className="hidden" onChange={handleGalleryFileChange} />
+                    </div>
+                    {galleryImageFiles.length > 0 && (
+                      <p className="text-sm text-muted-foreground mt-2">{galleryImageFiles.length} nouvelle(s) image(s) prête(s) à être uploadée(s).</p>
+                    )}
+                  </CardContent>
+                </Card>
+
             </div>
-            <div className="space-y-6">
+
+            {/* Colonne 2: Emplacement */}
+            <div className="lg:col-span-1 space-y-6">
                 <Card>
                     <CardHeader><CardTitle>Emplacement</CardTitle></CardHeader>
                     <CardContent className="relative">
                         <FormLabel>Cliquez sur la carte pour définir l'emplacement</FormLabel>
                         <div className="h-[400px] w-full overflow-hidden rounded-lg border mt-2">
                                 <Map
-                                    defaultCenter={mapCenter}
+                                    defaultCenter={form.getValues('location')}
                                     defaultZoom={13}
                                     gestureHandling={'greedy'}
                                     disableDefaultUI={false}
@@ -254,9 +345,9 @@ export function POIForm({ poiId }: POIFormProps) {
             </div>
             </div>
 
-            <Button type="submit" disabled={formIsLoading}>
+            <Button type="submit" disabled={formIsLoading} size="lg">
             {formIsLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isEditMode ? 'Mettre à jour le POI' : 'Créer un POI'}
+            {isEditMode ? 'Mettre à jour le POI' : 'Créer le POI'}
             </Button>
         </form>
         </Form>

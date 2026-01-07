@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import Image from 'next/image';
 
 
 function POIsTable() {
@@ -39,6 +40,8 @@ function POIsTable() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
+  const { role } = useAuth();
+  const canManagePois = role === 'admin' || role === 'editor';
 
   useEffect(() => {
     async function getPois() {
@@ -88,6 +91,7 @@ function POIsTable() {
     <Table>
       <TableHeader>
         <TableRow>
+          <TableHead className="w-[80px]">Image</TableHead>
           <TableHead>Titre</TableHead>
           <TableHead className="hidden md:table-cell">Description</TableHead>
           <TableHead className="hidden sm:table-cell">Avis</TableHead>
@@ -97,6 +101,17 @@ function POIsTable() {
       <TableBody>
         {pois.map((poi) => (
           <TableRow key={poi.id}>
+            <TableCell>
+              <div className="relative h-12 w-12 rounded-md overflow-hidden border">
+                {poi.headerPhotoUrl ? (
+                  <Image src={poi.headerPhotoUrl} alt={poi.title} fill className="object-cover" />
+                ) : (
+                  <div className="h-full w-full bg-muted flex items-center justify-center text-muted-foreground">
+                    <MapPin className="h-6 w-6"/>
+                  </div>
+                )}
+              </div>
+            </TableCell>
             <TableCell className="font-medium">{poi.title}</TableCell>
             <TableCell className="hidden md:table-cell truncate max-w-sm">{poi.description}</TableCell>
             <TableCell className="hidden sm:table-cell">
@@ -109,30 +124,34 @@ function POIsTable() {
                 <Eye className="h-4 w-4" />
                 <span className="sr-only">Voir</span>
               </Button>
-               <Button variant="outline" size="icon" onClick={() => handleEditClick(poi.id)}>
-                <Edit className="h-4 w-4" />
-                <span className="sr-only">Modifier</span>
-              </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="icon">
-                    <Trash2 className="h-4 w-4" />
-                    <span className="sr-only">Supprimer</span>
+              {canManagePois && (
+                <>
+                  <Button variant="outline" size="icon" onClick={() => handleEditClick(poi.id)}>
+                    <Edit className="h-4 w-4" />
+                    <span className="sr-only">Modifier</span>
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Cette action est irréversible. Le POI "{poi.title}" sera définitivement supprimé.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Annuler</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => handleDelete(poi.id)}>Supprimer</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="icon">
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Supprimer</span>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Cette action est irréversible. Le POI "{poi.title}" sera définitivement supprimé.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleDelete(poi.id)}>Supprimer</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </>
+              )}
             </TableCell>
           </TableRow>
         ))}

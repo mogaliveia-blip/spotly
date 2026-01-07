@@ -14,13 +14,13 @@ export default function EditPOIPage() {
 
   return (
     <AppLayout>
-      <div className="container mx-auto py-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold">Modifier le point d'intérêt</h1>
           <Button asChild variant="outline">
-            <Link href="/dashboard">
+            <Link href="/pois">
               <ChevronLeft className="mr-2 h-4 w-4" />
-              Retour au tableau de bord
+              Retour à la liste
             </Link>
           </Button>
         </div>
