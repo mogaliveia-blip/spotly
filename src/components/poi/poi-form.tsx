@@ -181,12 +181,16 @@ export function POIForm({ poiId }: POIFormProps) {
   
       // 3. Upload new gallery images
       const existingGallery = values.galleryUrls ?? [];
-      const newGalleryUploads = await Promise.all(
-        galleryImageFiles.map(file => {
-          const uniquePath = `poi-images/${poiIdToUpdate}/gallery/${crypto.randomUUID()}`;
-          return uploadFile(file, uniquePath);
-        })
-      );
+      let newGalleryUploads: { url: string; path: string; }[] = [];
+
+      if (galleryImageFiles.length > 0) {
+        newGalleryUploads = await Promise.all(
+          galleryImageFiles.map(file => {
+            const uniquePath = `poi-images/${poiIdToUpdate}/gallery/${crypto.randomUUID()}`;
+            return uploadFile(file, uniquePath);
+          })
+        );
+      }
       const finalGalleryUrls = [...existingGallery, ...newGalleryUploads];
   
       // 4. Update Firestore with all data
@@ -212,7 +216,8 @@ export function POIForm({ poiId }: POIFormProps) {
         description: `Impossible de ${isEditMode ? 'mettre à jour' : 'créer'} le POI.`,
         variant: 'destructive',
       });
-      setFormIsLoading(false); // Make sure to unlock form on error
+    } finally {
+      setFormIsLoading(false); 
     }
   }
 
