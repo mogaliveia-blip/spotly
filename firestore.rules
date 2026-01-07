@@ -43,9 +43,19 @@ service cloud.firestore {
       // Lecture : soi-même ou admin
       allow read: if isOwner(userId) || isAdmin();
 
-      // Création : uniquement son propre document
-      allow create: if isSignedIn()
-        && request.auth.uid == userId;
+      // Création : Le premier utilisateur DOIT être admin. Les suivants peuvent être 'user'.
+      allow create: if isSignedIn() && request.auth.uid == userId && (
+          (
+            // S'il n'y a aucun utilisateur, le premier DOIT avoir le rôle d'admin.
+            get(/databases/$(database)/documents/users).size() == 0 &&
+            request.resource.data.role == 'admin'
+          ) ||
+          (
+            // Les utilisateurs suivants doivent se voir attribuer le rôle 'user'.
+            get(/databases/$(database)/documents/users).size() > 0 &&
+            request.resource.data.role == 'user'
+          )
+        );
 
       // Mise à jour du profil (sans rôle)
       allow update: if isOwner(userId)

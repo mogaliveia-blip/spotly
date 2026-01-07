@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -28,6 +28,7 @@ import {
   CardFooter,
 } from '@/components/ui/card';
 import { Mountain } from 'lucide-react';
+import { collection, getCount } from 'firebase/firestore';
 
 const formSchema = z.object({
   displayName: z.string().min(2, { message: 'Le nom doit comporter au moins 2 caractères.' }),
@@ -57,6 +58,12 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setLoading(true);
     try {
+      // Vérifier s'il s'agit du premier utilisateur
+      const usersCollectionRef = collection(db, 'users');
+      const countSnapshot = await getCount(usersCollectionRef);
+      const isFirstUser = countSnapshot.data().count === 0;
+      const roleToAssign = isFirstUser ? 'admin' : 'user';
+
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         values.email,
@@ -67,17 +74,19 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
         displayName: values.displayName,
       });
 
-      // Create a corresponding user document in Firestore
+      // Créer un document utilisateur correspondant dans Firestore avec le rôle approprié
       await createUserInFirestore({
         uid: userCredential.user.uid,
         email: userCredential.user.email,
         displayName: values.displayName,
-        role: 'user',
+        role: roleToAssign,
       });
       
       toast({
         title: 'Compte créé !',
-        description: 'Bienvenue dans Eventide Guide.',
+        description: isFirstUser 
+            ? 'Bienvenue ! Votre compte administrateur a été créé.'
+            : 'Bienvenue dans Eventide Guide.',
       });
       router.refresh();
       onSuccess?.();
