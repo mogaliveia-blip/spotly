@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Eye, PlusCircle, Edit, Trash2 } from 'lucide-react';
+import { Eye, PlusCircle, Edit, Trash2, MapPin } from 'lucide-react';
 import { Suspense, useEffect, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AppLayout } from '@/components/layout/app-layout';
