@@ -137,20 +137,20 @@ export function POIForm({ poiId }: POIFormProps) {
 
   async function onSubmit(values: POIFormValues) {
     setFormIsLoading(true);
+    let poiIdToUpdate = poiId;
 
     try {
-      let poiIdToUpdate = poiId;
-
       // --- Step 1: Create new POI document if in create mode ---
       if (!isEditMode) {
         const newPoiData: Omit<POI, 'id'> = {
           ...values,
-          headerPhotoUrl: '',
-          galleryUrls: [],
+          headerPhotoUrl: '', // Will be set after upload
+          galleryUrls: [], // Will be set after upload
           averageRating: 0,
           reviewCount: 0,
         };
-        poiIdToUpdate = await createPoi(newPoiData);
+        // This is where we get the ID for a new POI
+        poiIdToUpdate = await createPoi(newPoiData); 
       }
 
       if (!poiIdToUpdate) {
@@ -187,8 +187,9 @@ export function POIForm({ poiId }: POIFormProps) {
         title: isEditMode ? 'POI mis à jour !' : 'POI créé !',
         description: `${values.title} a été sauvegardé.`,
       });
-      router.push('/pois');
       router.refresh();
+      router.push('/pois');
+
     } catch (error) {
       console.error("Erreur lors de la sauvegarde du POI", error);
       toast({
@@ -196,10 +197,7 @@ export function POIForm({ poiId }: POIFormProps) {
         description: `Impossible de ${isEditMode ? 'mettre à jour' : 'créer'} le POI. Veuillez réessayer.`,
         variant: 'destructive',
       });
-    } finally {
-        // This is now the only place we need to set loading to false.
-        // It's in the main try/finally, so it will always run.
-        setFormIsLoading(false);
+       setFormIsLoading(false);
     }
   }
 
@@ -349,4 +347,11 @@ export function POIForm({ poiId }: POIFormProps) {
             </div>
 
             <Button type="submit" disabled={formIsLoading} size="lg">
-            {formIsL
+              {formIsLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isEditMode ? 'Mettre à jour le POI' : 'Créer le POI'}
+            </Button>
+        </form>
+        </Form>
+    </APIProvider>
+  );
+}
