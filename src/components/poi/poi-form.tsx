@@ -104,6 +104,7 @@ export function POIForm({ poiId }: POIFormProps) {
 
   // Local state for file previews
   const [headerImageFile, setHeaderImageFile] = useState<File | null>(null);
+  const [headerPreviewUrl, setHeaderPreviewUrl] = useState<string | null>(null);
   const [galleryImageFiles, setGalleryImageFiles] = useState<File[]>([]);
 
 
@@ -134,70 +135,90 @@ export function POIForm({ poiId }: POIFormProps) {
     if(!geoLoading) getPoi();
   }, [poiId, form, router, toast, geoLoading, userLocation]);
 
+  useEffect(() => {
+    if (!headerImageFile) {
+      setHeaderPreviewUrl(null);
+      return;
+    }
+    const previewUrl = URL.createObjectURL(headerImageFile);
+    setHeaderPreviewUrl(previewUrl);
+    
+    // Cleanup function to revoke the object URL
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [headerImageFile]);
+
 
   async function onSubmit(values: POIFormValues) {
     setFormIsLoading(true);
-    let poiIdToUpdate = poiId;
 
     try {
-      // --- Step 1: Create new POI document if in create mode ---
+      let poiIdToUpdate = poiId;
+
+      // 1) Créer le POI si on est en mode création (sans images)
       if (!isEditMode) {
-        const newPoiData: Omit<POI, 'id'> = {
-          ...values,
+        const basePoiData: Omit<POI, 'id'> = {
+          title: values.title,
+          description: values.description,
+          location: values.location,
           headerPhotoUrl: '',
           galleryUrls: [],
           averageRating: 0,
           reviewCount: 0,
         };
-        poiIdToUpdate = await createPoi(newPoiData); 
+        poiIdToUpdate = await createPoi(basePoiData);
       }
 
       if (!poiIdToUpdate) {
-        throw new Error("ID du POI manquant après la création/mise à jour.");
+        throw new Error('ID du POI manquant.');
       }
 
-      // --- Step 2: Upload images and collect URLs ---
+      // 2) Upload de l’image d’en-tête (si modifiée)
       let finalHeaderUrl = values.headerPhotoUrl || '';
       if (headerImageFile) {
-        const path = `poi-images/${poiIdToUpdate}/header.jpg`;
-        const { url } = await uploadFile(headerImageFile, path);
+        const headerPath = `poi-images/${poiIdToUpdate}/header.jpg`;
+        const { url } = await uploadFile(headerImageFile, headerPath);
         finalHeaderUrl = url;
       }
 
+      // 3) Upload des nouvelles images de galerie
+      const existingGallery = values.galleryUrls ?? [];
       const newGalleryUploads = await Promise.all(
-        galleryImageFiles.map(file => {
-          const path = `poi-images/${poiIdToUpdate}/gallery/${Date.now()}-${file.name}`;
-          return uploadFile(file, path);
+        galleryImageFiles.map(async (file) => {
+          const uniquePath = `poi-images/${poiIdToUpdate}/gallery/${crypto.randomUUID()}`;
+          return uploadFile(file, uniquePath); // { url, path }
         })
       );
-      
-      const finalGalleryUrls = [...(values.galleryUrls || []), ...newGalleryUploads];
 
-      // --- Step 3: Update Firestore with final data and image URLs ---
-      const finalPoiData = {
-        ...values,
+      const finalGalleryUrls = [
+        ...existingGallery,
+        ...newGalleryUploads,
+      ];
+
+      // 4) Mise à jour Firestore (champs explicitement listés)
+      await updatePoi(poiIdToUpdate, {
+        title: values.title,
+        description: values.description,
+        location: values.location,
         headerPhotoUrl: finalHeaderUrl,
         galleryUrls: finalGalleryUrls,
-      };
-
-      await updatePoi(poiIdToUpdate, finalPoiData);
+      });
 
       toast({
         title: isEditMode ? 'POI mis à jour !' : 'POI créé !',
         description: `${values.title} a été sauvegardé.`,
       });
+
       router.refresh();
       router.push('/pois');
-
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde du POI", error);
+      console.error('Erreur lors de la sauvegarde du POI', error);
       toast({
         title: 'Erreur',
-        description: `Impossible de ${isEditMode ? 'mettre à jour' : 'créer'} le POI. Veuillez réessayer.`,
+        description: `Impossible de ${isEditMode ? 'mettre à jour' : 'créer'} le POI.`,
         variant: 'destructive',
       });
-       setFormIsLoading(false);
-    }
+      setFormIsLoading(false); // Make sure to unlock form on error
+    } 
   }
 
 
@@ -269,8 +290,8 @@ export function POIForm({ poiId }: POIFormProps) {
                           <Input type="file" accept="image/*" onChange={(e) => setHeaderImageFile(e.target.files?.[0] || null)} className="hidden" id="header-upload" />
                         </FormControl>
                         <div className="relative aspect-video w-full border-2 border-dashed rounded-lg flex items-center justify-center">
-                          {(headerPhotoUrl || headerImageFile) ? (
-                            <Image src={headerImageFile ? URL.createObjectURL(headerImageFile) : headerPhotoUrl!} alt="Aperçu de l'en-tête" fill className="object-cover rounded-lg" />
+                          {(headerPreviewUrl || headerPhotoUrl) ? (
+                            <Image src={headerPreviewUrl || headerPhotoUrl!} alt="Aperçu de l'en-tête" fill className="object-cover rounded-lg" />
                           ) : (
                             <label htmlFor="header-upload" className="cursor-pointer text-center text-muted-foreground p-4">
                               <ImagePlus className="mx-auto h-12 w-12" />
