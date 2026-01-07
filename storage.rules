@@ -8,25 +8,24 @@ service firebase.storage {
     }
 
     function getUserData() {
-      // Note: Changed to getUserRole in the recommended version, 
-      // but keeping it simple to align with existing functions.
-      // The logic remains the same.
       return get(/databases/(default)/documents/users/$(request.auth.uid)).data;
     }
     
     function isEditorOrAdmin() {
+      // Vérifie si l'utilisateur est connecté et si son rôle est 'editor' ou 'admin'
+      // en lisant directement son document dans Firestore.
       return isSignedIn() && getUserData().role in ['editor', 'admin'];
     }
 
-    // All POI images (header + gallery)
+    // Toutes les images des POI (header + galerie)
     match /poi-images/{poiId}/{allPaths=**} {
       allow read: if true;
 
-      // Separate create/update from delete for robustness
+      // Sépare la logique d'écriture pour la suppression et la création/mise à jour
       allow write: if isEditorOrAdmin() && (
-        // Allow deletion by authorized users without checking resource
+        // Autorise la suppression si l'utilisateur a le bon rôle
         request.method == 'delete' ||
-        // For uploads (create/update), validate size and content type
+        // Pour les uploads, valide la taille et le type de contenu
         (
           request.resource.size < 5 * 1024 * 1024
           && request.resource.contentType.matches('image/.*')
