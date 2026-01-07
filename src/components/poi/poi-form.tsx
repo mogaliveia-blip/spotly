@@ -137,69 +137,72 @@ export function POIForm({ poiId }: POIFormProps) {
 
   async function onSubmit(values: POIFormValues) {
     setFormIsLoading(true);
-    let currentPoiId = poiId;
 
     try {
-        // --- Step 1: Create or Update POI document in Firestore to get an ID ---
-        if (!isEditMode) {
-            const newPoiData: Omit<POI, 'id'> = {
-                ...values,
-                headerPhotoUrl: '',
-                galleryUrls: [],
-                averageRating: 0,
-                reviewCount: 0,
-            };
-            currentPoiId = await createPoi(newPoiData);
-        }
+      let poiIdToUpdate = poiId;
 
-        if (!currentPoiId) {
-            throw new Error("ID du POI manquant.");
-        }
-        
-        // --- Step 2: Upload images to Storage ---
-        let headerUrl = values.headerPhotoUrl || '';
-        if (headerImageFile) {
-            const path = `poi-images/${currentPoiId}/header.jpg`;
-            const { url } = await uploadFile(headerImageFile, path);
-            headerUrl = url;
-        }
-
-        const newGalleryUploads = await Promise.all(
-            galleryImageFiles.map(file => {
-                const path = `poi-images/${currentPoiId}/gallery/${Date.now()}-${file.name}`;
-                return uploadFile(file, path);
-            })
-        );
-        
-        const finalGalleryUrls = [...(values.galleryUrls || []), ...newGalleryUploads];
-        
-        // --- Step 3: Update Firestore with image URLs ---
-        const finalPoiData = {
-            ...values,
-            headerPhotoUrl: headerUrl,
-            galleryUrls: finalGalleryUrls,
+      // --- Step 1: Create new POI document if in create mode ---
+      if (!isEditMode) {
+        const newPoiData: Omit<POI, 'id'> = {
+          ...values,
+          headerPhotoUrl: '',
+          galleryUrls: [],
+          averageRating: 0,
+          reviewCount: 0,
         };
-        
-        await updatePoi(currentPoiId, finalPoiData);
+        poiIdToUpdate = await createPoi(newPoiData);
+      }
 
-        toast({
-            title: isEditMode ? 'POI mis à jour !' : 'POI créé !',
-            description: `${values.title} a été sauvegardé.`,
-        });
+      if (!poiIdToUpdate) {
+        throw new Error("ID du POI manquant après la création/mise à jour.");
+      }
 
-        router.push('/pois');
-        router.refresh(); 
+      // --- Step 2: Upload images and collect URLs ---
+      let finalHeaderUrl = values.headerPhotoUrl || '';
+      if (headerImageFile) {
+        const path = `poi-images/${poiIdToUpdate}/header.jpg`;
+        const { url } = await uploadFile(headerImageFile, path);
+        finalHeaderUrl = url;
+      }
+
+      const newGalleryUploads = await Promise.all(
+        galleryImageFiles.map(file => {
+          const path = `poi-images/${poiIdToUpdate}/gallery/${Date.now()}-${file.name}`;
+          return uploadFile(file, path);
+        })
+      );
+      
+      const finalGalleryUrls = [...(values.galleryUrls || []), ...newGalleryUploads];
+
+      // --- Step 3: Update Firestore with final data and image URLs ---
+      const finalPoiData = {
+        ...values,
+        headerPhotoUrl: finalHeaderUrl,
+        galleryUrls: finalGalleryUrls,
+      };
+
+      await updatePoi(poiIdToUpdate, finalPoiData);
+
+      toast({
+        title: isEditMode ? 'POI mis à jour !' : 'POI créé !',
+        description: `${values.title} a été sauvegardé.`,
+      });
+      router.push('/pois');
+      router.refresh();
     } catch (error) {
-        console.error("Erreur lors de la sauvegarde du POI", error);
-        toast({
-            title: 'Erreur',
-            description: `Impossible de ${isEditMode ? 'mettre à jour' : 'créer'} le POI. Veuillez réessayer.`,
-            variant: 'destructive',
-        });
+      console.error("Erreur lors de la sauvegarde du POI", error);
+      toast({
+        title: 'Erreur',
+        description: `Impossible de ${isEditMode ? 'mettre à jour' : 'créer'} le POI. Veuillez réessayer.`,
+        variant: 'destructive',
+      });
     } finally {
+        // This is now the only place we need to set loading to false.
+        // It's in the main try/finally, so it will always run.
         setFormIsLoading(false);
     }
   }
+
 
   const handleGalleryFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -346,11 +349,4 @@ export function POIForm({ poiId }: POIFormProps) {
             </div>
 
             <Button type="submit" disabled={formIsLoading} size="lg">
-            {formIsLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isEditMode ? 'Mettre à jour le POI' : 'Créer le POI'}
-            </Button>
-        </form>
-        </Form>
-    </APIProvider>
-  );
-}
+            {formIsL
