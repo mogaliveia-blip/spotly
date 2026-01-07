@@ -94,7 +94,7 @@ export function POIForm({ poiId }: POIFormProps) {
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields: galleryFields, append, remove } = useFieldArray({
     control: form.control,
     name: 'galleryUrls'
   });
@@ -102,10 +102,10 @@ export function POIForm({ poiId }: POIFormProps) {
   const selectedLocation = form.watch('location');
   const headerPhotoUrl = form.watch('headerPhotoUrl');
 
-  // Local state for file previews
   const [headerImageFile, setHeaderImageFile] = useState<File | null>(null);
   const [headerPreviewUrl, setHeaderPreviewUrl] = useState<string | null>(null);
   const [galleryImageFiles, setGalleryImageFiles] = useState<File[]>([]);
+  const [galleryPreviewUrls, setGalleryPreviewUrls] = useState<string[]>([]);
 
 
   useEffect(() => {
@@ -143,17 +143,28 @@ export function POIForm({ poiId }: POIFormProps) {
     const previewUrl = URL.createObjectURL(headerImageFile);
     setHeaderPreviewUrl(previewUrl);
     
-    // Cleanup function to revoke the object URL
     return () => URL.revokeObjectURL(previewUrl);
   }, [headerImageFile]);
+
+  useEffect(() => {
+    if (galleryImageFiles.length === 0) {
+      setGalleryPreviewUrls([]);
+      return;
+    }
+    const urls = galleryImageFiles.map(file => URL.createObjectURL(file));
+    setGalleryPreviewUrls(urls);
+    
+    return () => {
+      urls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [galleryImageFiles]);
 
 
   async function onSubmit(values: POIFormValues) {
     setFormIsLoading(true);
-    try {
-      let poiIdToUpdate = poiId;
+    let poiIdToUpdate = poiId;
   
-      // 1. Create POI document if in creation mode
+    try {
       if (!isEditMode) {
         const newPoiData: Omit<POI, 'id'> = {
           title: values.title,
@@ -171,7 +182,6 @@ export function POIForm({ poiId }: POIFormProps) {
         throw new Error('ID du POI manquant.');
       }
   
-      // 2. Upload header image if a new one is selected
       let finalHeaderUrl = values.headerPhotoUrl || '';
       if (headerImageFile) {
         const headerPath = `poi-images/${poiIdToUpdate}/header.jpg`;
@@ -179,21 +189,20 @@ export function POIForm({ poiId }: POIFormProps) {
         finalHeaderUrl = url;
       }
   
-      // 3. Upload new gallery images
       const existingGallery = values.galleryUrls ?? [];
       let newGalleryUploads: { url: string; path: string; }[] = [];
-
+  
       if (galleryImageFiles.length > 0) {
-        newGalleryUploads = await Promise.all(
-          galleryImageFiles.map(file => {
-            const uniquePath = `poi-images/${poiIdToUpdate}/gallery/${crypto.randomUUID()}`;
-            return uploadFile(file, uniquePath);
-          })
-        );
+          newGalleryUploads = await Promise.all(
+              galleryImageFiles.map(file => {
+                  const uniquePath = `poi-images/${poiIdToUpdate}/gallery/${crypto.randomUUID()}`;
+                  return uploadFile(file, uniquePath);
+              })
+          );
       }
+      
       const finalGalleryUrls = [...existingGallery, ...newGalleryUploads];
   
-      // 4. Update Firestore with all data
       await updatePoi(poiIdToUpdate, {
         title: values.title,
         description: values.description,
@@ -224,19 +233,27 @@ export function POIForm({ poiId }: POIFormProps) {
 
   const handleGalleryFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
-      setGalleryImageFiles(Array.from(event.target.files));
+      const files = Array.from(event.target.files);
+      setGalleryImageFiles(prev => [...prev, ...files]);
+      event.target.value = ''; // Reset file input to allow selecting the same file again
     }
   };
 
-  const handleRemoveGalleryImage = async (index: number, path: string) => {
+  const handleRemoveExistingGalleryImage = async (index: number, path: string) => {
+    if (!confirm("Voulez-vous vraiment supprimer cette image de la galerie ? Cette action est irréversible.")) return;
     try {
       await deleteFileByPath(path);
       remove(index);
-      toast({ title: 'Image supprimée', description: 'Image retirée de la galerie.' });
+      toast({ title: 'Image supprimée', description: 'Image retirée de la galerie et du stockage.' });
     } catch (error) {
       toast({ title: 'Erreur', description: 'Impossible de supprimer l\'image.', variant: 'destructive'});
     }
   }
+
+  const handleRemoveNewGalleryImage = (index: number) => {
+    setGalleryImageFiles(prev => prev.filter((_, i) => i !== index));
+  }
+
 
   if (pageIsLoading || geoLoading) {
     return (
@@ -311,23 +328,29 @@ export function POIForm({ poiId }: POIFormProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                      {fields.map((field, index) => (
+                      {galleryFields.map((field, index) => (
                         <div key={field.id} className="relative aspect-square group">
                            <Image src={field.url} alt={`Galerie ${index+1}`} fill className="object-cover rounded-md border" />
-                           <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveGalleryImage(index, field.path)}>
+                           <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveExistingGalleryImage(index, field.path)}>
                               <X className="h-4 w-4" />
                            </Button>
                         </div>
                       ))}
+                      {galleryPreviewUrls.map((url, index) => (
+                        <div key={url} className="relative aspect-square group">
+                           <Image src={url} alt={`Nouvelle image ${index+1}`} fill className="object-cover rounded-md border" />
+                           <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveNewGalleryImage(index)}>
+                              <X className="h-4 w-4" />
+                           </Button>
+                        </div>
+                      ))}
+
                        <label htmlFor="gallery-upload" className="cursor-pointer aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-muted-foreground hover:bg-accent/50">
                           <ImagePlus className="h-8 w-8" />
                           <span className="text-xs text-center mt-1">Ajouter</span>
                        </label>
                        <Input id="gallery-upload" type="file" multiple accept="image/*" className="hidden" onChange={handleGalleryFileChange} />
                     </div>
-                    {galleryImageFiles.length > 0 && (
-                      <p className="text-sm text-muted-foreground mt-2">{galleryImageFiles.length} nouvelle(s) image(s) prête(s) à être uploadée(s).</p>
-                    )}
                   </CardContent>
                 </Card>
 
