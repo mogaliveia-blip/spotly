@@ -16,16 +16,29 @@ import { Suspense, useEffect, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AppLayout } from '@/components/layout/app-layout';
 import { useAuth } from '@/hooks/use-auth-user';
-import { fetchPois } from '@/lib/data';
+import { fetchPois, deletePoi } from '@/lib/data';
 import type { POI } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 
 function POIsTable() {
   const [pois, setPois] = useState<POI[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const { toast } = useToast();
 
   useEffect(() => {
     async function getPois() {
@@ -46,14 +59,24 @@ function POIsTable() {
   };
   
   const handleEditClick = (poiId: string) => {
-    // Rediriger vers une page d'édition (à créer)
-    // router.push(`/pois/edit/${poiId}`);
-    console.log(`Edit POI ${poiId}`);
+    router.push(`/pois/edit/${poiId}`);
   };
 
-  const handleDeleteClick = (poiId: string) => {
-    // Implémenter la logique de suppression avec confirmation
-    console.log(`Delete POI ${poiId}`);
+  const handleDelete = (poiId: string) => {
+    try {
+      deletePoi(poiId);
+      setPois(pois.filter(p => p.id !== poiId));
+      toast({
+        title: "POI supprimé",
+        description: "Le point d'intérêt a été supprimé avec succès."
+      })
+    } catch (error) {
+       toast({
+        title: "Erreur",
+        description: "Impossible de supprimer le POI.",
+        variant: "destructive"
+      })
+    }
   };
 
 
@@ -68,7 +91,7 @@ function POIsTable() {
           <TableHead>Titre</TableHead>
           <TableHead className="hidden md:table-cell">Description</TableHead>
           <TableHead className="hidden sm:table-cell">Avis</TableHead>
-          <TableHead>Actions</TableHead>
+          <TableHead className="text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -81,16 +104,35 @@ function POIsTable() {
                     {poi.reviewCount} avis
                 </Badge>
             </TableCell>
-            <TableCell className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => handleViewClick(poi.id)}>
+            <TableCell className="flex gap-2 justify-end">
+              <Button variant="outline" size="icon" onClick={() => handleViewClick(poi.id)}>
                 <Eye className="h-4 w-4" />
+                <span className="sr-only">Voir</span>
               </Button>
-               <Button variant="outline" size="sm" onClick={() => handleEditClick(poi.id)}>
+               <Button variant="outline" size="icon" onClick={() => handleEditClick(poi.id)}>
                 <Edit className="h-4 w-4" />
+                <span className="sr-only">Modifier</span>
               </Button>
-               <Button variant="destructive" size="sm" onClick={() => handleDeleteClick(poi.id)}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="icon">
+                    <Trash2 className="h-4 w-4" />
+                    <span className="sr-only">Supprimer</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Cette action est irréversible. Le POI "{poi.title}" sera définitivement supprimé.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Annuler</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => handleDelete(poi.id)}>Supprimer</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </TableCell>
           </TableRow>
         ))}
