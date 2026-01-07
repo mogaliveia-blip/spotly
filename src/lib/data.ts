@@ -16,10 +16,11 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
  */
 export async function uploadFile(file: File, path: string): Promise<{ url: string, path: string }> {
   const storageRef = ref(storage, path);
-  await uploadBytes(storageRef, file);
+  await uploadBytes(storageRef, file, { contentType: file.type });
   const url = await getDownloadURL(storageRef);
   return { url, path: storageRef.fullPath };
 }
+
 
 /**
  * Deletes a file from Firebase Storage using its full path.
@@ -164,18 +165,8 @@ export function updateUserRole(uid: string, role: UserRole): void {
 
 export async function createPoi(poiData: Omit<POI, 'id'>): Promise<string> {
     const poiCollection = collection(db, 'pois');
-    try {
-      const docRef = await addDoc(poiCollection, poiData);
-      return docRef.id;
-    } catch (serverError: any) {
-      const permissionError = new FirestorePermissionError({
-        path: 'pois',
-        operation: 'create',
-        requestResourceData: poiData,
-      });
-      errorEmitter.emit('permission-error', permissionError);
-      throw serverError; // Rethrow to be caught by the form
-    }
+    const docRef = await addDoc(poiCollection, poiData);
+    return docRef.id;
 }
 
 
