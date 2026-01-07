@@ -4,7 +4,7 @@ import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc,
 import type { POI, Review, AppUser, UserRole } from './types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
 
 // --- STORAGE FUNCTIONS ---
 
@@ -16,10 +16,10 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
  */
 export async function uploadFile(file: File, path: string): Promise<{ url: string, path: string }> {
   const storageRef = ref(storage, path);
-  // Explicitly set the content type for robustness with Storage Rules
-  await uploadBytes(storageRef, file, { contentType: file.type });
-  const url = await getDownloadURL(storageRef);
-  return { url, path: storageRef.fullPath };
+  // uploadBytes returns an UploadResult, and we should use its reference for getDownloadURL
+  const uploadResult = await uploadBytes(storageRef, file, { contentType: file.type });
+  const url = await getDownloadURL(uploadResult.ref);
+  return { url, path: uploadResult.ref.fullPath };
 }
 
 
@@ -186,14 +186,36 @@ export async function updatePoi(poiId: string, poiData: Partial<POI>): Promise<v
     }
 }
 
-export function deletePoi(poiId: string): void {
-    const poiRef = doc(db, 'pois', poiId);
-    // TODO: Delete associated images in Storage using a Cloud Function.
-    deleteDoc(poiRef).catch(async (serverError) => {
-      const permissionError = new FirestorePermissionError({
-        path: poiRef.path,
-        operation: 'delete',
-      });
-      errorEmitter.emit('permission-error', permissionError);
+export async function deletePoi(poiId: string): Promise<void> {
+  const poiRef = doc(db, 'pois', poiId);
+  const imagesFolderRef = ref(storage, `poi-images/${poiId}`);
+
+  try {
+    // Delete Firestore document first
+    await deleteDoc(poiRef);
+
+    // Then delete all files in the corresponding Storage folder
+    const res = await listAll(imagesFolderRef);
+    const deletePromises = res.items.map((itemRef) => deleteObject(itemRef));
+    // Also delete items in subfolders (like gallery)
+    const subfolderPromises = res.prefixes.map(async (folderRef) => {
+      const subfolderItems = await listAll(folderRef);
+      return subfolderItems.items.map((itemRef) => deleteObject(itemRef));
     });
+    
+    await Promise.all([...deletePromises, ...(await Promise.all(subfolderPromises)).flat()]);
+    
+  } catch (serverError: any) {
+    // Handle potential permission errors for both Firestore and Storage
+    if (serverError.code?.includes('permission-denied')) {
+        const permissionError = new FirestorePermissionError({
+            path: poiRef.path,
+            operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+    } else {
+        console.error("Erreur lors de la suppression du POI et de ses images", serverError);
+    }
+    throw serverError; // Re-throw the error to be caught by the caller
+  }
 }
