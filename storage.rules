@@ -7,25 +7,21 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function getUserData() {
+    function getUserRole() {
       return get(
         /databases/(default)/documents/users/$(request.auth.uid)
-      ).data;
+      ).data.role;
     }
 
     function isEditorOrAdmin() {
-      // Vérifie si l'utilisateur est connecté et si son rôle est 'editor' ou 'admin'
-      // en lisant directement son document dans Firestore.
       return isSignedIn()
-        && getUserData().role in ['editor', 'admin'];
+        && getUserRole() in ['editor', 'admin'];
     }
 
-    // Toutes les images des POI (header + galerie)
     match /poi-images/{poiId}/{allPaths=**} {
 
       allow read: if true;
 
-      // Sépare la logique d'écriture pour la suppression et la création/mise à jour
       allow write: if isEditorOrAdmin()
         && (
           request.method == 'delete' ||
