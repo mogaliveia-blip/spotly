@@ -28,7 +28,7 @@ import {
   CardFooter,
 } from '@/components/ui/card';
 import { Mountain } from 'lucide-react';
-import { collection, getCount } from 'firebase/firestore';
+import { collection, getCountFromServer } from 'firebase/firestore';
 
 const formSchema = z.object({
   displayName: z.string().min(2, { message: 'Le nom doit comporter au moins 2 caractères.' }),
@@ -60,7 +60,7 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
     try {
       // Vérifier s'il s'agit du premier utilisateur
       const usersCollectionRef = collection(db, 'users');
-      const countSnapshot = await getCount(usersCollectionRef);
+      const countSnapshot = await getCountFromServer(usersCollectionRef);
       const isFirstUser = countSnapshot.data().count === 0;
       const roleToAssign = isFirstUser ? 'admin' : 'user';
 
