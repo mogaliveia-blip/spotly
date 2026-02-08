@@ -16,15 +16,12 @@ service cloud.firestore {
     }
 
     function getUserData(userId) {
-        return get(/databases/$(database)/documents/users/$(userId)).data;
+      return get(/databases/$(database)/documents/users/$(userId)).data;
     }
-    
-    function isRole(role) {
-        return isSignedIn() && getUserData(request.auth.uid).role == role;
-    }
-    
+
     function isOneOfRoles(roles) {
-        return isSignedIn() && getUserData(request.auth.uid).role in roles;
+      return isSignedIn()
+        && getUserData(request.auth.uid).role in roles;
     }
 
     function isAdmin() {
@@ -40,23 +37,16 @@ service cloud.firestore {
        ========================= */
     match /users/{userId} {
 
-      // Lecture : N'importe quel utilisateur connecté peut lire les données des autres.
-      // C'est nécessaire pour que les règles de Storage (si on les réactive) puissent fonctionner.
-      allow read: if isSignedIn();
+      // Lecture : soi-même OU admin
+      allow read: if isOwner(userId) || isAdmin();
 
-      // Création : Le premier utilisateur DOIT être admin. Les suivants peuvent être 'user'.
-      allow create: if isSignedIn() && request.auth.uid == userId && (
-          (
-            size(/databases/$(database)/documents/users) == 0 &&
-            request.resource.data.role == 'admin'
-          ) ||
-          (
-            size(/databases/$(database)/documents/users) > 0 &&
-            request.resource.data.role == 'user'
-          )
-        );
+      // Création : uniquement son propre document (signup)
+      // Le rôle par défaut DOIT être "user"
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == 'user';
 
-      // Mise à jour du profil (sans rôle)
+      // Mise à jour du profil personnel (sans le rôle)
       allow update: if isOwner(userId)
         && !('role' in request.resource.data);
 
@@ -72,16 +62,27 @@ service cloud.firestore {
        POIS
        ========================= */
     match /pois/{poiId} {
+
+      // Lecture publique
       allow read: if true;
+
+      // Création / modification / suppression :
+      // uniquement editor ou admin
       allow create, update, delete: if isEditorOrAdmin();
 
       /* =========================
          REVIEWS (sous-collection)
          ========================= */
       match /reviews/{reviewId} {
+
+        // Lecture publique
         allow read: if true;
+
+        // Création : utilisateur connecté, auteur obligatoire
         allow create: if isSignedIn()
           && request.resource.data.userId == request.auth.uid;
+
+        // Modification / suppression : auteur uniquement
         allow update, delete: if isSignedIn()
           && resource.data.userId == request.auth.uid;
       }

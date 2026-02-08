@@ -15,20 +15,14 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { auth, db } from '@/lib/firebase';
-import { useRouter } from 'next/navigation';
+import { auth } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { createUserInFirestore } from '@/lib/data';
 import {
-  CardHeader,
-  CardTitle,
-  CardDescription,
   CardContent,
   CardFooter,
 } from '@/components/ui/card';
-import { Mountain } from 'lucide-react';
-import { collection, getCountFromServer } from 'firebase/firestore';
 
 const formSchema = z.object({
   displayName: z.string().min(2, { message: 'Le nom doit comporter au moins 2 caractères.' }),
@@ -42,7 +36,6 @@ interface SignupFormProps {
 }
 
 export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
-  const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -58,44 +51,35 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setLoading(true);
     try {
-      // Vérifier s'il s'agit du premier utilisateur
-      const usersCollectionRef = collection(db, 'users');
-      const countSnapshot = await getCountFromServer(usersCollectionRef);
-      const isFirstUser = countSnapshot.data().count === 0;
-      const roleToAssign = isFirstUser ? 'admin' : 'user';
-
+      // 1️⃣ Création du compte Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         values.email,
         values.password
       );
-      
+
+      // 2️⃣ Mise à jour du profil Auth
       await updateProfile(userCredential.user, {
         displayName: values.displayName,
       });
 
-      // Créer un document utilisateur correspondant dans Firestore avec le rôle approprié
+      // 3️⃣ Création du document Firestore
       await createUserInFirestore({
         uid: userCredential.user.uid,
-        email: userCredential.user.email,
+        email: userCredential.user.email!,
         displayName: values.displayName,
-        role: roleToAssign,
+        role: 'user', // ✅ rôle par défaut, TOUJOURS
       });
-      
-      // Force a token refresh to ensure custom claims are available immediately.
-      await userCredential.user.getIdToken(true);
 
       toast({
         title: 'Compte créé !',
-        description: isFirstUser 
-            ? 'Bienvenue ! Votre compte administrateur a été créé.'
-            : 'Bienvenue dans Eventide Guide.',
+        description: 'Bienvenue dans Eventide Guide.',
       });
-      router.refresh();
+
       onSuccess?.();
     } catch (error: any) {
       toast({
-        title: 'Échec de l\'inscription',
+        title: "Échec de l'inscription",
         description:
           error.code === 'auth/email-already-in-use'
             ? 'Cet e-mail est déjà associé à un compte.'
@@ -119,7 +103,7 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
                 <FormItem>
                   <FormLabel>Nom</FormLabel>
                   <FormControl>
-                    <Input placeholder="Votre nom" {...field} disabled={loading} />
+                    <Input {...field} disabled={loading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -132,12 +116,7 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
                 <FormItem>
                   <FormLabel>E-mail</FormLabel>
                   <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="nom@example.com"
-                      {...field}
-                      disabled={loading}
-                    />
+                    <Input type="email" {...field} disabled={loading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -150,7 +129,7 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
                 <FormItem>
                   <FormLabel>Mot de passe</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="••••••••" {...field} disabled={loading} />
+                    <Input type="password" {...field} disabled={loading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -163,13 +142,11 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
           </form>
         </Form>
       </CardContent>
-      <CardFooter className="p-6 pt-0">
-        <div className="mt-4 text-center text-sm w-full">
-          Vous avez déjà un compte ?{' '}
-          <Button variant="link" className="p-0 h-auto" onClick={onSwitchToLogin}>
-            Se connecter
-          </Button>
-        </div>
+      <CardFooter className="p-6 pt-0 text-center text-sm">
+        Déjà un compte ?{' '}
+        <Button variant="link" className="p-0 h-auto" onClick={onSwitchToLogin}>
+          Se connecter
+        </Button>
       </CardFooter>
     </>
   );
