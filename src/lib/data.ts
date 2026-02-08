@@ -97,16 +97,25 @@ export async function fetchReviewsByPoiId(poiId: string): Promise<Review[]> {
 }
 
 export async function addReview(poiId: string, reviewData: Omit<Review, 'id' | 'poiId' | 'createdAt'>): Promise<Review> {
-  const poiRef = doc(db, 'pois', poiId);
   const reviewsCollection = collection(db, 'pois', poiId, 'reviews');
   
-  // 1. Add the review to the subcollection
+  // Add the review to the subcollection
   const reviewWithTimestamp = {
       ...reviewData,
       poiId,
       createdAt: serverTimestamp(),
   };
-  const newReviewRef = await addDoc(reviewsCollection, reviewWithTimestamp).catch(e => {
+
+  try {
+    const newReviewRef = await addDoc(reviewsCollection, reviewWithTimestamp);
+    // Return the optimistic review object for UI update
+    return {
+        id: newReviewRef.id,
+        ...reviewData,
+        createdAt: new Date(), // Use local date for immediate UI update
+        poiId,
+    };
+  } catch (e: any) {
     if (e.code && e.code.includes('permission-denied')) {
         const permissionError = new FirestorePermissionError({
             path: `pois/${poiId}/reviews`,
@@ -116,38 +125,7 @@ export async function addReview(poiId: string, reviewData: Omit<Review, 'id' | '
         errorEmitter.emit('permission-error', permissionError);
     }
     throw e;
-  });
-
-  // 2. Update the aggregate data on the POI document in a transaction
-  try {
-    await runTransaction(db, async (transaction) => {
-      const poiDoc = await transaction.get(poiRef);
-      if (!poiDoc.exists()) {
-        throw "Le POI n'existe pas !";
-      }
-
-      const poiData = poiDoc.data() as POI;
-      const newReviewCount = (poiData.reviewCount || 0) + 1;
-      const oldRatingTotal = (poiData.averageRating || 0) * (poiData.reviewCount || 0);
-      const newAverageRating = (oldRatingTotal + reviewData.rating) / newReviewCount;
-
-      transaction.update(poiRef, {
-        reviewCount: newReviewCount,
-        averageRating: newAverageRating,
-      });
-    });
-  } catch (e) {
-      console.error("Échec de la mise à jour de l'évaluation moyenne, mais l'avis a été ajouté.", e);
-      // The review is already added, so we don't throw. We can handle this state later if needed.
   }
-
-  // 3. Return the optimistic review object
-  return {
-      id: newReviewRef.id,
-      ...reviewData,
-      createdAt: new Date(), // Use local date for immediate UI update
-      poiId,
-  };
 }
 
 

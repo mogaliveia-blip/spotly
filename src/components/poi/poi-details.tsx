@@ -53,27 +53,11 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   }, [initialPoi]);
 
   const handleReviewAdded = useCallback((newReview: Review) => {
+    // Optimistically add the new review to the list for immediate UI feedback.
+    // The POI's average rating and review count will be updated by a backend function,
+    // and the change will be reflected on the next data refresh or via a realtime listener.
     setReviews(prevReviews => [newReview, ...prevReviews]);
-
-    // Optimistically update the POI's rating and review count
-    const oldRatingTotal = poi.averageRating * poi.reviewCount;
-    const newReviewCount = poi.reviewCount + 1;
-    const newAverageRating = (oldRatingTotal + newReview.rating) / newReviewCount;
-    
-    const updatedPoi = {
-      ...poi,
-      reviewCount: newReviewCount,
-      averageRating: newAverageRating,
-    };
-    setPoi(updatedPoi);
-
-    // Persist the new average rating and count to Firestore
-    updatePoi(poi.id, {
-      averageRating: newAverageRating,
-      reviewCount: newReviewCount,
-    });
-
-  }, [poi]);
+  }, []);
 
   return (
     <ScrollArea className="h-[50vh] w-full max-w-sm">
