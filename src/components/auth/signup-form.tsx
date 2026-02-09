@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/card';
 
 const formSchema = z.object({
-  displayName: z.string().min(2, { message: 'Le nom doit comporter au moins 2 caractères.' }),
+  displayName: z.string().min(2, { message: 'Le prénom doit comporter au moins 2 caractères.' }),
   email: z.string().email({ message: 'Veuillez saisir une adresse e-mail valide.' }),
   password: z.string().min(6, { message: 'Le mot de passe doit comporter au moins 6 caractères.' }),
 });
@@ -101,7 +101,7 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
               name="displayName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nom</FormLabel>
+                  <FormLabel>Prénom</FormLabel>
                   <FormControl>
                     <Input {...field} disabled={loading} />
                   </FormControl>
