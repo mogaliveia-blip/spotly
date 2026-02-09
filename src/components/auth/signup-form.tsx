@@ -73,7 +73,7 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
 
       toast({
         title: 'Compte créé !',
-        description: 'Bienvenue dans Eventide Guide.',
+        description: 'Bienvenue dans Leu Tempo.',
       });
 
       onSuccess?.();

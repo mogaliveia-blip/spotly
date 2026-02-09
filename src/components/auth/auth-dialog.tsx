@@ -50,7 +50,7 @@ export function AuthDialog({ trigger, initialView = 'login' }: AuthDialogProps) 
                 {isLoginView ? 'Content de vous revoir' : 'Créer un compte'}
             </DialogTitle>
             <DialogDescription>
-                {isLoginView ? 'Connectez-vous à votre compte Eventide Guide' : 'Rejoignez Eventide Guide pour explorer des événements'}
+                {isLoginView ? 'Connectez-vous à votre compte Leu Tempo' : 'Rejoignez Leu Tempo pour explorer des événements'}
             </DialogDescription>
         </DialogHeader>
         <Card className="w-full border-0 shadow-none">

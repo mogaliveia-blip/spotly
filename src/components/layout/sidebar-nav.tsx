@@ -171,7 +171,7 @@ export function SidebarNav() {
           <Mountain className="h-8 w-8 text-primary" />
           <div className="flex flex-col">
             <h2 className="text-lg font-semibold tracking-tight">
-              Eventide Guide
+              Leu Tempo
             </h2>
             <p className="text-sm text-muted-foreground">
               {user ? `Bienvenue, ${user.displayName?.split(' ')[0] || 'Utilisateur'} !` : 'Bienvenue !'}

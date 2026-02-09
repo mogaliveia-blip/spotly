@@ -7,7 +7,7 @@ import { MapsApiProvider } from '@/providers/maps-api-provider';
 import { GeolocationProvider } from '@/providers/geolocation-provider';
 
 export const metadata: Metadata = {
-  title: 'Eventide Guide',
+  title: 'Leu Tempo',
   description: 'Votre guide pour les points d\'intérêt de l\'événement.',
   manifest: '/manifest.json',
 };

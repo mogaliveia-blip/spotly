@@ -13,7 +13,7 @@ export function Header() {
       <div className="flex items-center gap-2">
         <SidebarTrigger className="md:hidden" />
         <Mountain className="h-6 w-6 text-primary" />
-        <h1 className="text-lg font-semibold tracking-tight">Eventide Guide</h1>
+        <h1 className="text-lg font-semibold tracking-tight">Leu Tempo</h1>
       </div>
       <div className="ml-auto flex items-center gap-4">
         {user ? (
