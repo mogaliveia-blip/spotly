@@ -69,10 +69,12 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
         )}
         <div className="space-y-2 p-1">
           <h3 className="font-bold text-lg">{poi.title}</h3>
+          {/* 
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <div className="flex items-center gap-1">{renderStars(poi.averageRating)}</div>
               <span>({poi.reviewCount} {poi.reviewCount !== 1 ? 'avis' : 'avis'})</span>
           </div>
+          */}
           {userLocation && (
               <p className="text-xs text-muted-foreground font-semibold">
                   À {getDistance(userLocation.lat, userLocation.lng, poi.location.lat, poi.location.lng).toFixed(2)} km
