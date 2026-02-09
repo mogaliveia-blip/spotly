@@ -13,16 +13,19 @@ import {
 import { Card } from '@/components/ui/card';
 import { LoginForm } from './login-form';
 import { SignupForm } from './signup-form';
+import { PasswordResetForm } from './password-reset-form';
 import { Mountain } from 'lucide-react';
+
+type AuthView = 'login' | 'signup' | 'passwordReset';
 
 interface AuthDialogProps {
   trigger: React.ReactNode;
-  initialView?: 'login' | 'signup';
+  initialView?: AuthView;
 }
 
 export function AuthDialog({ trigger, initialView = 'login' }: AuthDialogProps) {
   const [open, setOpen] = useState(false);
-  const [isLoginView, setIsLoginView] = useState(initialView === 'login');
+  const [view, setView] = useState<AuthView>(initialView);
 
   const handleSuccess = () => {
     setOpen(false);
@@ -32,9 +35,60 @@ export function AuthDialog({ trigger, initialView = 'login' }: AuthDialogProps) 
   const onOpenChange = (isOpen: boolean) => {
     setOpen(isOpen);
     if (isOpen) {
-      setIsLoginView(initialView === 'login');
+      setView(initialView);
     }
   }
+
+  const getTitle = () => {
+    switch (view) {
+      case 'signup':
+        return 'Créer un compte';
+      case 'passwordReset':
+        return 'Réinitialiser le mot de passe';
+      case 'login':
+      default:
+        return 'Content de vous revoir';
+    }
+  };
+
+  const getDescription = () => {
+    switch (view) {
+      case 'signup':
+        return 'Rejoignez Leu Tempo pour explorer des événements';
+      case 'passwordReset':
+        return 'Entrez votre e-mail pour recevoir un lien de réinitialisation.';
+      case 'login':
+      default:
+        return 'Connectez-vous à votre compte Leu Tempo';
+    }
+  };
+
+  const renderContent = () => {
+    switch (view) {
+      case 'signup':
+        return (
+          <SignupForm 
+            onSuccess={handleSuccess}
+            onSwitchToLogin={() => setView('login')}
+          />
+        );
+      case 'passwordReset':
+        return (
+          <PasswordResetForm 
+            onSwitchToLogin={() => setView('login')}
+          />
+        );
+      case 'login':
+      default:
+        return (
+          <LoginForm 
+            onSuccess={handleSuccess} 
+            onSwitchToSignup={() => setView('signup')}
+            onSwitchToPasswordReset={() => setView('passwordReset')}
+          />
+        );
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -47,24 +101,14 @@ export function AuthDialog({ trigger, initialView = 'login' }: AuthDialogProps) 
                 <Mountain className="h-10 w-10 text-primary" />
             </div>
             <DialogTitle className="text-2xl">
-                {isLoginView ? 'Content de vous revoir' : 'Créer un compte'}
+                {getTitle()}
             </DialogTitle>
             <DialogDescription>
-                {isLoginView ? 'Connectez-vous à votre compte Leu Tempo' : 'Rejoignez Leu Tempo pour explorer des événements'}
+                {getDescription()}
             </DialogDescription>
         </DialogHeader>
         <Card className="w-full border-0 shadow-none">
-          {isLoginView ? (
-            <LoginForm 
-              onSuccess={handleSuccess} 
-              onSwitchToSignup={() => setIsLoginView(false)}
-            />
-          ) : (
-            <SignupForm 
-              onSuccess={handleSuccess}
-              onSwitchToLogin={() => setIsLoginView(true)}
-            />
-          )}
+          {renderContent()}
         </Card>
       </DialogContent>
     </Dialog>

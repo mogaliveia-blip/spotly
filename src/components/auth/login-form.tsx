@@ -16,19 +16,13 @@ import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import {
-  Card,
   CardContent,
-  CardDescription,
   CardFooter,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
-import { Mountain } from 'lucide-react';
-import Link from 'next/link';
 
 const passwordSchema = z.object({
   email: z.string().email({ message: 'Veuillez saisir une adresse e-mail valide.' }),
@@ -38,9 +32,10 @@ const passwordSchema = z.object({
 interface LoginFormProps {
   onSuccess?: () => void;
   onSwitchToSignup?: () => void;
+  onSwitchToPasswordReset?: () => void;
 }
 
-export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
+export function LoginForm({ onSuccess, onSwitchToSignup, onSwitchToPasswordReset }: LoginFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [formLoading, setFormLoading] = useState(false);
@@ -103,7 +98,19 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Mot de passe</FormLabel>
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Mot de passe</FormLabel>
+                      {onSwitchToPasswordReset && (
+                        <Button
+                          type="button"
+                          variant="link"
+                          className="p-0 h-auto text-xs"
+                          onClick={onSwitchToPasswordReset}
+                        >
+                          Mot de passe oublié ?
+                        </Button>
+                      )}
+                    </div>
                     <FormControl>
                       <Input type="password" placeholder="••••••••" {...field} disabled={formLoading} />
                     </FormControl>
