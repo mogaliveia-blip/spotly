@@ -14,7 +14,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -63,7 +63,10 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
         displayName: values.displayName,
       });
 
-      // 3️⃣ Création du document Firestore
+      // 3️⃣ Envoi de l'email de vérification
+      await sendEmailVerification(userCredential.user);
+
+      // 4️⃣ Création du document Firestore
       await createUserInFirestore({
         uid: userCredential.user.uid,
         email: userCredential.user.email!,
@@ -73,7 +76,7 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
 
       toast({
         title: 'Compte créé !',
-        description: 'Bienvenue dans Leu Tempo.',
+        description: 'Un e-mail de vérification a été envoyé. Consultez votre boîte de réception pour continuer.',
       });
 
       onSuccess?.();

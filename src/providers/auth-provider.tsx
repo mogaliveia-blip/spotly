@@ -45,6 +45,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           displayName: firebaseUser.displayName,
           photoURL: firebaseUser.photoURL,
           role: userRole,
+          emailVerified: firebaseUser.emailVerified,
         };
         setUser(appUser);
         setRole(userRole);

@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { fetchAppConfig } from '@/lib/data';
 import type { AppConfig } from '@/lib/types';
 import { Mountain } from 'lucide-react';
+import { VerifyEmailPage } from '@/components/auth/verify-email-page';
 
 export default function DashboardLayout({
   children,
@@ -44,8 +45,23 @@ export default function DashboardLayout({
     }
   }, [role, user, authLoading, config, loading, router]);
 
-  const isBlocked = config?.isLandingPageActive && (role !== 'admin' && role !== 'editor');
   const isLoading = authLoading || loading;
+
+  if (isLoading) {
+    return (
+       <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Mountain className="h-12 w-12 animate-pulse text-primary" />
+      </div>
+    );
+  }
+
+  // --- NEW VERIFICATION GATE ---
+  // This must come AFTER isLoading, but BEFORE any other logic.
+  if (user && !user.emailVerified) {
+    return <VerifyEmailPage />;
+  }
+
+  const isBlocked = config?.isLandingPageActive && (role !== 'admin' && role !== 'editor');
 
   if (isLoading || isBlocked) {
     return (

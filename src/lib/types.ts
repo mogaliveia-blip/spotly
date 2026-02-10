@@ -9,6 +9,7 @@ export interface AppUser {
   displayName: string | null;
   role: UserRole;
   photoURL?: string | null;
+  emailVerified: boolean;
 }
 
 export interface POI {
