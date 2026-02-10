@@ -6,15 +6,15 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { fetchAppConfig } from '@/lib/data';
 import type { AppConfig } from '@/lib/types';
-import { Mountain, Users, LogIn, LogOut } from 'lucide-react';
-import Image from 'next/image';
+import { Mountain } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import Image from 'next/image';
+import { AuthDialog } from '@/components/auth/auth-dialog';
 
 export default function LandingPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [internalAccessClicked, setInternalAccessClicked] = useState(false);
-  const { role, loading: authLoading, user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
   const isLoading = authLoading || !config;
@@ -22,31 +22,27 @@ export default function LandingPage() {
   useEffect(() => {
     fetchAppConfig()
       .then(appConfig => {
-        if (!appConfig.isLandingPageActive) {
-          router.replace('/dashboard');
-        } else {
+        if (appConfig.isLandingPageActive) {
           setConfig(appConfig);
+        } else {
+          router.replace('/dashboard');
         }
       })
       .catch(e => {
         console.error("Could not fetch app config", e);
-        // Par défaut, afficher la landing page pour éviter de bloquer l'accès en cas d'erreur.
-        setConfig({ isLandingPageActive: true });
+        // If config fails to load, redirect to dashboard to avoid blocking access.
+        router.replace('/dashboard');
       });
   }, [router]);
 
-  const canAccessInternally = role === 'admin' || role === 'editor';
-
-  const handleEnterApp = () => {
-    router.push('/dashboard');
-  };
-  
   const handleSignOut = async () => {
     await signOut(auth);
+    // After sign-out, we want to ensure the page reflects the signed-out state.
+    // A page refresh is a robust way to do this without complex state management.
+    router.refresh();
   };
 
-  // Affiche le loader pendant la récupération de la config ou pendant la redirection.
-  if (isLoading || (config && !config.isLandingPageActive)) {
+  if (isLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Mountain className="h-12 w-12 animate-pulse text-primary" />
@@ -54,7 +50,8 @@ export default function LandingPage() {
     );
   }
   
-  // Si on arrive ici, on est certain que config.isLandingPageActive est true.
+  // If we reach here, it means we are definitely on the landing page because config.isLandingPageActive is true.
+  // The redirection logic in useEffect handles the other case.
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">
@@ -62,22 +59,18 @@ export default function LandingPage() {
           <Mountain className="h-6 w-6 text-primary" />
           <span className="text-lg font-semibold">Leu Tempo</span>
         </div>
-        <div className="flex items-center gap-2">
-          {user && (
-            <>
-              {canAccessInternally && (
-                <Button variant="outline" size="sm" onClick={() => setInternalAccessClicked(true)}>
-                  <Users className="mr-2 h-4 w-4" />
-                  Accès interne
+         {user && (
+            <div className="flex items-center gap-2">
+                {(user.role === 'admin' || user.role === 'editor') && (
+                     <Button variant="outline" size="sm" asChild>
+                        <a href="/dashboard">Entrer dans l'application</a>
+                    </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                    Se déconnecter
                 </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={handleSignOut}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Se déconnecter
-              </Button>
-            </>
-          )}
-        </div>
+            </div>
+        )}
       </header>
 
       <main className="flex-1">
@@ -99,15 +92,6 @@ export default function LandingPage() {
                 <p className="mt-4 max-w-2xl text-lg text-primary-foreground/90">
                     Bientôt disponible. L'application officielle pour ne rien manquer de l'événement.
                 </p>
-
-                {canAccessInternally && internalAccessClicked && (
-                    <div className="mt-8 animate-in fade-in zoom-in-95 duration-500">
-                        <Button size="lg" onClick={handleEnterApp}>
-                            <LogIn className="mr-2 h-5 w-5" />
-                            Entrer dans l'application
-                        </Button>
-                    </div>
-                )}
             </div>
           </div>
         </section>
@@ -122,8 +106,21 @@ export default function LandingPage() {
         </section>
       </main>
 
-       <footer className="py-6 text-center text-sm text-muted-foreground border-t">
-          © {new Date().getFullYear()} Leu Tempo Festival. Tous droits réservés.
+       <footer className="py-6 border-t">
+          <div className="container mx-auto text-center text-sm text-muted-foreground">
+            <p>© {new Date().getFullYear()} Leu Tempo Festival. Tous droits réservés.</p>
+            {!user && (
+                 <div className="mt-2">
+                    <AuthDialog 
+                        trigger={
+                            <Button variant="link" size="sm" className="text-xs text-muted-foreground/80 hover:text-muted-foreground">
+                                Espace organisateur
+                            </Button>
+                        }
+                    />
+                </div>
+            )}
+          </div>
         </footer>
     </div>
   );
