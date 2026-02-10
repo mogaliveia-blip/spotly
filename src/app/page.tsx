@@ -15,7 +15,6 @@ import { auth } from '@/lib/firebase';
 
 export default function LandingPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [loading, setLoading] = useState(true);
   const [internalAccessClicked, setInternalAccessClicked] = useState(false);
   const { role, loading: authLoading, user } = useAuth();
   const router = useRouter();
@@ -27,10 +26,8 @@ export default function LandingPage() {
         setConfig(appConfig);
       } catch (e) {
         console.error("Could not fetch app config", e);
-        // Default to landing page being off if config fails
+        // Default to landing page being active if config fails
         setConfig({ isLandingPageActive: true });
-      } finally {
-        setLoading(false);
       }
     }
     getConfig();
@@ -47,7 +44,9 @@ export default function LandingPage() {
     router.refresh();
   };
 
-  if (loading || authLoading) {
+  const isLoading = authLoading || !config;
+
+  if (isLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Mountain className="h-12 w-12 animate-pulse text-primary" />
@@ -67,7 +66,7 @@ export default function LandingPage() {
             // --- UTILISATEUR CONNECTÉ ---
             <>
               {/* Bouton "Accès interne" pour admin/editor quand la landing page est active */}
-              {config?.isLandingPageActive && canAccessInternally && (
+              {config.isLandingPageActive && canAccessInternally && (
                 <Button variant="outline" size="sm" onClick={() => setInternalAccessClicked(true)}>
                   <Users className="mr-2 h-4 w-4" />
                   Accès interne
@@ -84,7 +83,7 @@ export default function LandingPage() {
             // --- UTILISATEUR DÉCONNECTÉ ---
             <>
               {/* Bouton "Se connecter" uniquement si la landing page est inactive */}
-              {!config?.isLandingPageActive && (
+              {!config.isLandingPageActive && (
                 <AuthDialog trigger={<Button>Se connecter</Button>} />
               )}
             </>
@@ -112,7 +111,7 @@ export default function LandingPage() {
                     Bientôt disponible. L'application officielle pour ne rien manquer de l'événement.
                 </p>
 
-                {config?.isLandingPageActive && canAccessInternally && internalAccessClicked && (
+                {config.isLandingPageActive && canAccessInternally && internalAccessClicked && (
                     <div className="mt-8 animate-in fade-in zoom-in-95 duration-500">
                         <Button size="lg" onClick={handleEnterApp}>
                             <LogIn className="mr-2 h-5 w-5" />
@@ -120,7 +119,7 @@ export default function LandingPage() {
                         </Button>
                     </div>
                 )}
-                 {!config?.isLandingPageActive && !user && (
+                 {!config.isLandingPageActive && !user && (
                     <div className="mt-8">
                        <AuthDialog trigger={<Button size="lg">Accéder à l'application</Button>} />
                     </div>
