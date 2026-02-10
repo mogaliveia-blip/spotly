@@ -35,3 +35,7 @@ export interface Review {
   comment: string;
   createdAt: Date;
 }
+
+export interface AppConfig {
+  isLandingPageActive: boolean;
+}

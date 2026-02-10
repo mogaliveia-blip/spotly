@@ -1,10 +1,46 @@
 // src/lib/data.ts
 import { db, storage } from './firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, serverTimestamp, runTransaction, Timestamp } from 'firebase/firestore';
-import type { POI, Review, AppUser, UserRole } from './types';
+import type { POI, Review, AppUser, UserRole, AppConfig } from './types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
+
+// --- CONFIG FUNCTIONS ---
+
+/**
+ * Fetches the global application configuration.
+ * @returns A promise that resolves with the app configuration.
+ */
+export async function fetchAppConfig(): Promise<AppConfig> {
+  const configRef = doc(db, 'config', 'main');
+  const configSnap = await getDoc(configRef);
+  if (configSnap.exists()) {
+    return configSnap.data() as AppConfig;
+  }
+  // Default config if it doesn't exist
+  return { isLandingPageActive: true };
+}
+
+/**
+ * Updates the global application configuration.
+ * @param config The partial config to update.
+ */
+export async function updateAppConfig(config: Partial<AppConfig>): Promise<void> {
+  const configRef = doc(db, 'config', 'main');
+   try {
+    await setDoc(configRef, config, { merge: true });
+  } catch (serverError: any) {
+    const permissionError = new FirestorePermissionError({
+      path: configRef.path,
+      operation: 'update',
+      requestResourceData: config,
+    });
+    errorEmitter.emit('permission-error', permissionError);
+    throw serverError;
+  }
+}
+
 
 // --- STORAGE FUNCTIONS ---
 

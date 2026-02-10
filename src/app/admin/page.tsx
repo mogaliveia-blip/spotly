@@ -4,8 +4,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { useRouter } from 'next/navigation';
-import { fetchUsers, updateUserRole } from '@/lib/data';
-import type { AppUser, UserRole } from '@/lib/types';
+import { fetchUsers, updateUserRole, fetchAppConfig, updateAppConfig } from '@/lib/data';
+import type { AppUser, UserRole, AppConfig } from '@/lib/types';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -14,8 +14,68 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+
+function AppConfigCard() {
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchAppConfig().then(appConfig => {
+      setConfig(appConfig);
+      setLoading(false);
+    }).catch(() => {
+      toast({ title: "Erreur", description: "Impossible de charger la configuration.", variant: "destructive" });
+      setLoading(false);
+    });
+  }, [toast]);
+
+  const handleToggleLandingPage = async (isActive: boolean) => {
+    setSaving(true);
+    try {
+      await updateAppConfig({ isLandingPageActive: isActive });
+      setConfig(prev => prev ? { ...prev, isLandingPageActive: isActive } : { isLandingPageActive: isActive });
+      toast({ title: "Configuration mise à jour", description: `La page d'accueil a été ${isActive ? 'activée' : 'désactivée'}.` });
+    } catch (error) {
+      toast({ title: "Erreur", description: "Impossible de mettre à jour la configuration.", variant: "destructive" });
+      // Revert UI change on error
+      setConfig(prev => prev ? { ...prev, isLandingPageActive: !isActive } : { isLandingPageActive: !isActive });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <Skeleton className="h-10 w-full" />;
+  }
+
+  return (
+    <div className="flex items-center space-x-4 rounded-md border p-4">
+      <div className="flex-1 space-y-1">
+        <Label htmlFor="landing-page-switch" className="text-base font-medium">
+          Activer la page d'accueil (mode pré-événement)
+        </Label>
+        <p className="text-sm text-muted-foreground">
+          Si activée, les visiteurs verront une landing page. Seuls les admins et éditeurs pourront accéder à l'application.
+        </p>
+      </div>
+       <div className="flex items-center gap-2">
+        {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+        <Switch
+          id="landing-page-switch"
+          checked={config?.isLandingPageActive ?? true}
+          onCheckedChange={handleToggleLandingPage}
+          disabled={saving}
+        />
+       </div>
+    </div>
+  );
+}
 
 
 function UserTable() {
@@ -164,14 +224,11 @@ export default function AdminPage() {
     const router = useRouter();
 
     useEffect(() => {
-        // This is a client-side check.
-        // For robust security, you'd also have server-side checks or middleware.
         if (role && role !== 'admin') {
             router.replace('/dashboard');
         }
     }, [role, router]);
 
-    // Render nothing or a loading state until the role check is complete
     if (role !== 'admin') {
         return null; 
     }
@@ -179,6 +236,15 @@ export default function AdminPage() {
     return (
         <AppLayout>
             <div className="space-y-6">
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Configuration de l'application</CardTitle>
+                        <CardDescription>Gérez les paramètres globaux de l'application.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                       <AppConfigCard />
+                    </CardContent>
+                </Card>
                 <Card>
                     <CardHeader>
                         <CardTitle>Gestion des utilisateurs</CardTitle>

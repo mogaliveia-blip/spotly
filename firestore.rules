@@ -57,6 +57,17 @@ service cloud.firestore {
       // Suppression : admin uniquement
       allow delete: if isAdmin();
     }
+    
+    /* =========================
+       CONFIG
+       ========================= */
+    match /config/main {
+      // Lecture publique pour que le client connaisse l'état de la landing page
+      allow read: if true;
+      // Écriture : admin uniquement
+      allow write: if isAdmin();
+    }
+
 
     /* =========================
        POIS
