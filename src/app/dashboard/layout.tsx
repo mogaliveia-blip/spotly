@@ -37,27 +37,14 @@ export default function DashboardLayout({
       return; // Attendre que l'authentification et la configuration soient chargées
     }
 
-    // Règle n°1 : Les rôles privilégiés (admin, editor) ont toujours accès.
-    if (role === 'admin' || role === 'editor') {
-      return; // Accès autorisé
-    }
-    
-    // Règle n°2 : Les utilisateurs non authentifiés sont toujours redirigés vers l'accueil.
-    if (!user) {
+    // Le seul cas de redirection est un utilisateur standard ('user') essayant d'accéder
+    // à l'application alors que la landing page est active.
+    // Les administrateurs, éditeurs et utilisateurs non authentifiés ne sont pas redirigés d'ici.
+    if (role === 'user' && config?.isLandingPageActive) {
         router.replace('/');
-        return;
-    }
-    
-    // Règle n°3 : L'accès pour le rôle standard 'user' dépend de l'état de la landing page.
-    if (role === 'user') {
-        if (config?.isLandingPageActive) {
-            // La landing page est active, on bloque les utilisateurs standards.
-            router.replace('/');
-        }
-        // Si la landing page est désactivée, l'accès est autorisé en ne faisant rien.
     }
 
-  }, [role, user, config, isLoading, router]);
+  }, [role, config, isLoading, router]);
 
 
   if (isLoading) {
@@ -73,11 +60,8 @@ export default function DashboardLayout({
     return <VerifyEmailPage />;
   }
 
-  // On détermine si l'utilisateur actuel doit être bloqué après toutes les vérifications.
-  // C'est une sécurité finale pour éviter l'affichage de contenu avant une redirection.
-  const isBlocked = 
-    !user || 
-    (role === 'user' && config?.isLandingPageActive);
+  // On détermine si l'utilisateur actuel doit être bloqué pour éviter un flash de contenu.
+  const isBlocked = role === 'user' && config?.isLandingPageActive;
 
   if (isBlocked) {
     // Le useEffect a déjà dû déclencher la redirection.

@@ -1,11 +1,9 @@
-// src/app/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { AuthDialog } from '@/components/auth/auth-dialog';
 import { fetchAppConfig } from '@/lib/data';
 import type { AppConfig } from '@/lib/types';
 import { Mountain, Users, LogIn, LogOut } from 'lucide-react';
@@ -19,19 +17,23 @@ export default function LandingPage() {
   const { role, loading: authLoading, user } = useAuth();
   const router = useRouter();
 
+  const isLoading = authLoading || !config;
+
   useEffect(() => {
-    async function getConfig() {
-      try {
-        const appConfig = await fetchAppConfig();
-        setConfig(appConfig);
-      } catch (e) {
+    fetchAppConfig()
+      .then(appConfig => {
+        if (!appConfig.isLandingPageActive) {
+          router.replace('/dashboard');
+        } else {
+          setConfig(appConfig);
+        }
+      })
+      .catch(e => {
         console.error("Could not fetch app config", e);
-        // Default to landing page being active if config fails
+        // Par défaut, afficher la landing page pour éviter de bloquer l'accès en cas d'erreur.
         setConfig({ isLandingPageActive: true });
-      }
-    }
-    getConfig();
-  }, []);
+      });
+  }, [router]);
 
   const canAccessInternally = role === 'admin' || role === 'editor';
 
@@ -41,19 +43,18 @@ export default function LandingPage() {
   
   const handleSignOut = async () => {
     await signOut(auth);
-    router.refresh();
   };
 
-  const isLoading = authLoading || !config;
-
-  if (isLoading) {
+  // Affiche le loader pendant la récupération de la config ou pendant la redirection.
+  if (isLoading || (config && !config.isLandingPageActive)) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Mountain className="h-12 w-12 animate-pulse text-primary" />
       </div>
     );
   }
-
+  
+  // Si on arrive ici, on est certain que config.isLandingPageActive est true.
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">
@@ -62,30 +63,18 @@ export default function LandingPage() {
           <span className="text-lg font-semibold">Leu Tempo</span>
         </div>
         <div className="flex items-center gap-2">
-          {user ? (
-            // --- UTILISATEUR CONNECTÉ ---
+          {user && (
             <>
-              {/* Bouton "Accès interne" pour admin/editor quand la landing page est active */}
-              {config.isLandingPageActive && canAccessInternally && (
+              {canAccessInternally && (
                 <Button variant="outline" size="sm" onClick={() => setInternalAccessClicked(true)}>
                   <Users className="mr-2 h-4 w-4" />
                   Accès interne
                 </Button>
               )}
-              
-              {/* Bouton "Se déconnecter" pour tous les utilisateurs connectés */}
               <Button variant="outline" size="sm" onClick={handleSignOut}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Se déconnecter
               </Button>
-            </>
-          ) : (
-            // --- UTILISATEUR DÉCONNECTÉ ---
-            <>
-              {/* Bouton "Se connecter" uniquement si la landing page est inactive */}
-              {!config.isLandingPageActive && (
-                <AuthDialog trigger={<Button>Se connecter</Button>} />
-              )}
             </>
           )}
         </div>
@@ -111,7 +100,7 @@ export default function LandingPage() {
                     Bientôt disponible. L'application officielle pour ne rien manquer de l'événement.
                 </p>
 
-                {config.isLandingPageActive && canAccessInternally && internalAccessClicked && (
+                {canAccessInternally && internalAccessClicked && (
                     <div className="mt-8 animate-in fade-in zoom-in-95 duration-500">
                         <Button size="lg" onClick={handleEnterApp}>
                             <LogIn className="mr-2 h-5 w-5" />
@@ -119,11 +108,6 @@ export default function LandingPage() {
                         </Button>
                     </div>
                 )}
-                 {!config.isLandingPageActive && !user && (
-                    <div className="mt-8">
-                       <AuthDialog trigger={<Button size="lg">Accéder à l'application</Button>} />
-                    </div>
-                 )}
             </div>
           </div>
         </section>
