@@ -17,35 +17,48 @@ export default function DashboardLayout({
   const { role, user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [configLoading, setConfigLoading] = useState(true);
 
   useEffect(() => {
     fetchAppConfig().then(appConfig => {
       setConfig(appConfig);
-      setLoading(false);
+      setConfigLoading(false);
     }).catch(() => {
-      // In case of error, assume landing page is off to not block access
+      // En cas d'erreur, on suppose que la page d'accueil est désactivée pour ne pas bloquer l'accès.
       setConfig({ isLandingPageActive: false });
-      setLoading(false);
+      setConfigLoading(false);
     });
   }, []);
   
-  useEffect(() => {
-    if (!authLoading && !loading) {
-      // If landing page is active, only admin/editor can access the dashboard.
-      // Standard users and guests are redirected.
-      if (config?.isLandingPageActive && (role !== 'admin' && role !== 'editor')) {
-        router.replace('/');
-      }
-      // If landing page is OFF, but user is not logged in, redirect to landing
-      // The login button will be there.
-      if (!config?.isLandingPageActive && !user) {
-        router.replace('/');
-      }
-    }
-  }, [role, user, authLoading, config, loading, router]);
+  const isLoading = authLoading || configLoading;
 
-  const isLoading = authLoading || loading;
+  useEffect(() => {
+    if (isLoading) {
+      return; // Attendre que l'authentification et la configuration soient chargées
+    }
+
+    // Règle n°1 : Les rôles privilégiés (admin, editor) ont toujours accès.
+    if (role === 'admin' || role === 'editor') {
+      return; // Accès autorisé
+    }
+    
+    // Règle n°2 : Les utilisateurs non authentifiés sont toujours redirigés vers l'accueil.
+    if (!user) {
+        router.replace('/');
+        return;
+    }
+    
+    // Règle n°3 : L'accès pour le rôle standard 'user' dépend de l'état de la landing page.
+    if (role === 'user') {
+        if (config?.isLandingPageActive) {
+            // La landing page est active, on bloque les utilisateurs standards.
+            router.replace('/');
+        }
+        // Si la landing page est désactivée, l'accès est autorisé en ne faisant rien.
+    }
+
+  }, [role, user, config, isLoading, router]);
+
 
   if (isLoading) {
     return (
@@ -55,15 +68,20 @@ export default function DashboardLayout({
     );
   }
 
-  // --- NEW VERIFICATION GATE ---
-  // This must come AFTER isLoading, but BEFORE any other logic.
+  // Le portail de vérification d'e-mail doit se situer après le chargement.
   if (user && !user.emailVerified) {
     return <VerifyEmailPage />;
   }
 
-  const isBlocked = config?.isLandingPageActive && (role !== 'admin' && role !== 'editor');
+  // On détermine si l'utilisateur actuel doit être bloqué après toutes les vérifications.
+  // C'est une sécurité finale pour éviter l'affichage de contenu avant une redirection.
+  const isBlocked = 
+    !user || 
+    (role === 'user' && config?.isLandingPageActive);
 
-  if (isLoading || isBlocked) {
+  if (isBlocked) {
+    // Le useEffect a déjà dû déclencher la redirection.
+    // Ceci affiche une icône de chargement pendant que la redirection s'effectue.
     return (
        <div className="flex h-screen w-full items-center justify-center bg-background">
         <Mountain className="h-12 w-12 animate-pulse text-primary" />
