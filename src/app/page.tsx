@@ -1,3 +1,4 @@
+// src/app/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,14 +8,16 @@ import { Button } from '@/components/ui/button';
 import { AuthDialog } from '@/components/auth/auth-dialog';
 import { fetchAppConfig } from '@/lib/data';
 import type { AppConfig } from '@/lib/types';
-import { Mountain, Users, LogIn } from 'lucide-react';
+import { Mountain, Users, LogIn, LogOut } from 'lucide-react';
 import Image from 'next/image';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 export default function LandingPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [internalAccessClicked, setInternalAccessClicked] = useState(false);
-  const { role, loading: authLoading } = useAuth();
+  const { role, loading: authLoading, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -38,6 +41,11 @@ export default function LandingPage() {
   const handleEnterApp = () => {
     router.push('/dashboard');
   };
+  
+  const handleSignOut = async () => {
+    await signOut(auth);
+    router.refresh();
+  };
 
   if (loading || authLoading) {
     return (
@@ -55,17 +63,31 @@ export default function LandingPage() {
           <span className="text-lg font-semibold">Leu Tempo</span>
         </div>
         <div className="flex items-center gap-2">
-          {config?.isLandingPageActive ? (
+          {user ? (
+            // --- UTILISATEUR CONNECTÉ ---
             <>
-              {canAccessInternally && (
+              {/* Bouton "Accès interne" pour admin/editor quand la landing page est active */}
+              {config?.isLandingPageActive && canAccessInternally && (
                 <Button variant="outline" size="sm" onClick={() => setInternalAccessClicked(true)}>
                   <Users className="mr-2 h-4 w-4" />
                   Accès interne
                 </Button>
               )}
+              
+              {/* Bouton "Se déconnecter" pour tous les utilisateurs connectés */}
+              <Button variant="outline" size="sm" onClick={handleSignOut}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Se déconnecter
+              </Button>
             </>
           ) : (
-             <AuthDialog trigger={<Button>Se connecter</Button>} />
+            // --- UTILISATEUR DÉCONNECTÉ ---
+            <>
+              {/* Bouton "Se connecter" uniquement si la landing page est inactive */}
+              {!config?.isLandingPageActive && (
+                <AuthDialog trigger={<Button>Se connecter</Button>} />
+              )}
+            </>
           )}
         </div>
       </header>
@@ -98,7 +120,7 @@ export default function LandingPage() {
                         </Button>
                     </div>
                 )}
-                 {!config?.isLandingPageActive && (
+                 {!config?.isLandingPageActive && !user && (
                     <div className="mt-8">
                        <AuthDialog trigger={<Button size="lg">Accéder à l'application</Button>} />
                     </div>
