@@ -1,6 +1,13 @@
 'use client';
 
-import { createContext, useState, useEffect, useContext, ReactNode } from 'react';
+import {
+  createContext,
+  useState,
+  useEffect,
+  useContext,
+  ReactNode,
+  useRef,
+} from 'react';
 
 interface GeolocationContextType {
   userLocation: { lat: number; lng: number } | null;
@@ -21,60 +28,98 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
     error: null,
   });
 
+  const watchIdRef = useRef<number | null>(null);
+  const hasLoggedErrorRef = useRef(false);
+
   useEffect(() => {
-    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
-      console.error("La géolocalisation n'est pas prise en charge par ce navigateur.");
-      setState(prevState => ({ ...prevState, loading: false }));
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setState(prev => ({ ...prev, loading: false }));
       return;
     }
 
-    const onSuccess = (position: GeolocationPosition) => {
+    let isMounted = true;
+
+    const updateLocation = (position: GeolocationPosition) => {
+      if (!isMounted) return;
+
       setState({
         userLocation: {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         },
-        loading: false, // The initial loading is done
+        loading: false,
         error: null,
       });
     };
 
-    const onError = (error: GeolocationPositionError) => {
-      let errorMessage = "Une erreur de géolocalisation est survenue.";
-      switch(error.code) {
-        case error.PERMISSION_DENIED:
-          errorMessage = "La permission de géolocalisation a été refusée.";
-          break;
-        case error.POSITION_UNAVAILABLE:
-          errorMessage = "L'information de localisation n'est pas disponible.";
-          break;
-        case error.TIMEOUT:
-          errorMessage = "La demande de géolocalisation a expiré.";
-          break;
-        default:
-          errorMessage = `Une erreur inconnue est survenue (code: ${error.code}).`;
-          break;
+    const handleError = (error: GeolocationPositionError) => {
+      if (!isMounted) return;
+
+      // On évite le spam console en prod
+      if (!hasLoggedErrorRef.current) {
+        console.warn(
+          '[Geolocation]',
+          error.code,
+          error.message
+        );
+        hasLoggedErrorRef.current = true;
       }
-      console.error("Erreur de géolocalisation:", errorMessage, error.message);
-      setState(prevState => ({
-        ...prevState,
+
+      setState(prev => ({
+        ...prev,
         loading: false,
-        error: error,
+        error,
       }));
     };
 
-    // Use watchPosition to get real-time updates
-    const watchId = navigator.geolocation.watchPosition(onSuccess, onError, {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0, // We want the most recent position
-    });
-
-    // Cleanup function to clear the watcher when the component unmounts
-    return () => {
-      navigator.geolocation.clearWatch(watchId);
+    const startWatching = () => {
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        updateLocation,
+        handleError,
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 5000, // tolère 5s de cache
+        }
+      );
     };
-  }, []); // The empty dependency array is correct: the effect runs once to set up the watcher.
+
+    const init = async () => {
+      try {
+        if ('permissions' in navigator) {
+          const permission = await navigator.permissions.query({
+            name: 'geolocation',
+          } as PermissionDescriptor);
+
+          if (permission.state === 'denied') {
+            setState(prev => ({ ...prev, loading: false }));
+            return;
+          }
+        }
+
+        // Première position rapide
+        navigator.geolocation.getCurrentPosition(
+          updateLocation,
+          handleError,
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+
+        // Puis watch en live
+        startWatching();
+      } catch {
+        setState(prev => ({ ...prev, loading: false }));
+      }
+    };
+
+    init();
+
+    return () => {
+      isMounted = false;
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
 
   return (
     <GeolocationContext.Provider value={state}>
@@ -85,8 +130,8 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
 
 export const useGeolocation = () => {
   const context = useContext(GeolocationContext);
-  if (context === undefined) {
-    throw new Error('useGeolocation must be used within a GeolocationProvider');
+  if (!context) {
+    throw new Error('useGeolocation must be used within GeolocationProvider');
   }
   return context;
 };
