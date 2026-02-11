@@ -1,5 +1,7 @@
 // src/lib/types.ts
 import type { User as FirebaseUser } from 'firebase/auth';
+import type { LucideIcon } from 'lucide-react';
+import { Music, UtensilsCrossed, HeartPulse, Bus, ShoppingBag, Shapes } from 'lucide-react';
 
 export type UserRole = 'user' | 'editor' | 'admin';
 
@@ -46,7 +48,13 @@ export type SubCategory =
   | 'zone_detente'
   | 'backstage';
 
-export const categoriesMap: Record<MainCategory, { label: string; subCategories: Partial<Record<SubCategory, string>> }> = {
+export const categoriesMap: Record<MainCategory, { 
+  label: string; 
+  subCategories: Partial<Record<SubCategory, string>>;
+  icon: LucideIcon;
+  color: string;
+  markerColor: string;
+}> = {
   programmation: {
     label: 'Programmation',
     subCategories: {
@@ -55,27 +63,36 @@ export const categoriesMap: Record<MainCategory, { label: string; subCategories:
       spectacle_rue: 'Spectacle de Rue',
       dj_set: 'DJ Set',
     },
+    icon: Music,
+    color: 'text-violet-500',
+    markerColor: 'text-violet-500',
   },
   nourriture_boissons: {
-    label: 'Nourriture & Boissons',
+    label: 'Nourriture',
     subCategories: {
       food_truck: 'Food Truck',
       restaurant: 'Restaurant',
       bar: 'Bar',
       buvette: 'Buvette',
     },
+    icon: UtensilsCrossed,
+    color: 'text-orange-500',
+    markerColor: 'text-orange-500',
   },
   services_essentiels: {
-    label: 'Services Essentiels',
+    label: 'Services',
     subCategories: {
       toilettes: 'Toilettes',
       poste_secours: 'Poste de Secours',
       securite: 'Sécurité',
       point_eau: "Point d'eau",
     },
+    icon: HeartPulse,
+    color: 'text-blue-500',
+    markerColor: 'text-blue-500',
   },
   logistique_mobilite: {
-    label: 'Logistique & Mobilité',
+    label: 'Mobilité',
     subCategories: {
       entree_principale: 'Entrée Principale',
       parking: 'Parking',
@@ -83,23 +100,32 @@ export const categoriesMap: Record<MainCategory, { label: string; subCategories:
       info_point: 'Point Info',
       acces_pmr: 'Accès PMR',
     },
+    icon: Bus,
+    color: 'text-green-500',
+    markerColor: 'text-green-500',
   },
   merchandising_partenaires: {
-    label: 'Merchandising & Partenaires',
+    label: 'Partenaires',
     subCategories: {
       boutique_officielle: 'Boutique Officielle',
       stand_partenaire: 'Stand Partenaire',
       sponsor: 'Sponsor',
     },
+    icon: ShoppingBag,
+    color: 'text-pink-500',
+    markerColor: 'text-pink-500',
   },
   espaces_specifiques: {
-    label: 'Espaces Spécifiques',
+    label: 'Espaces',
     subCategories: {
       espace_vip: 'Espace VIP',
       espace_enfant: 'Espace Enfants',
       zone_detente: 'Zone Détente',
       backstage: 'Backstage',
     },
+    icon: Shapes,
+    color: 'text-teal-500',
+    markerColor: 'text-teal-500',
   },
 };
 

@@ -1,13 +1,14 @@
 'use client';
 
 import { POIMap } from '@/components/poi/poi-map';
-import type { POI } from '@/lib/types';
+import type { POI, MainCategory } from '@/lib/types';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useSidebar } from '@/components/ui/sidebar';
 import { useEffect, useState, useMemo } from 'react';
 import { fetchPois } from '@/lib/data';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth-user';
+import { CategoryFilter } from '@/components/poi/category-filter';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -21,7 +22,6 @@ export default function DashboardPage() {
   const selectedPoiId = searchParams.get('poi');
   const categoryFilter = searchParams.get('category') || 'all';
   
-  // Fetch POIs on component mount
   useEffect(() => {
     async function getPois() {
       try {
@@ -39,7 +39,6 @@ export default function DashboardPage() {
     getPois();
   }, [toast]);
 
-  // Open sidebar on dashboard by default on desktop
   useEffect(() => {
     if (typeof window !== 'undefined' && window.innerWidth >= 768) {
       setOpen(true);
@@ -53,17 +52,25 @@ export default function DashboardPage() {
     } else {
       params.delete('poi');
     }
-    // We use router.replace to avoid adding to browser history
     router.replace(`${pathname}?${params.toString()}`);
   };
+
+  const handleCategorySelect = (category: MainCategory | 'all') => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (category === 'all') {
+      params.delete('category');
+    } else {
+      params.set('category', category);
+    }
+    params.delete('poi');
+    router.replace(`${pathname}?${params.toString()}`);
+  }
 
   const visiblePois = useMemo(() => {
     const filtered = pois.filter(p => categoryFilter === 'all' || p.mainCategory === categoryFilter);
     if(user) {
         return filtered;
     }
-    // For non-logged in users, we show a limited number of POIs.
-    // Also ensures the selected POI remains visible if it's outside the limited slice.
     const limitedPois = filtered.slice(0, 2);
     if (selectedPoiId) {
       const selectedPoi = pois.find(p => p.id === selectedPoiId);
@@ -75,12 +82,20 @@ export default function DashboardPage() {
   }, [pois, categoryFilter, user, selectedPoiId]);
 
   return (
-    <div className="h-full w-full relative">
-      <POIMap 
-        selectedPoiId={selectedPoiId} 
-        onSelectPoi={handleSelectPoi}
-        pois={visiblePois}
-      />
+    <div className="h-full w-full flex flex-col">
+      <div className="px-2 py-1 border-b bg-background z-10">
+        <CategoryFilter 
+          selectedCategory={categoryFilter as MainCategory | 'all'}
+          onSelectCategory={handleCategorySelect}
+        />
+      </div>
+      <div className="flex-1 relative">
+        <POIMap 
+          selectedPoiId={selectedPoiId} 
+          onSelectPoi={handleSelectPoi}
+          pois={visiblePois}
+        />
+      </div>
     </div>
   );
 }

@@ -1,4 +1,3 @@
-// src/components/poi/poi-details.tsx
 'use client'
 
 import type { POI, Review } from '@/lib/types';
@@ -6,7 +5,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { fetchReviewsByPoiId } from '@/lib/data';
 import { useAuth } from '@/hooks/use-auth-user';
 import Image from 'next/image';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { AuthDialog } from '@/components/auth/auth-dialog';
@@ -38,66 +36,61 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   }, [initialPoi]);
 
   const handleReviewAdded = useCallback((newReview: Review) => {
-    // Optimistically add the new review to the list for immediate UI feedback.
-    // The POI's average rating and review count will be updated by a backend function,
-    // and the change will be reflected on the next data refresh or via a realtime listener.
     setReviews(prevReviews => [newReview, ...prevReviews]);
   }, []);
 
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${poi.location.lat},${poi.location.lng}&travelmode=walking`;
 
   return (
-    <ScrollArea className="h-[50vh] w-full max-w-sm">
-      <div className="space-y-4 pr-4">
-        {poi.headerPhotoUrl && (
-          <div className="relative aspect-video w-full">
-            <Image src={poi.headerPhotoUrl} alt={poi.title} fill className="object-cover rounded-md" />
-          </div>
-        )}
-        <div className="space-y-2 p-1">
-          <h3 className="font-bold text-lg">{poi.title}</h3>
-          
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
-            {userLocation && (
-                <p className="text-sm text-muted-foreground">
-                    À env. {getDistance(userLocation.lat, userLocation.lng, poi.location.lat, poi.location.lng).toFixed(1)} km
-                </p>
-            )}
-             <Button asChild size="sm" variant="outline">
-                <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
-                    <Navigation className="mr-2 h-4 w-4" />
-                    Itinéraire à pied
-                </a>
-            </Button>
-          </div>
-          
-          <p className="text-sm text-muted-foreground pt-2">
-              {poi.description}
-          </p>
+    <div className="space-y-4">
+      {poi.headerPhotoUrl && (
+        <div className="relative aspect-video w-full">
+          <Image src={poi.headerPhotoUrl} alt={poi.title} fill className="object-cover rounded-md" />
         </div>
-
-        <POIGallery poi={poi} />
+      )}
+      <div className="space-y-2 p-1">
+        <h3 className="font-bold text-lg">{poi.title}</h3>
         
-        {user ? (
-            <ReviewForm poiId={poi.id} onReviewAdded={handleReviewAdded} />
-        ) : (
-            <div className="text-center text-sm text-muted-foreground border rounded-md p-4">
-                <p>Vous souhaitez partager votre expérience ?</p>
-                 <AuthDialog trigger={
-                    <Button variant="link" className="p-0 h-auto">
-                        Connectez-vous pour laisser un avis.
-                    </Button>
-                 } />
-            </div>
-        )}
-
-        <div>
-            <h4 className="font-semibold text-md mb-2">Avis récents</h4>
-            {reviewsLoading ? <Skeleton className="h-20 w-full" /> : (
-                <ReviewList reviews={reviews} />
-            )}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
+          {userLocation && (
+              <p className="text-sm text-muted-foreground">
+                  À env. {getDistance(userLocation.lat, userLocation.lng, poi.location.lat, poi.location.lng).toFixed(1)} km
+              </p>
+          )}
+           <Button asChild size="sm" variant="outline">
+              <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
+                  <Navigation className="mr-2 h-4 w-4" />
+                  Itinéraire à pied
+              </a>
+          </Button>
         </div>
+        
+        <p className="text-sm text-muted-foreground pt-2">
+            {poi.description}
+        </p>
       </div>
-    </ScrollArea>
+
+      <POIGallery poi={poi} />
+      
+      {user ? (
+          <ReviewForm poiId={poi.id} onReviewAdded={handleReviewAdded} />
+      ) : (
+          <div className="text-center text-sm text-muted-foreground border rounded-md p-4">
+              <p>Vous souhaitez partager votre expérience ?</p>
+               <AuthDialog trigger={
+                  <Button variant="link" className="p-0 h-auto">
+                      Connectez-vous pour laisser un avis.
+                  </Button>
+               } />
+          </div>
+      )}
+
+      <div>
+          <h4 className="font-semibold text-md mb-2">Avis récents</h4>
+          {reviewsLoading ? <Skeleton className="h-20 w-full" /> : (
+              <ReviewList reviews={reviews} />
+          )}
+      </div>
+    </div>
   );
 }

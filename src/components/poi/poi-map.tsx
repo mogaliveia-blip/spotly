@@ -8,12 +8,17 @@ import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
 import { Button } from '../ui/button';
 import { POIDetails } from './poi-details';
-
+import { useIsMobile } from '@/hooks/use-mobile';
+import { MobilePOIBottomSheet } from './mobile-poi-bottom-sheet';
+import { categoriesMap } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import { ScrollArea } from '../ui/scroll-area';
 
 function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSelectPoi: (poi: POI | null) => void, selectedPoiId: string | null }) {
   const { userLocation } = useGeolocation();
   const map = useMap();
   const selectedPoi = selectedPoiId ? pois.find(p => p.id === selectedPoiId) || null : null;
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (selectedPoi && map) {
@@ -39,28 +44,41 @@ function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSe
         </AdvancedMarker>
       )}
 
-      {pois.map((poi) => (
-        <AdvancedMarker
-          key={poi.id}
-          position={poi.location}
-          onClick={() => onSelectPoi(poi)}
-        >
-          <div className={`transition-transform ${selectedPoi?.id === poi.id ? 'text-accent scale-125' : 'text-primary hover:scale-110'}`}>
-            <MapPin size={32} />
-          </div>
-        </AdvancedMarker>
-      ))}
+      {pois.map((poi) => {
+        const isSelected = selectedPoi?.id === poi.id;
+        const colorClass = categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
+        
+        return (
+            <AdvancedMarker
+                key={poi.id}
+                position={poi.location}
+                onClick={() => onSelectPoi(poi)}
+            >
+                <div className={cn(
+                    'transition-transform drop-shadow-md',
+                    isSelected ? 'text-accent scale-125' : `${colorClass} hover:scale-110`
+                )}>
+                    <MapPin size={36} />
+                </div>
+            </AdvancedMarker>
+        );
+      })}
 
-      {selectedPoi && (
+      {!isMobile && selectedPoi && (
         <InfoWindow
           position={selectedPoi.location}
           onCloseClick={() => onSelectPoi(null)}
-          pixelOffset={[0, -40]}
+          pixelOffset={[0, -48]}
           maxWidth={400}
         >
-          <POIDetails poi={selectedPoi} />
+            <ScrollArea className="h-[50vh] w-full max-w-sm">
+                <div className="pr-4">
+                    <POIDetails poi={selectedPoi} />
+                </div>
+            </ScrollArea>
         </InfoWindow>
       )}
+      
       {userLocation && (
         <div className="absolute bottom-4 left-4 z-10">
           <Button size="icon" onClick={handleRecenter} type="button" title="Recentrer sur ma position">
@@ -74,15 +92,18 @@ function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSe
 
 export function POIMap({ selectedPoiId, onSelectPoi, pois }: { selectedPoiId: string | null; onSelectPoi: (poi: POI | null) => void; pois: POI[] }) {
     const { userLocation, loading: geoLoading } = useGeolocation();
+    const isMobile = useIsMobile();
     
     const defaultCenter = userLocation || (pois.length > 0 ? pois[0].location : { lat: 48.8566, lng: 2.3522 });
+    const selectedPoi = selectedPoiId ? pois.find(p => p.id === selectedPoiId) || null : null;
+
 
     if (geoLoading && pois.length === 0) {
         return <Skeleton className="w-full h-full" />;
     }
 
     return (
-        <div className="w-full h-full rounded-lg overflow-hidden border">
+        <div className="w-full h-full">
             <Map
                 defaultCenter={defaultCenter}
                 defaultZoom={13}
@@ -97,6 +118,12 @@ export function POIMap({ selectedPoiId, onSelectPoi, pois }: { selectedPoiId: st
                     selectedPoiId={selectedPoiId}
                 />
             </Map>
+            {isMobile && (
+                <MobilePOIBottomSheet 
+                    poi={selectedPoi} 
+                    onOpenChange={(open) => { if (!open) onSelectPoi(null) }} 
+                />
+            )}
         </div>
     )
 }
