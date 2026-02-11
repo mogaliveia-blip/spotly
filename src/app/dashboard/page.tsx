@@ -83,13 +83,13 @@ export default function DashboardPage() {
 
   return (
     <div className="h-full w-full flex flex-col">
-      <div className="px-2 py-1 border-b bg-background z-10">
+      <div className="border-b bg-background z-10">
         <CategoryFilter 
           selectedCategory={categoryFilter as MainCategory | 'all'}
           onSelectCategory={handleCategorySelect}
         />
       </div>
-      <div className="flex-1 relative">
+      <div className="flex-1 relative overflow-hidden">
         <POIMap 
           selectedPoiId={selectedPoiId} 
           onSelectPoi={handleSelectPoi}

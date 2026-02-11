@@ -194,28 +194,30 @@ export default function POIsPage() {
 
     return (
         <AppLayout>
-            <div className="space-y-6">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                        <CardTitle>Gérer les Points d'intérêt</CardTitle>
-                        <CardDescription>Ajoutez, modifiez ou supprimez des POIs.</CardDescription>
-                    </div>
-                    {canManagePois && (
-                        <Button asChild>
-                            <Link href="/pois/new">
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Ajouter un POI
-                            </Link>
-                        </Button>
-                    )}
-                    </CardHeader>
-                    <CardContent>
-                        <Suspense fallback={<Skeleton className="h-[300px] w-full" />}>
-                            <POIsTable />
-                        </Suspense>
-                    </CardContent>
-                </Card>
+            <div className="h-full overflow-y-auto p-6">
+                <div className="space-y-6">
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                        <div>
+                            <CardTitle>Gérer les Points d'intérêt</CardTitle>
+                            <CardDescription>Ajoutez, modifiez ou supprimez des POIs.</CardDescription>
+                        </div>
+                        {canManagePois && (
+                            <Button asChild>
+                                <Link href="/pois/new">
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Ajouter un POI
+                                </Link>
+                            </Button>
+                        )}
+                        </CardHeader>
+                        <CardContent>
+                            <Suspense fallback={<Skeleton className="h-[300px] w-full" />}>
+                                <POIsTable />
+                            </Suspense>
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
         </AppLayout>
     );

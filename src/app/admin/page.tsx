@@ -235,25 +235,27 @@ export default function AdminPage() {
 
     return (
         <AppLayout>
-            <div className="space-y-6">
-                 <Card>
-                    <CardHeader>
-                        <CardTitle>Configuration de l'application</CardTitle>
-                        <CardDescription>Gérez les paramètres globaux de l'application.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                       <AppConfigCard />
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Gestion des utilisateurs</CardTitle>
-                        <CardDescription>Gérez les rôles et les accès des utilisateurs de l'application.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <UserTable />
-                    </CardContent>
-                </Card>
+            <div className="h-full overflow-y-auto p-6">
+                <div className="space-y-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Configuration de l'application</CardTitle>
+                            <CardDescription>Gérez les paramètres globaux de l'application.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                        <AppConfigCard />
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Gestion des utilisateurs</CardTitle>
+                            <CardDescription>Gérez les rôles et les accès des utilisateurs de l'application.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <UserTable />
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
         </AppLayout>
     );

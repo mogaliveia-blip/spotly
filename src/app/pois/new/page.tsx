@@ -8,7 +8,7 @@ import { AppLayout } from '@/components/layout/app-layout';
 export default function NewPOIPage() {
   return (
     <AppLayout>
-      <div className="p-4 sm:p-6 lg:p-8">
+      <div className="h-full overflow-y-auto p-4 sm:p-6 lg:p-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold">Créer un nouveau point d'intérêt</h1>
           <Button asChild variant="outline">

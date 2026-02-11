@@ -16,8 +16,8 @@ export function CategoryFilter({ selectedCategory, onSelectCategory }: CategoryF
 
   return (
     <div className="w-full">
-      <ScrollArea className="w-full">
-        <div className="flex space-x-2 p-1">
+      <ScrollArea className="w-full whitespace-nowrap">
+        <div className="flex space-x-2 p-2">
           {allCategories.map((category) => {
             const Icon = category.icon;
             return (
