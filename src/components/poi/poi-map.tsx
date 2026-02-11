@@ -1,13 +1,12 @@
 'use client';
 
-import type { POI, Review } from '@/lib/types';
+import type { POI } from '@/lib/types';
 import { Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useEffect } from 'react';
 import { User, Crosshair, MapPin } from 'lucide-react';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
 import { Button } from '../ui/button';
-import { useAuth } from '@/hooks/use-auth-user';
 import { POIDetails } from './poi-details';
 
 
@@ -73,32 +72,12 @@ function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSe
   );
 }
 
-export function POIMap({ selectedPoiId, onSelectPoi, pois, setPois }: { selectedPoiId: string | null; onSelectPoi: (poi: POI | null) => void; pois: POI[]; setPois: React.Dispatch<React.SetStateAction<POI[]>> }) {
+export function POIMap({ selectedPoiId, onSelectPoi, pois }: { selectedPoiId: string | null; onSelectPoi: (poi: POI | null) => void; pois: POI[] }) {
     const { userLocation, loading: geoLoading } = useGeolocation();
-    const [loading, setLoading] = useState(true);
-    const { user } = useAuth();
-
-    // This effect is removed because pois are now fetched in the parent dashboard page.
-    // This component now only displays the pois it receives.
-
-    useEffect(() => {
-      if (pois.length > 0) {
-        setLoading(false);
-      }
-    }, [pois]);
-
-
-    const visiblePois = useMemo(() => {
-        if (user) {
-            return pois;
-        }
-        // Limit visible POIs for non-authenticated users
-        return pois.slice(0, 2);
-    }, [pois, user]);
-
+    
     const defaultCenter = userLocation || (pois.length > 0 ? pois[0].location : { lat: 48.8566, lng: 2.3522 });
 
-    if (loading || geoLoading) {
+    if (geoLoading && pois.length === 0) {
         return <Skeleton className="w-full h-full" />;
     }
 
@@ -113,7 +92,7 @@ export function POIMap({ selectedPoiId, onSelectPoi, pois, setPois }: { selected
                 className="w-full h-full"
             >
                 <MapController 
-                    pois={visiblePois} 
+                    pois={pois} 
                     onSelectPoi={onSelectPoi} 
                     selectedPoiId={selectedPoiId}
                 />

@@ -23,15 +23,25 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui
 import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { useState, useEffect } from 'react';
 import { Loader2, MapPin, Crosshair, ImagePlus, X } from 'lucide-react';
-import type { POI } from '@/lib/types';
+import type { POI, MainCategory, SubCategory } from '@/lib/types';
+import { categoriesMap } from '@/lib/types';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
 import { mapsConfig } from '@/lib/firebase-config';
 import Image from 'next/image';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+
+const mainCategories = Object.keys(categoriesMap) as MainCategory[];
+
+const allSubCategories = Object.values(categoriesMap).flatMap(
+    (main) => Object.keys(main.subCategories)
+) as SubCategory[];
 
 const formSchema = z.object({
   title: z.string().min(3, { message: 'Le titre doit comporter au moins 3 caractères.' }),
   description: z.string().min(10, { message: 'La description doit comporter au moins 10 caractères.' }),
+  mainCategory: z.enum(mainCategories, { required_error: 'Veuillez sélectionner une catégorie principale.' }),
+  subCategory: z.enum(allSubCategories, { required_error: 'Veuillez sélectionner une sous-catégorie.' }),
   location: z.object({
     lat: z.number(),
     lng: z.number(),
@@ -41,7 +51,17 @@ const formSchema = z.object({
     url: z.string(),
     path: z.string(),
   })).optional(),
+}).refine(data => {
+    if (data.mainCategory && data.subCategory) {
+        const validSubCategories = categoriesMap[data.mainCategory]?.subCategories;
+        return validSubCategories && Object.keys(validSubCategories).includes(data.subCategory);
+    }
+    return true;
+}, {
+    message: "La sous-catégorie ne correspond pas à la catégorie principale.",
+    path: ["subCategory"],
 });
+
 
 type POIFormValues = z.infer<typeof formSchema>;
 
@@ -88,6 +108,8 @@ export function POIForm({ poiId }: POIFormProps) {
     defaultValues: {
       title: '',
       description: '',
+      mainCategory: 'programmation',
+      subCategory: 'concert_headliner',
       location: userLocation || fallbackCenter,
       headerPhotoUrl: '',
       galleryUrls: [],
@@ -98,7 +120,8 @@ export function POIForm({ poiId }: POIFormProps) {
     control: form.control,
     name: 'galleryUrls'
   });
-
+  
+  const selectedMainCategory = form.watch('mainCategory');
   const selectedLocation = form.watch('location');
   const headerPhotoUrl = form.watch('headerPhotoUrl');
 
@@ -106,6 +129,17 @@ export function POIForm({ poiId }: POIFormProps) {
   const [headerPreviewUrl, setHeaderPreviewUrl] = useState<string | null>(null);
   const [galleryImageFiles, setGalleryImageFiles] = useState<File[]>([]);
   const [galleryPreviewUrls, setGalleryPreviewUrls] = useState<string[]>([]);
+
+  // Reset subcategory when main category changes, but not on initial edit load
+  useEffect(() => {
+    if (isEditMode && pageIsLoading) return;
+
+    const availableSubCategories = categoriesMap[selectedMainCategory]?.subCategories;
+    if (availableSubCategories) {
+        const firstSubCategory = Object.keys(availableSubCategories)[0] as SubCategory;
+        form.setValue('subCategory', firstSubCategory, { shouldValidate: true });
+    }
+  }, [selectedMainCategory, form, isEditMode, pageIsLoading]);
 
 
   useEffect(() => {
@@ -165,31 +199,32 @@ export function POIForm({ poiId }: POIFormProps) {
     let poiIdToUpdate = poiId;
   
     try {
+      const poiPayload = {
+        title: values.title,
+        description: values.description,
+        mainCategory: values.mainCategory,
+        subCategory: values.subCategory,
+        location: values.location,
+        headerPhotoUrl: values.headerPhotoUrl || '',
+        galleryUrls: values.galleryUrls || [],
+      }
+
       if (!isEditMode) {
-        const newPoiData: Omit<POI, 'id'> = {
-          title: values.title,
-          description: values.description,
-          location: values.location,
-          headerPhotoUrl: '',
-          galleryUrls: [],
-          averageRating: 0,
-          reviewCount: 0,
-        };
-        poiIdToUpdate = await createPoi(newPoiData);
+        poiIdToUpdate = await createPoi(poiPayload);
       }
   
       if (!poiIdToUpdate) {
         throw new Error('ID du POI manquant.');
       }
   
-      let finalHeaderUrl = values.headerPhotoUrl || '';
+      let finalHeaderUrl = poiPayload.headerPhotoUrl;
       if (headerImageFile) {
         const headerPath = `poi-images/${poiIdToUpdate}/header.jpg`;
         const { url } = await uploadFile(headerImageFile, headerPath);
         finalHeaderUrl = url;
       }
   
-      const existingGallery = values.galleryUrls ?? [];
+      const existingGallery = poiPayload.galleryUrls;
       let newGalleryUploads: { url: string; path: string; }[] = [];
   
       if (galleryImageFiles.length > 0) {
@@ -204,9 +239,7 @@ export function POIForm({ poiId }: POIFormProps) {
       const finalGalleryUrls = [...existingGallery, ...newGalleryUploads];
   
       await updatePoi(poiIdToUpdate, {
-        title: values.title,
-        description: values.description,
-        location: values.location,
+        ...poiPayload,
         headerPhotoUrl: finalHeaderUrl,
         galleryUrls: finalGalleryUrls,
       });
@@ -292,6 +325,56 @@ export function POIForm({ poiId }: POIFormProps) {
                           <FormMessage />
                           </FormItem>
                       )} />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <FormField
+                            control={form.control}
+                            name="mainCategory"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Catégorie principale</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Sélectionner une catégorie" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {mainCategories.map(cat => (
+                                                <SelectItem key={cat} value={cat}>
+                                                    {categoriesMap[cat].label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="subCategory"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Sous-catégorie</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Sélectionner une sous-catégorie" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {selectedMainCategory && categoriesMap[selectedMainCategory] && Object.entries(categoriesMap[selectedMainCategory].subCategories).map(([value, label]) => (
+                                                <SelectItem key={value} value={value}>
+                                                    {label as string}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    </div>
                   </CardContent>
                 </Card>
 

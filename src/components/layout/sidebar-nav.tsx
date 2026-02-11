@@ -23,7 +23,8 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '../ui/button';
 import { useEffect, useState, useMemo } from 'react';
-import type { POI } from '@/lib/types';
+import type { POI, MainCategory } from '@/lib/types';
+import { categoriesMap } from '@/lib/types';
 import { fetchPois } from '@/lib/data';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { getDistance } from '@/lib/utils';
@@ -32,6 +33,7 @@ import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
 import { Card, CardDescription } from '../ui/card';
 import { AuthDialog } from '../auth/auth-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 function POISidebarList() {
     const [pois, setPois] = useState<POI[]>([]);
@@ -41,6 +43,7 @@ function POISidebarList() {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const selectedPoiId = searchParams.get('poi');
+    const categoryFilter = (searchParams.get('category') as MainCategory) || 'all';
     const { user } = useAuth();
 
     useEffect(() => {
@@ -57,22 +60,48 @@ function POISidebarList() {
         getPois();
     }, []);
 
+    const handleFilterChange = (value: string) => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (value === 'all') {
+            params.delete('category');
+        } else {
+            params.set('category', value);
+        }
+        // Garder le POI sélectionné dans l'URL
+        router.push(`${pathname}?${params.toString()}`);
+    }
+
+
     const handleSelectPoi = (poi: POI) => {
         const params = new URLSearchParams(searchParams.toString());
         params.set('poi', poi.id);
         router.push(`${pathname}?${params.toString()}`);
     };
+    
+    const sortedPois = useMemo(() => {
+      if (!userLocation) return pois;
+      return [...pois].sort((a, b) => {
+          const distA = getDistance(userLocation.lat, userLocation.lng, a.location.lat, a.location.lng);
+          const distB = getDistance(userLocation.lat, userLocation.lng, b.location.lat, b.location.lng);
+          return distA - distB;
+      });
+    }, [pois, userLocation]);
 
     const visiblePois = useMemo(() => {
+      const filtered = sortedPois.filter(poi => 
+        categoryFilter === 'all' || poi.mainCategory === categoryFilter
+      );
+    
       if (user) {
-        return pois;
+        return filtered;
       }
-      return pois.slice(0, 2);
-    }, [pois, user]);
+      return filtered.slice(0, 2);
+    }, [sortedPois, user, categoryFilter]);
     
     if (loading) {
         return (
             <div className="px-2 space-y-2">
+                <Skeleton className="h-9 w-full" />
                 {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
             </div>
         )
@@ -80,7 +109,20 @@ function POISidebarList() {
 
     return (
       <>
-        <div className="flex flex-col gap-1 px-2">
+        <div className="px-2 space-y-2">
+            <Select value={categoryFilter} onValueChange={handleFilterChange}>
+                <SelectTrigger className="w-full text-xs h-9">
+                    <SelectValue placeholder="Filtrer par catégorie" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Toutes les catégories</SelectItem>
+                    {Object.entries(categoriesMap).map(([key, { label }]) => (
+                        <SelectItem key={key} value={key}>{label}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+        <div className="flex flex-col gap-1 px-2 mt-2">
             {visiblePois.map((poi) => (
                 <button
                     key={poi.id}

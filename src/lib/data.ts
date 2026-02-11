@@ -183,14 +183,19 @@ export function updateUserRole(uid: string, role: UserRole): void {
     });
 }
 
-export async function createPoi(poiData: Omit<POI, 'id'>): Promise<string> {
+export async function createPoi(poiData: Omit<POI, 'id' | 'averageRating' | 'reviewCount'>): Promise<string> {
     const poiCollection = collection(db, 'pois');
-    const docRef = await addDoc(poiCollection, poiData);
+    const fullPoiData = {
+        ...poiData,
+        averageRating: 0,
+        reviewCount: 0,
+    };
+    const docRef = await addDoc(poiCollection, fullPoiData);
     return docRef.id;
 }
 
 
-export async function updatePoi(poiId: string, poiData: Partial<POI>): Promise<void> {
+export async function updatePoi(poiId: string, poiData: Partial<Omit<POI, 'id' | 'averageRating' | 'reviewCount'>>): Promise<void> {
     const poiRef = doc(db, 'pois', poiId);
     try {
       await updateDoc(poiRef, poiData);

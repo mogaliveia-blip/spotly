@@ -33,6 +33,36 @@ service cloud.firestore {
     }
 
     /* =========================
+       Listes de valeurs autorisées
+       ========================= */
+    function mainCategories() {
+      return [
+        'programmation', 'nourriture_boissons', 'services_essentiels',
+        'logistique_mobilite', 'merchandising_partenaires', 'espaces_specifiques'
+      ];
+    }
+
+    function subCategories() {
+      return [
+        'concert_headliner', 'concert_scene_secondaire', 'spectacle_rue', 'dj_set',
+        'food_truck', 'restaurant', 'bar', 'buvette',
+        'toilettes', 'poste_secours', 'securite', 'point_eau',
+        'entree_principale', 'parking', 'navette', 'info_point', 'acces_pmr',
+        'boutique_officielle', 'stand_partenaire', 'sponsor',
+        'espace_vip', 'espace_enfant', 'zone_detente', 'backstage'
+      ];
+    }
+    
+    function isValidCategoryPair(mainCat, subCat) {
+      return (mainCat == 'programmation' && subCat in ['concert_headliner', 'concert_scene_secondaire', 'spectacle_rue', 'dj_set'])
+        || (mainCat == 'nourriture_boissons' && subCat in ['food_truck', 'restaurant', 'bar', 'buvette'])
+        || (mainCat == 'services_essentiels' && subCat in ['toilettes', 'poste_secours', 'securite', 'point_eau'])
+        || (mainCat == 'logistique_mobilite' && subCat in ['entree_principale', 'parking', 'navette', 'info_point', 'acces_pmr'])
+        || (mainCat == 'merchandising_partenaires' && subCat in ['boutique_officielle', 'stand_partenaire', 'sponsor'])
+        || (mainCat == 'espaces_specifiques' && subCat in ['espace_vip', 'espace_enfant', 'zone_detente', 'backstage']);
+    }
+
+    /* =========================
        USERS
        ========================= */
     match /users/{userId} {
@@ -77,9 +107,17 @@ service cloud.firestore {
       // Lecture publique
       allow read: if true;
 
-      // Création / modification / suppression :
-      // uniquement editor ou admin
-      allow create, update, delete: if isEditorOrAdmin();
+      // Création / modification :
+      // uniquement editor ou admin, avec validation des catégories
+      allow create, update: if isEditorOrAdmin()
+        && request.resource.data.mainCategory is string
+        && request.resource.data.mainCategory in mainCategories()
+        && request.resource.data.subCategory is string
+        && request.resource.data.subCategory in subCategories()
+        && isValidCategoryPair(request.resource.data.mainCategory, request.resource.data.subCategory);
+      
+      // Suppression : editor ou admin
+      allow delete: if isEditorOrAdmin();
 
       /* =========================
          REVIEWS (sous-collection)
