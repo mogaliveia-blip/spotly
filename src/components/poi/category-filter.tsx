@@ -16,8 +16,8 @@ export function CategoryFilter({ selectedCategory, onSelectCategory }: CategoryF
 
   return (
     <div className="w-full">
-      <ScrollArea className="w-full whitespace-nowrap">
-        <div className="flex w-max space-x-2 p-1">
+      <ScrollArea className="w-full">
+        <div className="flex space-x-2 p-1">
           {allCategories.map((category) => {
             const Icon = category.icon;
             return (
@@ -25,7 +25,7 @@ export function CategoryFilter({ selectedCategory, onSelectCategory }: CategoryF
                 key={category.id}
                 variant={selectedCategory === category.id ? 'default' : 'outline'}
                 size="sm"
-                className="h-9 rounded-full px-4"
+                className="h-9 rounded-full px-4 flex-shrink-0"
                 onClick={() => onSelectCategory(category.id as MainCategory | 'all')}
               >
                 <Icon className="mr-2 h-4 w-4" />
