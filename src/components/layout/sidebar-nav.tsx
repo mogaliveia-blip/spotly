@@ -182,7 +182,7 @@ export function SidebarNav() {
   return (
     <>
       <SidebarHeader>
-        <div className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <Mountain className="h-8 w-8 text-primary" />
           <div className="flex flex-col">
             <h2 className="text-lg font-semibold tracking-tight">
@@ -192,7 +192,7 @@ export function SidebarNav() {
               {user ? `Bienvenue, ${user.displayName?.split(' ')[0] || 'Utilisateur'} !` : 'Bienvenue !'}
             </p>
           </div>
-        </div>
+        </Link>
       </SidebarHeader>
       
       <SidebarContent>
