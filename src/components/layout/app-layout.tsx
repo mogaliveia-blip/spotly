@@ -9,7 +9,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { loading } = useAuth();
   
   if (loading) {
-    return null; // Or a global loading spinner
+    return null;
   }
 
   return (
@@ -20,7 +20,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <SidebarInset>
         <div className="flex flex-col h-screen">
           <Header />
-          <main className="flex-1 overflow-hidden">
+          <main className="flex-1">
             {children}
           </main>
         </div>
