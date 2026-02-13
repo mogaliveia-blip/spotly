@@ -7,24 +7,44 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Note: La vérification de rôle a été temporairement enlevée pour débugger
-    // les problèmes de permission. La règle se base uniquement sur l'authentification.
-    function isAllowedToWrite() {
-      return isSignedIn();
+    function isOneOfRoles(roles) {
+      // Note: Accéder à Firestore depuis les règles de Storage est coûteux.
+      // Pour une application à grande échelle, envisagez les custom claims.
+      // https://firebase.google.com/docs/auth/admin/custom-claims
+      return isSignedIn()
+        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in roles;
     }
 
+    function isAdmin() {
+      return isOneOfRoles(['admin']);
+    }
+
+    function isEditorOrAdmin() {
+      return isOneOfRoles(['editor', 'admin']);
+    }
+    
+    // --- Règles POI ---
     match /poi-images/{poiId}/{allPaths=**} {
-
       allow read: if true;
-
-      // Simplification : Tout utilisateur connecté peut écrire (upload/delete)
-      // des images de moins de 5MB.
-      allow write: if isAllowedToWrite()
+      allow write: if isEditorOrAdmin()
         && (
           request.method == 'delete' ||
           (
             request.resource.size < 5 * 1024 * 1024
             && request.resource.contentType.matches('image/.*')
+          )
+        );
+    }
+
+    // --- Règles Marketing ---
+    match /marketing/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin()
+       && (
+          request.method == 'delete' ||
+          (
+            request.resource.size < 2 * 1024 * 1024 // 2MB
+            && request.resource.contentType.matches('image/(jpeg|png|webp)')
           )
         );
     }

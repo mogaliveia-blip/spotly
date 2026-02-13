@@ -1,14 +1,15 @@
 'use client';
 
 import { POIMap } from '@/components/poi/poi-map';
-import type { POI, MainCategory } from '@/lib/types';
+import type { POI, MainCategory, MarketingConfig } from '@/lib/types';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useSidebar } from '@/components/ui/sidebar';
 import { useEffect, useState, useMemo } from 'react';
-import { fetchPois } from '@/lib/data';
+import { fetchPois, fetchMarketingConfig } from '@/lib/data';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth-user';
 import { CategoryFilter } from '@/components/poi/category-filter';
+import { HeroOverlay } from '@/components/marketing/hero-overlay';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   
   const [pois, setPois] = useState<POI[]>([]);
+  const [marketingConfig, setMarketingConfig] = useState<MarketingConfig | null>(null);
   const selectedPoiId = searchParams.get('poi');
   const categoryFilter = searchParams.get('category') || 'all';
   
@@ -36,7 +38,17 @@ export default function DashboardPage() {
         });
       }
     }
+    async function getMarketingConfig() {
+        try {
+            const config = await fetchMarketingConfig();
+            setMarketingConfig(config);
+        } catch (error) {
+            console.error("Impossible de charger la configuration marketing", error);
+        }
+    }
+
     getPois();
+    getMarketingConfig();
   }, [toast]);
 
   useEffect(() => {
@@ -81,6 +93,8 @@ export default function DashboardPage() {
     return limitedPois;
   }, [pois, categoryFilter, user, selectedPoiId]);
 
+  const showHero = !user && marketingConfig?.heroEnabled;
+
   return (
     <div className="h-full w-full flex flex-col">
       <div className="border-b bg-background z-10">
@@ -90,6 +104,7 @@ export default function DashboardPage() {
         />
       </div>
       <div className="flex-1 relative overflow-hidden">
+        {showHero && marketingConfig && <HeroOverlay config={marketingConfig} />}
         <POIMap 
           selectedPoiId={selectedPoiId} 
           onSelectPoi={handleSelectPoi}

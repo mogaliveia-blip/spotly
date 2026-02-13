@@ -4,8 +4,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { useRouter } from 'next/navigation';
-import { fetchUsers, updateUserRole, fetchAppConfig, updateAppConfig } from '@/lib/data';
-import type { AppUser, UserRole, AppConfig } from '@/lib/types';
+import { fetchUsers, updateUserRole, fetchAppConfig, updateAppConfig, fetchMarketingConfig, updateMarketingConfig, uploadFile } from '@/lib/data';
+import type { AppUser, UserRole, AppConfig, MarketingConfig } from '@/lib/types';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -14,10 +14,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Trash2, Loader2 } from 'lucide-react';
+import { Trash2, Loader2, ImagePlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import Image from 'next/image';
 
 function AppConfigCard() {
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -77,6 +79,145 @@ function AppConfigCard() {
   );
 }
 
+function MarketingConfigCard() {
+    const [config, setConfig] = useState<MarketingConfig | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const { toast } = useToast();
+    const [imageFile, setImageFile] = useState<File | null>(null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        fetchMarketingConfig().then(data => {
+            setConfig(data);
+            setLoading(false);
+        }).catch(() => {
+            toast({ title: "Erreur", description: "Impossible de charger la configuration marketing.", variant: "destructive" });
+            setLoading(false);
+        });
+    }, [toast]);
+    
+    useEffect(() => {
+        if (!imageFile) {
+            setPreviewUrl(null);
+            return;
+        }
+        const url = URL.createObjectURL(imageFile);
+        setPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [imageFile]);
+    
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (file.size > 2 * 1024 * 1024) {
+            toast({ title: "Fichier trop lourd", description: "L'image ne doit pas dépasser 2MB.", variant: "destructive" });
+            return;
+        }
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+            toast({ title: "Format invalide", description: "Veuillez sélectionner une image JPG, PNG, ou WEBP.", variant: "destructive" });
+            return;
+        }
+        setImageFile(file);
+    };
+    
+    const handleSave = async () => {
+        if (!config) return;
+        setSaving(true);
+        try {
+            let imageUrl = config.heroImageUrl;
+            if (imageFile) {
+                const { url } = await uploadFile(imageFile, `marketing/hero/${crypto.randomUUID()}`);
+                imageUrl = url;
+            }
+            const newConfig = { ...config, heroImageUrl: imageUrl };
+            await updateMarketingConfig(newConfig);
+            setConfig(newConfig);
+            setImageFile(null);
+            setPreviewUrl(null);
+            toast({ title: "Configuration marketing mise à jour" });
+        } catch (error) {
+            toast({ title: "Erreur", description: "Impossible de sauvegarder la configuration.", variant: "destructive" });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) {
+        return <Skeleton className="h-96 w-full" />;
+    }
+
+    if (!config) {
+        return <p>Impossible de charger la configuration.</p>;
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between rounded-md border p-4">
+                <div className="flex-1 space-y-1">
+                    <Label htmlFor="hero-enabled-switch" className="text-base font-medium">Activer l'overlay marketing</Label>
+                    <p className="text-sm text-muted-foreground">Si activé, un encart promotionnel s'affichera sur la carte pour les visiteurs non connectés.</p>
+                </div>
+                <Switch id="hero-enabled-switch" checked={config.heroEnabled} onCheckedChange={checked => setConfig({ ...config, heroEnabled: checked })} />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="heroTitle">Titre</Label>
+                        <Input id="heroTitle" value={config.heroTitle} onChange={e => setConfig({ ...config, heroTitle: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="heroSubtitle">Sous-titre</Label>
+                        <Textarea id="heroSubtitle" value={config.heroSubtitle} onChange={e => setConfig({ ...config, heroSubtitle: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Image de fond</Label>
+                         <Input id="hero-image-upload" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFileChange} className="hidden" />
+                        <label htmlFor="hero-image-upload" className="relative aspect-video w-full border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
+                           {(previewUrl || config.heroImageUrl) ? (
+                                <Image src={previewUrl || config.heroImageUrl} alt="Aperçu du Hero" fill className="object-cover rounded-lg" />
+                           ) : (
+                               <div className="text-center text-muted-foreground">
+                                   <ImagePlus className="mx-auto h-12 w-12" />
+                                   <p>Cliquez pour ajouter une image (max 2MB)</p>
+                               </div>
+                           )}
+                        </label>
+                    </div>
+                </div>
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="heroCtaText">Texte du bouton (CTA)</Label>
+                        <Input id="heroCtaText" value={config.heroCtaText} onChange={e => setConfig({ ...config, heroCtaText: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="heroCtaMode">Action du bouton</Label>
+                        <Select value={config.heroCtaMode} onValueChange={value => setConfig({ ...config, heroCtaMode: value as any })}>
+                            <SelectTrigger id="heroCtaMode"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="auth">Ouvrir la modale de connexion</SelectItem>
+                                <SelectItem value="external">Ouvrir un lien externe</SelectItem>
+                                <SelectItem value="none">Aucun bouton</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    {config.heroCtaMode === 'external' && (
+                         <div className="space-y-2">
+                            <Label htmlFor="heroCtaLink">Lien externe du CTA</Label>
+                            <Input id="heroCtaLink" placeholder="https://example.com" value={config.heroCtaLink} onChange={e => setConfig({ ...config, heroCtaLink: e.target.value })} />
+                        </div>
+                    )}
+                </div>
+            </div>
+             <Button onClick={handleSave} disabled={saving}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Sauvegarder la configuration
+            </Button>
+        </div>
+    );
+}
 
 function UserTable() {
   const [users, setUsers] = useState<AppUser[]>([]);
@@ -236,14 +377,23 @@ export default function AdminPage() {
     return (
         <AppLayout>
             <div className="h-full overflow-y-auto p-6">
-                <div className="space-y-6">
+                <div className="space-y-8">
                     <Card>
                         <CardHeader>
                             <CardTitle>Configuration de l'application</CardTitle>
                             <CardDescription>Gérez les paramètres globaux de l'application.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                        <AppConfigCard />
+                            <AppConfigCard />
+                        </CardContent>
+                    </Card>
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Configuration Marketing</CardTitle>
+                            <CardDescription>Gérez le contenu de l'overlay marketing pour les nouveaux visiteurs.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <MarketingConfigCard />
                         </CardContent>
                     </Card>
                     <Card>

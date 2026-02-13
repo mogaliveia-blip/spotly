@@ -1,7 +1,7 @@
 // src/lib/data.ts
 import { db, storage } from './firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, serverTimestamp, runTransaction, Timestamp } from 'firebase/firestore';
-import type { POI, Review, AppUser, UserRole, AppConfig } from './types';
+import type { POI, Review, AppUser, UserRole, AppConfig, MarketingConfig } from './types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
@@ -39,6 +39,47 @@ export async function updateAppConfig(config: Partial<AppConfig>): Promise<void>
     errorEmitter.emit('permission-error', permissionError);
     throw serverError;
   }
+}
+
+/**
+ * Fetches the marketing configuration.
+ * @returns A promise that resolves with the marketing configuration.
+ */
+export async function fetchMarketingConfig(): Promise<MarketingConfig> {
+    const configRef = doc(db, 'config', 'marketing');
+    const configSnap = await getDoc(configRef);
+    if (configSnap.exists()) {
+        return configSnap.data() as MarketingConfig;
+    }
+    // Default config if it doesn't exist
+    return {
+        heroEnabled: false,
+        heroTitle: "Découvrez le festival",
+        heroSubtitle: "Connectez-vous pour accéder à toutes les fonctionnalités et profiter d'une expérience complète.",
+        heroImageUrl: "https://picsum.photos/seed/marketing/1200/800",
+        heroCtaText: "Se connecter",
+        heroCtaMode: 'auth',
+        heroCtaLink: ''
+    };
+}
+
+/**
+ * Updates the marketing configuration.
+ * @param config The partial marketing config to update.
+ */
+export async function updateMarketingConfig(config: Partial<MarketingConfig>): Promise<void> {
+    const configRef = doc(db, 'config', 'marketing');
+    try {
+        await setDoc(configRef, config, { merge: true });
+    } catch (serverError: any) {
+        const permissionError = new FirestorePermissionError({
+            path: configRef.path,
+            operation: 'update',
+            requestResourceData: config,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        throw serverError;
+    }
 }
 
 

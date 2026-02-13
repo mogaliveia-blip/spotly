@@ -160,3 +160,13 @@ export interface Review {
 export interface AppConfig {
   isLandingPageActive: boolean;
 }
+
+export interface MarketingConfig {
+  heroEnabled: boolean;
+  heroTitle: string;
+  heroSubtitle: string;
+  heroImageUrl: string;
+  heroCtaText: string;
+  heroCtaMode: 'auth' | 'external' | 'none';
+  heroCtaLink?: string;
+}
