@@ -40,8 +40,8 @@ export function isSponsorActive(poi: POI): boolean {
  */
 export function getSponsorLabel(level: 'standard' | 'premium' | 'official'): string {
     switch (level) {
-        case 'standard': return 'Sponsor';
-        case 'premium': return 'Sponsor Premium';
+        case 'standard': return 'Partenaire';
+        case 'premium': return 'Partenaire Premium';
         case 'official': return 'Partenaire Officiel';
         default: return '';
     }

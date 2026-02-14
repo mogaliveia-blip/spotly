@@ -36,7 +36,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Calendar } from '@/components/ui/calendar';
 
 
 const mainCategories = Object.keys(categoriesMap) as MainCategory[];
@@ -429,7 +428,7 @@ export function POIForm({ poiId }: POIFormProps) {
                 {canManageSponsor && (
                     <Card>
                         <CardHeader>
-                            <CardTitle>Sponsoring (optionnel)</CardTitle>
+                            <CardTitle>Partenariat (optionnel)</CardTitle>
                             <CardDescription>Gérez la mise en avant de ce POI.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
@@ -439,7 +438,7 @@ export function POIForm({ poiId }: POIFormProps) {
                                 render={({ field }) => (
                                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                                         <div className="space-y-0.5">
-                                            <FormLabel>Activer le sponsoring</FormLabel>
+                                            <FormLabel>Activer le partenariat</FormLabel>
                                             <FormDescription>Mettre ce POI en avant.</FormDescription>
                                         </div>
                                         <FormControl>
@@ -459,7 +458,7 @@ export function POIForm({ poiId }: POIFormProps) {
                                             name="sponsor.level"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>Niveau de sponsoring</FormLabel>
+                                                    <FormLabel>Niveau de partenariat</FormLabel>
                                                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                                                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                                         <SelectContent>
