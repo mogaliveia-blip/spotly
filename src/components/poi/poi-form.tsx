@@ -22,7 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { useState, useEffect } from 'react';
-import { Loader2, MapPin, Crosshair, ImagePlus, X } from 'lucide-react';
+import { Loader2, MapPin, Crosshair, ImagePlus, X, Calendar as CalendarIcon } from 'lucide-react';
 import type { POI, MainCategory, SubCategory } from '@/lib/types';
 import { categoriesMap } from '@/lib/types';
 import { useGeolocation } from '@/providers/geolocation-provider';
@@ -30,6 +30,14 @@ import { Skeleton } from '../ui/skeleton';
 import { mapsConfig } from '@/lib/firebase-config';
 import Image from 'next/image';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { useAuth } from '@/hooks/use-auth-user';
+import { Switch } from '@/components/ui/switch';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import { Calendar } from '@/components/ui/calendar';
+
 
 const mainCategories = Object.keys(categoriesMap) as MainCategory[];
 
@@ -51,6 +59,13 @@ const formSchema = z.object({
     url: z.string(),
     path: z.string(),
   })).optional(),
+  sponsor: z.object({
+    enabled: z.boolean().default(false),
+    level: z.enum(['standard', 'premium', 'official']).default('standard'),
+    priority: z.coerce.number().min(0, "La priorité doit être positive.").default(0),
+    startDate: z.date().optional(),
+    endDate: z.date().optional(),
+  }).optional().default({ enabled: false, level: 'standard', priority: 0 }),
 }).refine(data => {
     if (data.mainCategory && data.subCategory) {
         const validSubCategories = categoriesMap[data.mainCategory]?.subCategories;
@@ -60,6 +75,14 @@ const formSchema = z.object({
 }, {
     message: "La sous-catégorie ne correspond pas à la catégorie principale.",
     path: ["subCategory"],
+}).refine(data => {
+    if (data.sponsor?.startDate && data.sponsor?.endDate) {
+        return data.sponsor.endDate >= data.sponsor.startDate;
+    }
+    return true;
+}, {
+    message: "La date de fin doit être après la date de début.",
+    path: ["sponsor", "endDate"],
 });
 
 
@@ -99,8 +122,10 @@ export function POIForm({ poiId }: POIFormProps) {
   const [formIsLoading, setFormIsLoading] = useState(false);
   const [pageIsLoading, setPageIsLoading] = useState(true);
   const { userLocation, loading: geoLoading } = useGeolocation();
+  const { role } = useAuth();
   
   const isEditMode = !!poiId;
+  const canManageSponsor = role === 'admin' || role === 'editor';
   const fallbackCenter = { lat: 48.8566, lng: 2.3522 }; // Paris
 
   const form = useForm<POIFormValues>({
@@ -124,6 +149,7 @@ export function POIForm({ poiId }: POIFormProps) {
   const selectedMainCategory = form.watch('mainCategory');
   const selectedLocation = form.watch('location');
   const headerPhotoUrl = form.watch('headerPhotoUrl');
+  const sponsorEnabled = form.watch('sponsor.enabled');
 
   const [headerImageFile, setHeaderImageFile] = useState<File | null>(null);
   const [headerPreviewUrl, setHeaderPreviewUrl] = useState<string | null>(null);
@@ -149,7 +175,16 @@ export function POIForm({ poiId }: POIFormProps) {
         try {
           const poiData = await fetchPoiById(poiId);
           if (poiData) {
-            form.reset(poiData);
+            // Firestore timestamps need to be converted to JS Dates for the form
+            const formData = {
+                ...poiData,
+                sponsor: {
+                    ...poiData.sponsor,
+                    startDate: poiData.sponsor?.startDate ? (poiData.sponsor.startDate as any).toDate() : undefined,
+                    endDate: poiData.sponsor?.endDate ? (poiData.sponsor.endDate as any).toDate() : undefined,
+                }
+            }
+            form.reset(formData as POIFormValues);
           } else {
              toast({ title: "Erreur", description: "POI non trouvé.", variant: "destructive" });
              router.push('/pois');
@@ -199,32 +234,38 @@ export function POIForm({ poiId }: POIFormProps) {
     let poiIdToUpdate = poiId;
   
     try {
-      const poiPayload = {
-        title: values.title,
-        description: values.description,
-        mainCategory: values.mainCategory,
-        subCategory: values.subCategory,
-        location: values.location,
-        headerPhotoUrl: values.headerPhotoUrl || '',
-        galleryUrls: values.galleryUrls || [],
-      }
+        const poiPayload: Partial<POI> = { ...values };
 
+        if (!poiPayload.sponsor?.enabled) {
+            poiPayload.sponsor = undefined; // This will remove the field when sending to Firestore
+        }
+        
       if (!isEditMode) {
-        poiIdToUpdate = await createPoi(poiPayload);
+        const createPayload = {
+            title: poiPayload.title!,
+            description: poiPayload.description!,
+            mainCategory: poiPayload.mainCategory!,
+            subCategory: poiPayload.subCategory!,
+            location: poiPayload.location!,
+            headerPhotoUrl: '',
+            galleryUrls: [],
+            sponsor: poiPayload.sponsor,
+        }
+        poiIdToUpdate = await createPoi(createPayload);
       }
   
       if (!poiIdToUpdate) {
         throw new Error('ID du POI manquant.');
       }
   
-      let finalHeaderUrl = poiPayload.headerPhotoUrl;
+      let finalHeaderUrl = values.headerPhotoUrl || '';
       if (headerImageFile) {
         const headerPath = `poi-images/${poiIdToUpdate}/header.jpg`;
         const { url } = await uploadFile(headerImageFile, headerPath);
         finalHeaderUrl = url;
       }
   
-      const existingGallery = poiPayload.galleryUrls;
+      const existingGallery = values.galleryUrls || [];
       let newGalleryUploads: { url: string; path: string; }[] = [];
   
       if (galleryImageFiles.length > 0) {
@@ -377,6 +418,143 @@ export function POIForm({ poiId }: POIFormProps) {
                     </div>
                   </CardContent>
                 </Card>
+
+                {canManageSponsor && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Sponsoring (optionnel)</CardTitle>
+                            <CardDescription>Gérez la mise en avant de ce POI.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <FormField
+                                control={form.control}
+                                name="sponsor.enabled"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                                        <div className="space-y-0.5">
+                                            <FormLabel>Activer le sponsoring</FormLabel>
+                                            <FormDescription>Mettre ce POI en avant.</FormDescription>
+                                        </div>
+                                        <FormControl>
+                                            <Switch
+                                                checked={field.value}
+                                                onCheckedChange={field.onChange}
+                                            />
+                                        </FormControl>
+                                    </FormItem>
+                                )}
+                            />
+                            {sponsorEnabled && (
+                                <div className="space-y-4 pt-4 border-t">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <FormField
+                                            control={form.control}
+                                            name="sponsor.level"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Niveau de sponsoring</FormLabel>
+                                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                        <SelectContent>
+                                                            <SelectItem value="standard">Standard</SelectItem>
+                                                            <SelectItem value="premium">Premium</SelectItem>
+                                                            <SelectItem value="official">Officiel</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="sponsor.priority"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Priorité</FormLabel>
+                                                    <FormControl><Input type="number" min="0" {...field} /></FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                         <FormField
+                                            control={form.control}
+                                            name="sponsor.startDate"
+                                            render={({ field }) => (
+                                                <FormItem className="flex flex-col">
+                                                <FormLabel>Date de début (optionnel)</FormLabel>
+                                                <Popover>
+                                                    <PopoverTrigger asChild>
+                                                    <FormControl>
+                                                        <Button
+                                                        variant={"outline"}
+                                                        className={cn( "pl-3 text-left font-normal", !field.value && "text-muted-foreground" )}
+                                                        >
+                                                        {field.value ? (
+                                                            format(field.value, "PPP", { locale: fr })
+                                                        ) : (
+                                                            <span>Choisir une date</span>
+                                                        )}
+                                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                        </Button>
+                                                    </FormControl>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="w-auto p-0" align="start">
+                                                    <Calendar
+                                                        mode="single"
+                                                        selected={field.value}
+                                                        onSelect={field.onChange}
+                                                        initialFocus
+                                                    />
+                                                    </PopoverContent>
+                                                </Popover>
+                                                <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="sponsor.endDate"
+                                            render={({ field }) => (
+                                                <FormItem className="flex flex-col">
+                                                <FormLabel>Date de fin (optionnel)</FormLabel>
+                                                <Popover>
+                                                    <PopoverTrigger asChild>
+                                                    <FormControl>
+                                                        <Button
+                                                        variant={"outline"}
+                                                        className={cn( "pl-3 text-left font-normal", !field.value && "text-muted-foreground" )}
+                                                        >
+                                                        {field.value ? (
+                                                            format(field.value, "PPP", { locale: fr })
+                                                        ) : (
+                                                            <span>Choisir une date</span>
+                                                        )}
+                                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                        </Button>
+                                                    </FormControl>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="w-auto p-0" align="start">
+                                                    <Calendar
+                                                        mode="single"
+                                                        selected={field.value}
+                                                        onSelect={field.onChange}
+                                                        initialFocus
+                                                    />
+                                                    </PopoverContent>
+                                                </Popover>
+                                                <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
+
 
                 <Card>
                   <CardHeader>
