@@ -14,10 +14,20 @@ import { categoriesMap } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
 
-function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSelectPoi: (poi: POI | null) => void, selectedPoiId: string | null }) {
+function MapController({
+  pois,
+  onSelectPoi,
+  selectedPoiId
+}: {
+  pois: POI[];
+  onSelectPoi: (poi: POI | null) => void;
+  selectedPoiId: string | null;
+}) {
   const { userLocation } = useGeolocation();
   const map = useMap();
-  const selectedPoi = selectedPoiId ? pois.find(p => p.id === selectedPoiId) || null : null;
+  const selectedPoi = selectedPoiId
+    ? pois.find(p => p.id === selectedPoiId) || null
+    : null;
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -25,7 +35,6 @@ function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSe
       map.panTo(selectedPoi.location);
     }
   }, [selectedPoi, map]);
-
 
   const handleRecenter = () => {
     if (map && userLocation) {
@@ -36,34 +45,42 @@ function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSe
 
   return (
     <>
+      {/* Position utilisateur */}
       {userLocation && (
         <AdvancedMarker position={userLocation}>
-            <div className="text-blue-500 rounded-full bg-white p-1 shadow-lg">
-                <User size={24} />
-            </div>
+          <div className="text-blue-500 rounded-full bg-white p-1 shadow-lg">
+            <User size={24} />
+          </div>
         </AdvancedMarker>
       )}
 
+      {/* POI Markers */}
       {pois.map((poi) => {
         const isSelected = selectedPoi?.id === poi.id;
-        const colorClass = categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
-        
+        const colorClass =
+          categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
+
         return (
-            <AdvancedMarker
-                key={poi.id}
-                position={poi.location}
-                onClick={() => onSelectPoi(poi)}
+          <AdvancedMarker
+            key={poi.id}
+            position={poi.location}
+            onClick={() => onSelectPoi(poi)}
+          >
+            <div
+              className={cn(
+                'transition-transform drop-shadow-md',
+                isSelected
+                  ? 'text-accent scale-125'
+                  : `${colorClass} hover:scale-110`
+              )}
             >
-                <div className={cn(
-                    'transition-transform drop-shadow-md',
-                    isSelected ? 'text-accent scale-125' : `${colorClass} hover:scale-110`
-                )}>
-                    <MapPin size={36} />
-                </div>
-            </AdvancedMarker>
+              <MapPin size={36} />
+            </div>
+          </AdvancedMarker>
         );
       })}
 
+      {/* InfoWindow desktop */}
       {!isMobile && selectedPoi && (
         <InfoWindow
           position={selectedPoi.location}
@@ -71,17 +88,23 @@ function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSe
           pixelOffset={[0, -48]}
           maxWidth={400}
         >
-            <ScrollArea className="h-[50vh] w-full max-w-sm">
-                <div className="pr-4">
-                    <POIDetails poi={selectedPoi} />
-                </div>
-            </ScrollArea>
+          <ScrollArea className="h-[50vh] w-full max-w-sm">
+            <div className="pr-4">
+              <POIDetails poi={selectedPoi} />
+            </div>
+          </ScrollArea>
         </InfoWindow>
       )}
-      
+
+      {/* Bouton recentrage */}
       {userLocation && (
         <div className="absolute bottom-4 left-4 z-10">
-          <Button size="icon" onClick={handleRecenter} type="button" title="Recentrer sur ma position">
+          <Button
+            size="icon"
+            onClick={handleRecenter}
+            type="button"
+            title="Recentrer sur ma position"
+          >
             <Crosshair className="h-5 w-5" />
           </Button>
         </div>
@@ -90,40 +113,60 @@ function MapController({ pois, onSelectPoi, selectedPoiId }: { pois: POI[], onSe
   );
 }
 
-export function POIMap({ selectedPoiId, onSelectPoi, pois }: { selectedPoiId: string | null; onSelectPoi: (poi: POI | null) => void; pois: POI[] }) {
-    const { userLocation, loading: geoLoading } = useGeolocation();
-    const isMobile = useIsMobile();
-    
-    const defaultCenter = userLocation || (pois.length > 0 ? pois[0].location : { lat: 48.8566, lng: 2.3522 });
-    const selectedPoi = selectedPoiId ? pois.find(p => p.id === selectedPoiId) || null : null;
+export function POIMap({
+  selectedPoiId,
+  onSelectPoi,
+  pois
+}: {
+  selectedPoiId: string | null;
+  onSelectPoi: (poi: POI | null) => void;
+  pois: POI[];
+}) {
+  const { userLocation, loading: geoLoading } = useGeolocation();
+  const isMobile = useIsMobile();
 
+  const defaultCenter =
+    userLocation ||
+    (pois.length > 0
+      ? pois[0].location
+      : { lat: 48.8566, lng: 2.3522 });
 
-    if (geoLoading && pois.length === 0) {
-        return <Skeleton className="w-full h-full" />;
-    }
+  const selectedPoi = selectedPoiId
+    ? pois.find(p => p.id === selectedPoiId) || null
+    : null;
 
-    return (
-        <div className="w-full h-full">
-            <Map
-                defaultCenter={defaultCenter}
-                defaultZoom={13}
-                gestureHandling={'greedy'}
-                disableDefaultUI={false}
-                mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
-                className="w-full h-full"
-            >
-                <MapController 
-                    pois={pois} 
-                    onSelectPoi={onSelectPoi} 
-                    selectedPoiId={selectedPoiId}
-                />
-            </Map>
-            {isMobile && (
-                <MobilePOIBottomSheet 
-                    poi={selectedPoi} 
-                    onOpenChange={(open) => { if (!open) onSelectPoi(null) }} 
-                />
-            )}
-        </div>
-    )
+  if (geoLoading && pois.length === 0) {
+    return <Skeleton className="w-full h-full" />;
+  }
+
+  return (
+    <div className="w-full h-full">
+      <Map
+        defaultCenter={defaultCenter}
+        defaultZoom={13}
+        gestureHandling="greedy"
+        mapTypeControl={false}
+        streetViewControl={false}
+        fullscreenControl={false}
+        disableDefaultUI={false}
+        mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
+        className="w-full h-full"
+      >
+        <MapController
+          pois={pois}
+          onSelectPoi={onSelectPoi}
+          selectedPoiId={selectedPoiId}
+        />
+      </Map>
+
+      {isMobile && (
+        <MobilePOIBottomSheet
+          poi={selectedPoi}
+          onOpenChange={(open) => {
+            if (!open) onSelectPoi(null);
+          }}
+        />
+      )}
+    </div>
+  );
 }

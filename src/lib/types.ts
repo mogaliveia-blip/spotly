@@ -129,6 +129,13 @@ export const categoriesMap: Record<MainCategory, {
   },
 };
 
+export interface POISponsor {
+  enabled: boolean;
+  level: 'standard' | 'premium' | 'official';
+  priority: number; // 0 = normal, plus élevé = plus prioritaire
+  startDate?: Date;
+  endDate?: Date;
+}
 
 export interface POI {
   id: string;
@@ -144,6 +151,7 @@ export interface POI {
   subCategory: SubCategory;
   averageRating: number;
   reviewCount: number;
+  sponsor?: POISponsor;
 }
 
 export interface Review {
