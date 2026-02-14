@@ -79,11 +79,61 @@ export default function DashboardPage() {
   }
 
   const visiblePois = useMemo(() => {
-    const filtered = pois.filter(p => categoryFilter === 'all' || p.mainCategory === categoryFilter);
-    if(user) {
-        return filtered;
+    // 1. Filtrer par catégorie (logique existante)
+    const filteredByCategory = pois.filter(p => categoryFilter === 'all' || p.mainCategory === categoryFilter);
+
+    // 2. Définir la logique pour un sponsor actif
+    const isSponsorActive = (poi: POI): boolean => {
+      if (!poi.sponsor || !poi.sponsor.enabled) {
+        return false;
+      }
+      const now = new Date();
+      
+      const getJsDate = (date: any): Date | null => {
+        if (!date) return null;
+        if (date.toDate) return date.toDate(); // Convertit un Timestamp Firestore
+        if (date instanceof Date) return date; // Déjà une Date JS
+        return null; // Type inconnu, on l'ignore
+      };
+      
+      const startDate = getJsDate(poi.sponsor.startDate);
+      const endDate = getJsDate(poi.sponsor.endDate);
+      
+      if (!startDate && !endDate) {
+        return true; // Sponsor actif si pas de dates
+      }
+      
+      // Gère les intervalles ouverts (si une seule date est définie)
+      const isAfterStart = startDate ? now >= startDate : true;
+      const isBeforeEnd = endDate ? now <= endDate : true;
+
+      return isAfterStart && isBeforeEnd;
+    };
+    
+    // 3. Séparer les POIs sponsorisés actifs des autres
+    const activeSponsors: POI[] = [];
+    const otherPois: POI[] = [];
+    
+    for (const poi of filteredByCategory) {
+      if (isSponsorActive(poi)) {
+        activeSponsors.push(poi);
+      } else {
+        otherPois.push(poi);
+      }
     }
-    const limitedPois = filtered.slice(0, 2);
+    
+    // 4. Trier les sponsors actifs par priorité (décroissante)
+    activeSponsors.sort((a, b) => b.sponsor!.priority - a.sponsor!.priority);
+    
+    // 5. Concaténer les listes
+    const sortedPois = [...activeSponsors, ...otherPois];
+
+    // 6. Appliquer la logique "freemium" pour les visiteurs
+    if (user) {
+        return sortedPois;
+    }
+    
+    const limitedPois = sortedPois.slice(0, 2);
     if (selectedPoiId) {
       const selectedPoi = pois.find(p => p.id === selectedPoiId);
       if (selectedPoi && !limitedPois.some(p => p.id === selectedPoiId)) {
