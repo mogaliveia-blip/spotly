@@ -1,3 +1,4 @@
+// src/components/poi/poi-map.tsx
 'use client';
 
 import type { POI } from '@/lib/types';
@@ -13,6 +14,7 @@ import { MobilePOIBottomSheet } from './mobile-poi-bottom-sheet';
 import { categoriesMap } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
+import { isSponsorActive } from '@/lib/sponsor-utils';
 
 function MapController({
   pois,
@@ -57,8 +59,15 @@ function MapController({
       {/* POI Markers */}
       {pois.map((poi) => {
         const isSelected = selectedPoi?.id === poi.id;
-        const colorClass =
-          categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
+        const sponsorIsActive = isSponsorActive(poi);
+        
+        let colorClass = categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
+        if (sponsorIsActive) {
+            colorClass = 'text-amber-500'; // Specific color for active sponsors
+        }
+        if (isSelected) {
+            colorClass = 'text-accent';
+        }
 
         return (
           <AdvancedMarker
@@ -69,9 +78,11 @@ function MapController({
             <div
               className={cn(
                 'transition-transform drop-shadow-md',
+                colorClass,
                 isSelected
-                  ? 'text-accent scale-125'
-                  : `${colorClass} hover:scale-110`
+                  ? 'scale-125'
+                  : 'hover:scale-110',
+                sponsorIsActive && !isSelected && 'drop-shadow-lg'
               )}
             >
               <MapPin size={36} />
@@ -129,7 +140,7 @@ export function POIMap({
     userLocation ||
     (pois.length > 0
       ? pois[0].location
-      : { lat: 48.8566, lng: 2.3522 });
+      : { lat: -21.3393, lng: 55.4781 }); // Default to Réunion Island
 
   const selectedPoi = selectedPoiId
     ? pois.find(p => p.id === selectedPoiId) || null

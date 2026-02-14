@@ -1,3 +1,4 @@
+// src/components/poi/poi-details.tsx
 'use client'
 
 import type { POI, Review } from '@/lib/types';
@@ -14,6 +15,8 @@ import { POIGallery } from './poi-gallery';
 import { getDistance } from '@/lib/utils';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Navigation } from 'lucide-react';
+import { SponsorBadge } from '../sponsor/sponsor-badge';
+import { isSponsorActive } from '@/lib/sponsor-utils';
 
 interface POIDetailsProps {
   poi: POI;
@@ -49,7 +52,10 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
         </div>
       )}
       <div className="space-y-2 p-1">
-        <h3 className="font-bold text-lg">{poi.title}</h3>
+        <div className="flex items-center gap-2">
+            <h3 className="font-bold text-lg">{poi.title}</h3>
+            {isSponsorActive(poi) && <SponsorBadge sponsor={poi.sponsor} />}
+        </div>
         
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
           {userLocation && (

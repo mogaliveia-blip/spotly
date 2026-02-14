@@ -1,3 +1,4 @@
+// src/app/dashboard/page.tsx
 'use client';
 
 import { POIMap } from '@/components/poi/poi-map';
@@ -10,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth-user';
 import { CategoryFilter } from '@/components/poi/category-filter';
 import { HeroOverlay } from '@/components/marketing/hero-overlay';
+import { isSponsorActive } from '@/lib/sponsor-utils';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -79,38 +81,10 @@ export default function DashboardPage() {
   }
 
   const visiblePois = useMemo(() => {
-    // 1. Filtrer par catégorie (logique existante)
+    // 1. Filter by category
     const filteredByCategory = pois.filter(p => categoryFilter === 'all' || p.mainCategory === categoryFilter);
 
-    // 2. Définir la logique pour un sponsor actif
-    const isSponsorActive = (poi: POI): boolean => {
-      if (!poi.sponsor || !poi.sponsor.enabled) {
-        return false;
-      }
-      const now = new Date();
-      
-      const getJsDate = (date: any): Date | null => {
-        if (!date) return null;
-        if (date.toDate) return date.toDate(); // Convertit un Timestamp Firestore
-        if (date instanceof Date) return date; // Déjà une Date JS
-        return null; // Type inconnu, on l'ignore
-      };
-      
-      const startDate = getJsDate(poi.sponsor.startDate);
-      const endDate = getJsDate(poi.sponsor.endDate);
-      
-      if (!startDate && !endDate) {
-        return true; // Sponsor actif si pas de dates
-      }
-      
-      // Gère les intervalles ouverts (si une seule date est définie)
-      const isAfterStart = startDate ? now >= startDate : true;
-      const isBeforeEnd = endDate ? now <= endDate : true;
-
-      return isAfterStart && isBeforeEnd;
-    };
-    
-    // 3. Séparer les POIs sponsorisés actifs des autres
+    // 2. Separate active sponsors from other POIs
     const activeSponsors: POI[] = [];
     const otherPois: POI[] = [];
     
@@ -122,13 +96,13 @@ export default function DashboardPage() {
       }
     }
     
-    // 4. Trier les sponsors actifs par priorité (décroissante)
-    activeSponsors.sort((a, b) => b.sponsor!.priority - a.sponsor!.priority);
+    // 3. Sort active sponsors by priority (descending)
+    activeSponsors.sort((a, b) => (b.sponsor?.priority ?? 0) - (a.sponsor?.priority ?? 0));
     
-    // 5. Concaténer les listes
+    // 4. Concatenate the lists
     const sortedPois = [...activeSponsors, ...otherPois];
 
-    // 6. Appliquer la logique "freemium" pour les visiteurs
+    // 5. Apply "freemium" logic for visitors
     if (user) {
         return sortedPois;
     }
@@ -146,13 +120,11 @@ export default function DashboardPage() {
   const showHero = !user && marketingConfig?.heroEnabled;
 
   return (
-    <div className="h-full w-full flex flex-col">
-      <div className="border-b bg-background z-10">
+    <div className="flex flex-col h-full w-full">
         <CategoryFilter 
           selectedCategory={categoryFilter as MainCategory | 'all'}
           onSelectCategory={handleCategorySelect}
         />
-      </div>
       <div className="flex-1 relative overflow-hidden">
         {showHero && marketingConfig && <HeroOverlay config={marketingConfig} />}
         <POIMap 

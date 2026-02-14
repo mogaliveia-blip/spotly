@@ -1,3 +1,4 @@
+// src/components/layout/sidebar-nav.tsx
 'use client';
 
 import {
@@ -24,7 +25,6 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '../ui/button';
 import { useEffect, useState, useMemo } from 'react';
 import type { POI, MainCategory } from '@/lib/types';
-import { categoriesMap } from '@/lib/types';
 import { fetchPois } from '@/lib/data';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { getDistance } from '@/lib/utils';
@@ -33,6 +33,8 @@ import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
 import { Card, CardDescription } from '../ui/card';
 import { AuthDialog } from '../auth/auth-dialog';
+import { isSponsorActive } from '@/lib/sponsor-utils';
+import { SponsorBadge } from '../sponsor/sponsor-badge';
 
 function POISidebarList() {
     const [pois, setPois] = useState<POI[]>([]);
@@ -65,25 +67,45 @@ function POISidebarList() {
         router.push(`${pathname}?${params.toString()}`);
     };
     
-    const sortedPois = useMemo(() => {
-      if (!userLocation) return pois;
-      return [...pois].sort((a, b) => {
-          const distA = getDistance(userLocation.lat, userLocation.lng, a.location.lat, a.location.lng);
-          const distB = getDistance(userLocation.lat, userLocation.lng, b.location.lat, b.location.lng);
-          return distA - distB;
-      });
-    }, [pois, userLocation]);
+    const sortedAndFilteredPois = useMemo(() => {
+      // 1. Filter by category
+      const filteredByCategory = pois.filter(p => categoryFilter === 'all' || p.mainCategory === categoryFilter);
+
+      // 2. Separate active sponsors from other POIs
+      const activeSponsors: POI[] = [];
+      const otherPois: POI[] = [];
+      
+      for (const poi of filteredByCategory) {
+        if (isSponsorActive(poi)) {
+          activeSponsors.push(poi);
+        } else {
+          otherPois.push(poi);
+        }
+      }
+      
+      // 3. Sort active sponsors by priority (descending)
+      activeSponsors.sort((a, b) => (b.sponsor?.priority ?? 0) - (a.sponsor?.priority ?? 0));
+      
+      // 4. Sort other POIs by distance if location is available
+      if (userLocation) {
+        otherPois.sort((a, b) => {
+            const distA = getDistance(userLocation.lat, userLocation.lng, a.location.lat, a.location.lng);
+            const distB = getDistance(userLocation.lat, userLocation.lng, b.location.lat, b.location.lng);
+            return distA - distB;
+        });
+      }
+      
+      // 5. Concatenate the lists
+      return [...activeSponsors, ...otherPois];
+    }, [pois, categoryFilter, userLocation]);
+
 
     const visiblePois = useMemo(() => {
-      const filtered = sortedPois.filter(poi => 
-        categoryFilter === 'all' || poi.mainCategory === categoryFilter
-      );
-    
       if (user) {
-        return filtered;
+        return sortedAndFilteredPois;
       }
-      return filtered.slice(0, 2);
-    }, [sortedPois, user, categoryFilter]);
+      return sortedAndFilteredPois.slice(0, 2);
+    }, [sortedAndFilteredPois, user]);
     
     if (loading) {
         return (
@@ -107,7 +129,10 @@ function POISidebarList() {
                             : 'hover:bg-sidebar-accent/50'
                     )}
                 >
-                    <span className="font-medium">{poi.title}</span>
+                    <div className="flex items-center justify-between">
+                        <span className="font-medium">{poi.title}</span>
+                         {isSponsorActive(poi) && <SponsorBadge sponsor={poi.sponsor} />}
+                    </div>
                      {userLocation ? (
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                             <Navigation className="h-3 w-3" />

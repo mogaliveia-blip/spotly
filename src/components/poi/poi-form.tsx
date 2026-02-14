@@ -138,9 +138,16 @@ export function POIForm({ poiId }: POIFormProps) {
       location: userLocation || fallbackCenter,
       headerPhotoUrl: '',
       galleryUrls: [],
+      sponsor: {
+        enabled: false,
+        level: 'standard',
+        priority: 0,
+        startDate: undefined,
+        endDate: undefined,
+      },
     },
   });
-
+  
   const { fields: galleryFields, append, remove } = useFieldArray({
     control: form.control,
     name: 'galleryUrls'
