@@ -241,23 +241,26 @@ export function POIForm({ poiId }: POIFormProps) {
     let poiIdToUpdate = poiId;
   
     try {
-        const poiPayload: Partial<POI> = { ...values };
-
-        if (!poiPayload.sponsor?.enabled) {
-            poiPayload.sponsor = undefined; // This will remove the field when sending to Firestore
-        }
-        
+      // 🔥 On nettoie proprement sponsor pour ne JAMAIS envoyer undefined
+      const { sponsor, ...rest } = values;
+  
+      const poiPayload: Partial<POI> = {
+        ...rest,
+        ...(sponsor?.enabled ? { sponsor } : {})
+      };
+  
       if (!isEditMode) {
         const createPayload = {
-            title: poiPayload.title!,
-            description: poiPayload.description!,
-            mainCategory: poiPayload.mainCategory!,
-            subCategory: poiPayload.subCategory!,
-            location: poiPayload.location!,
-            headerPhotoUrl: '',
-            galleryUrls: [],
-            sponsor: poiPayload.sponsor,
-        }
+          title: poiPayload.title!,
+          description: poiPayload.description!,
+          mainCategory: poiPayload.mainCategory!,
+          subCategory: poiPayload.subCategory!,
+          location: poiPayload.location!,
+          headerPhotoUrl: '',
+          galleryUrls: [],
+          ...(poiPayload.sponsor ? { sponsor: poiPayload.sponsor } : {})
+        };
+  
         poiIdToUpdate = await createPoi(createPayload);
       }
   
@@ -266,6 +269,7 @@ export function POIForm({ poiId }: POIFormProps) {
       }
   
       let finalHeaderUrl = values.headerPhotoUrl || '';
+  
       if (headerImageFile) {
         const headerPath = `poi-images/${poiIdToUpdate}/header.jpg`;
         const { url } = await uploadFile(headerImageFile, headerPath);
@@ -273,17 +277,17 @@ export function POIForm({ poiId }: POIFormProps) {
       }
   
       const existingGallery = values.galleryUrls || [];
-      let newGalleryUploads: { url: string; path: string; }[] = [];
+      let newGalleryUploads: { url: string; path: string }[] = [];
   
       if (galleryImageFiles.length > 0) {
-          newGalleryUploads = await Promise.all(
-              galleryImageFiles.map(file => {
-                  const uniquePath = `poi-images/${poiIdToUpdate}/gallery/${crypto.randomUUID()}`;
-                  return uploadFile(file, uniquePath);
-              })
-          );
+        newGalleryUploads = await Promise.all(
+          galleryImageFiles.map(file => {
+            const uniquePath = `poi-images/${poiIdToUpdate}/gallery/${crypto.randomUUID()}`;
+            return uploadFile(file, uniquePath);
+          })
+        );
       }
-      
+  
       const finalGalleryUrls = [...existingGallery, ...newGalleryUploads];
   
       await updatePoi(poiIdToUpdate, {
@@ -296,6 +300,7 @@ export function POIForm({ poiId }: POIFormProps) {
         title: isEditMode ? 'POI mis à jour !' : 'POI créé !',
         description: `${values.title} a été sauvegardé.`,
       });
+  
       router.refresh();
       router.push('/pois');
   
@@ -307,9 +312,10 @@ export function POIForm({ poiId }: POIFormProps) {
         variant: 'destructive',
       });
     } finally {
-      setFormIsLoading(false); 
+      setFormIsLoading(false);
     }
   }
+  
 
 
   const handleGalleryFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {

@@ -16,7 +16,11 @@ service cloud.firestore {
     }
 
     function getUserData(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data;
+      let userDocPath = /databases/$(database)/documents/users/$(userId);
+      if (exists(userDocPath)) {
+        return get(userDocPath).data;
+      }
+      return {};
     }
 
     function isOneOfRoles(roles) {

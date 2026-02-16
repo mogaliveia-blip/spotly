@@ -7,25 +7,25 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function isOneOfRoles(roles) {
-      // Note: Accéder à Firestore depuis les règles de Storage est coûteux.
-      // Pour une application à grande échelle, envisagez les custom claims.
-      // https://firebase.google.com/docs/auth/admin/custom-claims
-      return isSignedIn()
-        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in roles;
+    function getUserRole() {
+      let userDocPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      if (isSignedIn() && exists(userDocPath)) {
+        return get(userDocPath).data.role;
+      }
+      return null;
     }
 
     function isAdmin() {
-      return isOneOfRoles(['admin']);
+      return getUserRole() == 'admin';
     }
 
     function isEditorOrAdmin() {
-      return isOneOfRoles(['editor', 'admin']);
+      return getUserRole() in ['editor', 'admin'];
     }
-    
-    // --- Règles POI ---
+
     match /poi-images/{poiId}/{allPaths=**} {
       allow read: if true;
+
       allow write: if isEditorOrAdmin()
         && (
           request.method == 'delete' ||
@@ -36,14 +36,14 @@ service firebase.storage {
         );
     }
 
-    // --- Règles Marketing ---
     match /marketing/{allPaths=**} {
       allow read: if true;
+
       allow write: if isAdmin()
-       && (
+        && (
           request.method == 'delete' ||
           (
-            request.resource.size < 2 * 1024 * 1024 // 2MB
+            request.resource.size < 2 * 1024 * 1024
             && request.resource.contentType.matches('image/(jpeg|png|webp)')
           )
         );
