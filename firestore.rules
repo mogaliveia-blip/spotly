@@ -35,6 +35,7 @@ service cloud.firestore {
     /* =========================
        Listes de valeurs autorisées
        ========================= */
+
     function mainCategories() {
       return [
         'programmation', 'nourriture_boissons', 'services_essentiels',
@@ -63,82 +64,95 @@ service cloud.firestore {
     }
 
     /* =========================
+       Validation Sponsor
+       ========================= */
+
+    function isValidSponsor(s) {
+      return s is map
+        && s.enabled is bool
+        && s.level in ['standard', 'premium', 'official']
+        && s.priority is int
+        && s.priority >= 0
+        && (
+          !('startDate' in s)
+          || s.startDate is timestamp
+        )
+        && (
+          !('endDate' in s)
+          || s.endDate is timestamp
+        );
+    }
+
+    /* =========================
        USERS
        ========================= */
+
     match /users/{userId} {
 
-      // Lecture : soi-même OU admin
       allow read: if isOwner(userId) || isAdmin();
 
-      // Création : uniquement son propre document (signup)
-      // Le rôle par défaut DOIT être "user"
       allow create: if isSignedIn()
         && request.auth.uid == userId
         && request.resource.data.role == 'user';
 
-      // Mise à jour du profil personnel (sans le rôle)
       allow update: if isOwner(userId)
         && !('role' in request.resource.data);
 
-      // Modification du rôle : admin uniquement
       allow update: if isAdmin()
         && ('role' in request.resource.data);
 
-      // Suppression : admin uniquement
       allow delete: if isAdmin();
     }
     
     /* =========================
        CONFIG
        ========================= */
+
     match /config/main {
-      // Lecture publique pour que le client connaisse l'état de la landing page
       allow read: if true;
-      // Écriture : admin uniquement
       allow write: if isAdmin();
     }
 
     match /config/marketing {
-      // Lecture publique pour l'overlay marketing
       allow read: if true;
-      // Écriture : admin uniquement
       allow write: if isAdmin();
     }
-
 
     /* =========================
        POIS
        ========================= */
+
     match /pois/{poiId} {
 
-      // Lecture publique
       allow read: if true;
 
-      // Création / modification :
-      // uniquement editor ou admin, avec validation des catégories
       allow create, update: if isEditorOrAdmin()
         && request.resource.data.mainCategory is string
         && request.resource.data.mainCategory in mainCategories()
         && request.resource.data.subCategory is string
         && request.resource.data.subCategory in subCategories()
-        && isValidCategoryPair(request.resource.data.mainCategory, request.resource.data.subCategory);
+        && isValidCategoryPair(
+            request.resource.data.mainCategory,
+            request.resource.data.subCategory
+          )
+        && (
+          !('sponsor' in request.resource.data)
+          || isValidSponsor(request.resource.data.sponsor)
+        );
       
-      // Suppression : editor ou admin
       allow delete: if isEditorOrAdmin();
 
       /* =========================
-         REVIEWS (sous-collection)
+         REVIEWS
          ========================= */
+
       match /reviews/{reviewId} {
 
-        // Lecture publique
         allow read: if true;
 
-        // Création : utilisateur connecté, auteur obligatoire
         allow create: if isSignedIn()
           && request.resource.data.userId == request.auth.uid;
 
-        // Modification / suppression : auteur uniquement
         allow update, delete: if isSignedIn()
           && resource.data.userId == request.auth.uid;
       }

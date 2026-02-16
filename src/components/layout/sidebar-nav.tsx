@@ -19,6 +19,7 @@ import {
   PlusCircle,
   Navigation,
   Unlock,
+  Monitor,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -131,7 +132,7 @@ function POISidebarList() {
                 >
                     <div className="flex items-center justify-between">
                         <span className="font-medium">{poi.title}</span>
-                         {isSponsorActive(poi) && <SponsorBadge sponsor={poi.sponsor} />}
+                         <SponsorBadge sponsor={poi.sponsor} />
                     </div>
                      {userLocation ? (
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -175,7 +176,7 @@ export function SidebarNav() {
       href: '/dashboard',
       icon: LayoutDashboard,
       label: 'Tableau de bord',
-      auth: true, // Visible to all, but we may want to distinguish later
+      auth: true, 
     },
     {
       href: '/pois',
@@ -191,15 +192,22 @@ export function SidebarNav() {
       roles: ['admin'],
       auth: true,
     },
+     {
+      href: '/admin/monitor',
+      icon: Monitor,
+      label: 'Monitoring',
+      roles: ['admin'],
+      auth: true,
+    },
   ];
 
   const canAddPoi = role === 'admin' || role === 'editor';
 
   const filteredNavItems = navItems.filter(item => {
-      if (!item.auth) return true; // Public items
-      if (!user) return false; // Auth-only items for logged-out users
-      if (item.roles) return role && item.roles.includes(role); // Role-based items
-      return true; // For auth items without specific roles
+      if (!item.auth) return true;
+      if (!user) return false; 
+      if (item.roles) return role && item.roles.includes(role); 
+      return true;
   });
 
   const isDashboard = pathname.startsWith('/dashboard');
