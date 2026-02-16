@@ -32,11 +32,31 @@ function MapController({
     : null;
   const isMobile = useIsMobile();
 
+  // Effect to pan to a selected POI
   useEffect(() => {
     if (selectedPoi && map) {
       map.panTo(selectedPoi.location);
     }
   }, [selectedPoi, map]);
+
+  // Effect to fit bounds when category changes (and no POI is selected)
+  useEffect(() => {
+    if (selectedPoi || !map || pois.length === 0) {
+      return;
+    }
+
+    if (pois.length === 1) {
+      map.panTo(pois[0].location);
+      map.setZoom(15);
+    } else {
+      const bounds = new google.maps.LatLngBounds();
+      pois.forEach(poi => {
+        bounds.extend(poi.location);
+      });
+      map.fitBounds(bounds, 100); // 100px padding
+    }
+  }, [pois, selectedPoi, map]);
+
 
   const handleRecenter = () => {
     if (map && userLocation) {

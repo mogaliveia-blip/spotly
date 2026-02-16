@@ -3,50 +3,52 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    /* =========================
+       FONCTIONS UTILITAIRES
+       ========================= */
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function getUserRole() {
-      let userDocPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      if (isSignedIn() && exists(userDocPath)) {
-        return get(userDocPath).data.role;
-      }
-      return null;
-    }
-
     function isAdmin() {
-      return getUserRole() == 'admin';
+      return isSignedIn()
+        && firestore.get(
+          /databases/(default)/documents/users/$(request.auth.uid)
+        ).data.role == 'admin';
     }
 
     function isEditorOrAdmin() {
-      return getUserRole() in ['editor', 'admin'];
+      return isSignedIn()
+        && firestore.get(
+          /databases/(default)/documents/users/$(request.auth.uid)
+        ).data.role in ['editor', 'admin'];
     }
 
-    match /poi-images/{poiId}/{allPaths=**} {
+    /* =========================
+       POI IMAGES
+       ========================= */
+
+    match /poi-images/{allPaths=**} {
+
+      // Lecture publique
       allow read: if true;
 
-      allow write: if isEditorOrAdmin()
-        && (
-          request.method == 'delete' ||
-          (
-            request.resource.size < 5 * 1024 * 1024
-            && request.resource.contentType.matches('image/.*')
-          )
-        );
+      // Upload uniquement editor ou admin
+      allow write: if isEditorOrAdmin();
     }
+
+    /* =========================
+       MARKETING HERO
+       ========================= */
 
     match /marketing/{allPaths=**} {
+
+      // Lecture publique
       allow read: if true;
 
-      allow write: if isAdmin()
-        && (
-          request.method == 'delete' ||
-          (
-            request.resource.size < 2 * 1024 * 1024
-            && request.resource.contentType.matches('image/(jpeg|png|webp)')
-          )
-        );
+      // Upload uniquement admin
+      allow write: if isAdmin();
     }
   }
 }

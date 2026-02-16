@@ -3,10 +3,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /* =========================
-       Fonctions utilitaires
-       ========================= */
-
     function isSignedIn() {
       return request.auth != null;
     }
@@ -16,11 +12,9 @@ service cloud.firestore {
     }
 
     function getUserData(userId) {
-      let userDocPath = /databases/$(database)/documents/users/$(userId);
-      if (exists(userDocPath)) {
-        return get(userDocPath).data;
-      }
-      return {};
+      return exists(/databases/$(database)/documents/users/$(userId))
+        ? get(/databases/$(database)/documents/users/$(userId)).data
+        : {};
     }
 
     function isOneOfRoles(roles) {
@@ -35,10 +29,6 @@ service cloud.firestore {
     function isEditorOrAdmin() {
       return isOneOfRoles(['editor', 'admin']);
     }
-
-    /* =========================
-       Listes de valeurs autorisées
-       ========================= */
 
     function mainCategories() {
       return [
@@ -57,60 +47,35 @@ service cloud.firestore {
         'espace_vip', 'espace_enfant', 'zone_detente', 'backstage'
       ];
     }
-    
-    function isValidCategoryPair(mainCat, subCat) {
-      return (mainCat == 'programmation' && subCat in ['concert_headliner', 'concert_scene_secondaire', 'spectacle_rue', 'dj_set'])
-        || (mainCat == 'nourriture_boissons' && subCat in ['food_truck', 'restaurant', 'bar', 'buvette'])
-        || (mainCat == 'services_essentiels' && subCat in ['toilettes', 'poste_secours', 'securite', 'point_eau'])
-        || (mainCat == 'logistique_mobilite' && subCat in ['entree_principale', 'parking', 'navette', 'info_point', 'acces_pmr'])
-        || (mainCat == 'merchandising_partenaires' && subCat in ['boutique_officielle', 'stand_partenaire', 'sponsor'])
-        || (mainCat == 'espaces_specifiques' && subCat in ['espace_vip', 'espace_enfant', 'zone_detente', 'backstage']);
-    }
 
-    /* =========================
-       Validation Sponsor
-       ========================= */
+    function isValidCategoryPair(mainCat, subCat) {
+      return (mainCat == 'programmation' && subCat in ['concert_headliner','concert_scene_secondaire','spectacle_rue','dj_set'])
+        || (mainCat == 'nourriture_boissons' && subCat in ['food_truck','restaurant','bar','buvette'])
+        || (mainCat == 'services_essentiels' && subCat in ['toilettes','poste_secours','securite','point_eau'])
+        || (mainCat == 'logistique_mobilite' && subCat in ['entree_principale','parking','navette','info_point','acces_pmr'])
+        || (mainCat == 'merchandising_partenaires' && subCat in ['boutique_officielle','stand_partenaire','sponsor'])
+        || (mainCat == 'espaces_specifiques' && subCat in ['espace_vip','espace_enfant','zone_detente','backstage']);
+    }
 
     function isValidSponsor(s) {
       return s is map
         && s.enabled is bool
-        && s.level in ['standard', 'premium', 'official']
+        && s.level in ['standard','premium','official']
         && s.priority is int
         && s.priority >= 0
-        && (
-          !('startDate' in s)
-          || s.startDate is timestamp
-        )
-        && (
-          !('endDate' in s)
-          || s.endDate is timestamp
-        );
+        && (!('startDate' in s) || s.startDate is timestamp)
+        && (!('endDate' in s) || s.endDate is timestamp);
     }
 
-    /* =========================
-       USERS
-       ========================= */
-
     match /users/{userId} {
-
       allow read: if isOwner(userId) || isAdmin();
-
       allow create: if isSignedIn()
         && request.auth.uid == userId
         && request.resource.data.role == 'user';
-
-      allow update: if isOwner(userId)
-        && !('role' in request.resource.data);
-
-      allow update: if isAdmin()
-        && ('role' in request.resource.data);
-
+      allow update: if isOwner(userId) && !('role' in request.resource.data);
+      allow update: if isAdmin() && ('role' in request.resource.data);
       allow delete: if isAdmin();
     }
-    
-    /* =========================
-       CONFIG
-       ========================= */
 
     match /config/main {
       allow read: if true;
@@ -122,41 +87,25 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    /* =========================
-       POIS
-       ========================= */
-
     match /pois/{poiId} {
-
       allow read: if true;
 
       allow create, update: if isEditorOrAdmin()
-        && request.resource.data.mainCategory is string
         && request.resource.data.mainCategory in mainCategories()
-        && request.resource.data.subCategory is string
         && request.resource.data.subCategory in subCategories()
         && isValidCategoryPair(
             request.resource.data.mainCategory,
             request.resource.data.subCategory
           )
-        && (
-          !('sponsor' in request.resource.data)
-          || isValidSponsor(request.resource.data.sponsor)
-        );
-      
+        && (!('sponsor' in request.resource.data)
+            || isValidSponsor(request.resource.data.sponsor));
+
       allow delete: if isEditorOrAdmin();
 
-      /* =========================
-         REVIEWS
-         ========================= */
-
       match /reviews/{reviewId} {
-
         allow read: if true;
-
         allow create: if isSignedIn()
           && request.resource.data.userId == request.auth.uid;
-
         allow update, delete: if isSignedIn()
           && resource.data.userId == request.auth.uid;
       }
