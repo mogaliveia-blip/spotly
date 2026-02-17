@@ -23,6 +23,8 @@ export default function DashboardPage() {
   
   const [pois, setPois] = useState<POI[]>([]);
   const [marketingConfig, setMarketingConfig] = useState<MarketingConfig | null>(null);
+  const [activePoi, setActivePoi] = useState<POI | null>(null); // BUG 2 FIX: Local state for active POI
+
   const selectedPoiId = searchParams.get('poi');
   const categoryFilter = searchParams.get('category') || 'all';
   
@@ -52,6 +54,15 @@ export default function DashboardPage() {
     getPois();
     getMarketingConfig();
   }, [toast]);
+  
+  // BUG 2 FIX: Sync local state from URL on load or when URL changes
+  useEffect(() => {
+    if (pois.length > 0) {
+        const poiFromUrl = selectedPoiId ? pois.find(p => p.id === selectedPoiId) : null;
+        setActivePoi(poiFromUrl);
+    }
+  }, [selectedPoiId, pois]);
+
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.innerWidth >= 768) {
@@ -59,14 +70,16 @@ export default function DashboardPage() {
     }
   }, [setOpen]);
 
+  // BUG 2 FIX: Update local state for instant feedback, then update URL
   const handleSelectPoi = (poi: POI | null) => {
+    setActivePoi(poi);
     const params = new URLSearchParams(searchParams.toString());
     if (poi) {
       params.set('poi', poi.id);
     } else {
       params.delete('poi');
     }
-    router.replace(`${pathname}?${params.toString()}`);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
   const handleCategorySelect = (category: MainCategory | 'all') => {
@@ -77,7 +90,8 @@ export default function DashboardPage() {
       params.set('category', category);
     }
     params.delete('poi');
-    router.replace(`${pathname}?${params.toString()}`);
+    setActivePoi(null); // Ensure POI is deselected in state
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
   const visiblePois = useMemo(() => {
@@ -108,27 +122,31 @@ export default function DashboardPage() {
     }
     
     const limitedPois = sortedPois.slice(0, 2);
-    if (selectedPoiId) {
-      const selectedPoi = pois.find(p => p.id === selectedPoiId);
-      if (selectedPoi && !limitedPois.some(p => p.id === selectedPoiId)) {
-        limitedPois.push(selectedPoi);
-      }
+    // BUG 2 FIX: Logic now depends on activePoi (from state) not selectedPoiId (from URL)
+    if (activePoi && !limitedPois.some(p => p.id === activePoi.id)) {
+      const selectedPoiInFullList = sortedPois.find(p => p.id === activePoi.id);
+       if (selectedPoiInFullList) {
+          limitedPois.push(selectedPoiInFullList);
+       }
     }
     return limitedPois;
-  }, [pois, categoryFilter, user, selectedPoiId]);
+  }, [pois, categoryFilter, user, activePoi]);
 
   const showHero = !user && marketingConfig?.heroEnabled;
 
   return (
     <div className="flex flex-col h-full w-full">
-        <CategoryFilter 
-          selectedCategory={categoryFilter as MainCategory | 'all'}
-          onSelectCategory={handleCategorySelect}
-        />
+        {/* BUG 1 FIX: Add z-index and background to ensure visibility above map */}
+        <div className="relative z-10 bg-background">
+          <CategoryFilter 
+            selectedCategory={categoryFilter as MainCategory | 'all'}
+            onSelectCategory={handleCategorySelect}
+          />
+        </div>
       <div className="flex-1 relative overflow-hidden">
         {showHero && marketingConfig && <HeroOverlay config={marketingConfig} />}
         <POIMap 
-          selectedPoiId={selectedPoiId} 
+          selectedPoi={activePoi} 
           onSelectPoi={handleSelectPoi}
           pois={visiblePois}
         />

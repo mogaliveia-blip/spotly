@@ -19,17 +19,14 @@ import { isSponsorActive } from '@/lib/sponsor-utils';
 function MapController({
   pois,
   onSelectPoi,
-  selectedPoiId
+  selectedPoi
 }: {
   pois: POI[];
   onSelectPoi: (poi: POI | null) => void;
-  selectedPoiId: string | null;
+  selectedPoi: POI | null;
 }) {
   const { userLocation } = useGeolocation();
   const map = useMap();
-  const selectedPoi = selectedPoiId
-    ? pois.find(p => p.id === selectedPoiId) || null
-    : null;
   const isMobile = useIsMobile();
 
   // Effect to pan to a selected POI
@@ -121,7 +118,7 @@ function MapController({
         >
           <ScrollArea className="h-[50vh] w-full max-w-sm">
             <div className="pr-4">
-              <POIDetails poi={selectedPoi} />
+              <POIDetails poi={poi} />
             </div>
           </ScrollArea>
         </InfoWindow>
@@ -145,11 +142,11 @@ function MapController({
 }
 
 export function POIMap({
-  selectedPoiId,
+  selectedPoi,
   onSelectPoi,
   pois
 }: {
-  selectedPoiId: string | null;
+  selectedPoi: POI | null;
   onSelectPoi: (poi: POI | null) => void;
   pois: POI[];
 }) {
@@ -161,10 +158,6 @@ export function POIMap({
     (pois.length > 0
       ? pois[0].location
       : { lat: -21.3393, lng: 55.4781 }); // Default to Réunion Island
-
-  const selectedPoi = selectedPoiId
-    ? pois.find(p => p.id === selectedPoiId) || null
-    : null;
 
   if (geoLoading && pois.length === 0) {
     return <Skeleton className="w-full h-full" />;
@@ -186,7 +179,7 @@ export function POIMap({
         <MapController
           pois={pois}
           onSelectPoi={onSelectPoi}
-          selectedPoiId={selectedPoiId}
+          selectedPoi={selectedPoi}
         />
       </Map>
 
