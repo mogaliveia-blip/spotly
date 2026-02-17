@@ -18,7 +18,6 @@ import {
   Mountain,
   PlusCircle,
   Navigation,
-  Unlock,
   Monitor,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -151,12 +150,11 @@ function POISidebarList() {
           <div className="p-2">
             <Card className="p-3 text-center bg-sidebar-accent/50 border-sidebar-border">
               <CardDescription className="text-xs">
-                Connectez-vous pour découvrir tous les points d'intérêt.
+                Connectez-vous pour laisser des avis et recevoir les dernières infos du festival.
               </CardDescription>
               <AuthDialog trigger={
                 <Button size="sm" className="mt-3 w-full">
-                  <Unlock className="mr-2 h-4 w-4" />
-                  Découvrir
+                  Se connecter
                 </Button>
               }/>
             </Card>

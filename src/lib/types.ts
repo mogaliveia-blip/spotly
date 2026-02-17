@@ -48,13 +48,16 @@ export type SubCategory =
   | 'zone_detente'
   | 'backstage';
 
-export const categoriesMap: Record<MainCategory, { 
-  label: string; 
-  subCategories: Partial<Record<SubCategory, string>>;
-  icon: LucideIcon;
-  color: string;
-  markerColor: string;
-}> = {
+export const categoriesMap: Record<
+  MainCategory,
+  {
+    label: string;
+    subCategories: Partial<Record<SubCategory, string>>;
+    icon: LucideIcon;
+    color: string;
+    markerColor: string;
+  }
+> = {
   programmation: {
     label: 'Programmation',
     subCategories: {
@@ -132,7 +135,7 @@ export const categoriesMap: Record<MainCategory, {
 export interface POISponsor {
   enabled: boolean;
   level: 'standard' | 'premium' | 'official';
-  priority: number; // 0 = normal, plus élevé = plus prioritaire
+  priority: number;
   startDate?: Date;
   endDate?: Date;
 }
@@ -167,6 +170,7 @@ export interface Review {
 
 export interface AppConfig {
   isLandingPageActive: boolean;
+  festivalMode?: boolean;
 }
 
 export interface MarketingConfig {

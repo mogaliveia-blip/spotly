@@ -18,8 +18,10 @@ export async function fetchAppConfig(): Promise<AppConfig> {
   if (configSnap.exists()) {
     return configSnap.data() as AppConfig;
   }
-  // Default config if it doesn't exist
-  return { isLandingPageActive: true };
+  return {
+    isLandingPageActive: true,
+    festivalMode: false
+  };
 }
 
 /**
