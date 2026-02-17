@@ -126,14 +126,16 @@ export function LoginForm({ onSuccess, onSwitchToSignup, onSwitchToPasswordReset
           </form>
         </Form>
       </CardContent>
-      <CardFooter className="p-4 border-t bg-muted/50">
-        <div className="text-center text-sm w-full text-muted-foreground">
-          Vous n'avez pas de compte ?{' '}
-          <Button variant="link" className="p-0 h-auto" onClick={onSwitchToSignup}>
-            Inscrivez-vous
+      {onSwitchToSignup && (
+        <CardFooter className="flex-col items-stretch p-6 border-t gap-2">
+          <div className="text-sm text-center text-muted-foreground">
+            Vous n'avez pas de compte ?
+          </div>
+          <Button variant="outline" className="w-full" onClick={onSwitchToSignup}>
+            Créer un compte
           </Button>
-        </div>
-      </CardFooter>
+        </CardFooter>
+      )}
     </>
   );
 }

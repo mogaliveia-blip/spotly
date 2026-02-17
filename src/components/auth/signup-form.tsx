@@ -145,14 +145,16 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
           </form>
         </Form>
       </CardContent>
-      <CardFooter className="p-4 border-t bg-muted/50">
-        <div className="text-center text-sm w-full text-muted-foreground">
-          Déjà un compte ?{' '}
-          <Button variant="link" className="p-0 h-auto" onClick={onSwitchToLogin}>
+      {onSwitchToLogin && (
+        <CardFooter className="flex-col items-stretch p-6 border-t gap-2">
+          <div className="text-sm text-center text-muted-foreground">
+            Déjà un compte ?
+          </div>
+          <Button variant="outline" className="w-full" onClick={onSwitchToLogin}>
             Se connecter
           </Button>
-        </div>
-      </CardFooter>
+        </CardFooter>
+      )}
     </>
   );
 }

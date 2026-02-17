@@ -65,9 +65,11 @@ export function PasswordResetForm({ onSwitchToLogin }: PasswordResetFormProps) {
             <p className="mt-2 text-sm text-muted-foreground">
                 Si un compte existe pour **{form.getValues('email')}**, vous recevrez un e-mail avec un lien pour réinitialiser votre mot de passe.
             </p>
-            <Button variant="link" className="mt-4" onClick={onSwitchToLogin}>
-                Retour à la connexion
-            </Button>
+            {onSwitchToLogin && (
+              <Button variant="outline" className="mt-4 w-full" onClick={onSwitchToLogin}>
+                  Retour à la connexion
+              </Button>
+            )}
         </div>
     );
   }
@@ -102,13 +104,13 @@ export function PasswordResetForm({ onSwitchToLogin }: PasswordResetFormProps) {
           </form>
         </Form>
       </CardContent>
-      <CardFooter className="p-4 border-t bg-muted/50">
-        <div className="text-center text-sm w-full">
-            <Button variant="link" className="p-0 h-auto" onClick={onSwitchToLogin}>
-                Retour à la connexion
-            </Button>
-        </div>
-      </CardFooter>
+      {onSwitchToLogin && (
+        <CardFooter className="p-6 border-t">
+          <Button variant="outline" className="w-full" onClick={onSwitchToLogin}>
+              Retour à la connexion
+          </Button>
+        </CardFooter>
+      )}
     </>
   );
 }
