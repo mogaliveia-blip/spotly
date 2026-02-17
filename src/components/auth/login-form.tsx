@@ -126,8 +126,8 @@ export function LoginForm({ onSuccess, onSwitchToSignup, onSwitchToPasswordReset
           </form>
         </Form>
       </CardContent>
-      <CardFooter className="p-6 pt-0">
-        <div className="mt-4 text-center text-sm w-full">
+      <CardFooter className="p-4 border-t bg-muted/50">
+        <div className="text-center text-sm w-full text-muted-foreground">
           Vous n'avez pas de compte ?{' '}
           <Button variant="link" className="p-0 h-auto" onClick={onSwitchToSignup}>
             Inscrivez-vous

@@ -118,7 +118,7 @@ function MapController({
         >
           <ScrollArea className="h-[50vh] w-full max-w-sm">
             <div className="pr-4">
-              <POIDetails poi={poi} />
+              <POIDetails poi={selectedPoi} />
             </div>
           </ScrollArea>
         </InfoWindow>

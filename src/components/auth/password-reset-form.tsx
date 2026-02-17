@@ -102,10 +102,12 @@ export function PasswordResetForm({ onSwitchToLogin }: PasswordResetFormProps) {
           </form>
         </Form>
       </CardContent>
-      <CardFooter className="p-6 pt-0 text-center text-sm">
-        <Button variant="link" className="p-0 h-auto mx-auto" onClick={onSwitchToLogin}>
-            Retour à la connexion
-        </Button>
+      <CardFooter className="p-4 border-t bg-muted/50">
+        <div className="text-center text-sm w-full">
+            <Button variant="link" className="p-0 h-auto" onClick={onSwitchToLogin}>
+                Retour à la connexion
+            </Button>
+        </div>
       </CardFooter>
     </>
   );
