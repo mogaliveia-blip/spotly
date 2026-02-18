@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/use-auth-user';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { loading } = useAuth();
-  
+
   if (loading) {
     return null;
   }
@@ -17,8 +17,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <Sidebar>
         <SidebarNav />
       </Sidebar>
+
       <SidebarInset>
-        <div className="flex flex-col h-screen">
+        {/* 🔥 min-h-screen pour stabilité mobile + h-full pour géométrie flex */}
+        <div className="flex flex-col min-h-screen h-full">
           <Header />
           <main className="flex-1">
             {children}

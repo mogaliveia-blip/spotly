@@ -24,8 +24,8 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '../ui/button';
 import { useEffect, useState, useMemo } from 'react';
-import type { POI, MainCategory } from '@/lib/types';
-import { fetchPois } from '@/lib/data';
+import type { POI, MainCategory, AppConfig } from '@/lib/types';
+import { fetchPois, fetchAppConfig } from '@/lib/data';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { getDistance } from '@/lib/utils';
 import { Skeleton } from '../ui/skeleton';
@@ -37,133 +37,156 @@ import { isSponsorActive } from '@/lib/sponsor-utils';
 import { SponsorBadge } from '../sponsor/sponsor-badge';
 
 function POISidebarList() {
-    const [pois, setPois] = useState<POI[]>([]);
-    const [loading, setLoading] = useState(true);
-    const { userLocation, loading: geoLoading } = useGeolocation();
-    const router = useRouter();
-    const pathname = usePathname();
-    const searchParams = useSearchParams();
-    const selectedPoiId = searchParams.get('poi');
-    const categoryFilter = (searchParams.get('category') as MainCategory) || 'all';
-    const { user } = useAuth();
+  const [pois, setPois] = useState<POI[]>([]);
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        async function getPois() {
-            try {
-                const poiData = await fetchPois();
-                setPois(poiData);
-            } catch (error) {
-                console.error("Impossible de récupérer les POIs", error);
-            } finally {
-                setLoading(false);
-            }
-        }
-        getPois();
-    }, []);
+  const { userLocation, loading: geoLoading } = useGeolocation();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const selectedPoiId = searchParams.get('poi');
+  const categoryFilter = (searchParams.get('category') as MainCategory) || 'all';
+  const { user } = useAuth();
 
-    const handleSelectPoi = (poi: POI) => {
-        const params = new URLSearchParams(searchParams.toString());
-        params.set('poi', poi.id);
-        router.push(`${pathname}?${params.toString()}`);
-    };
-    
-    const sortedAndFilteredPois = useMemo(() => {
-      // 1. Filter by category
-      const filteredByCategory = pois.filter(p => categoryFilter === 'all' || p.mainCategory === categoryFilter);
-
-      // 2. Separate active sponsors from other POIs
-      const activeSponsors: POI[] = [];
-      const otherPois: POI[] = [];
-      
-      for (const poi of filteredByCategory) {
-        if (isSponsorActive(poi)) {
-          activeSponsors.push(poi);
-        } else {
-          otherPois.push(poi);
-        }
+  useEffect(() => {
+    async function init() {
+      try {
+        const [poiData, config] = await Promise.all([fetchPois(), fetchAppConfig()]);
+        setPois(poiData);
+        setAppConfig(config);
+      } catch (error) {
+        console.error('Impossible de récupérer les données (POIs/config)', error);
+      } finally {
+        setLoading(false);
       }
-      
-      // 3. Sort active sponsors by priority (descending)
-      activeSponsors.sort((a, b) => (b.sponsor?.priority ?? 0) - (a.sponsor?.priority ?? 0));
-      
-      // 4. Sort other POIs by distance if location is available
-      if (userLocation) {
-        otherPois.sort((a, b) => {
-            const distA = getDistance(userLocation.lat, userLocation.lng, a.location.lat, a.location.lng);
-            const distB = getDistance(userLocation.lat, userLocation.lng, b.location.lat, b.location.lng);
-            return distA - distB;
-        });
-      }
-      
-      // 5. Concatenate the lists
-      return [...activeSponsors, ...otherPois];
-    }, [pois, categoryFilter, userLocation]);
+    }
+    init();
+  }, []);
 
+  const handleSelectPoi = (poi: POI) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('poi', poi.id);
+    router.push(`${pathname}?${params.toString()}`);
+  };
 
-    const visiblePois = useMemo(() => {
-      if (user) {
-        return sortedAndFilteredPois;
+  const sortedAndFilteredPois = useMemo(() => {
+    // 1. Filter by category
+    const filteredByCategory = pois.filter(
+      (p) => categoryFilter === 'all' || p.mainCategory === categoryFilter
+    );
+
+    // 2. Separate active sponsors from other POIs
+    const activeSponsors: POI[] = [];
+    const otherPois: POI[] = [];
+
+    for (const poi of filteredByCategory) {
+      if (isSponsorActive(poi)) {
+        activeSponsors.push(poi);
+      } else {
+        otherPois.push(poi);
       }
-      return sortedAndFilteredPois.slice(0, 2);
-    }, [sortedAndFilteredPois, user]);
-    
-    if (loading) {
-        return (
-            <div className="px-2 space-y-2">
-                {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
-            </div>
-        )
     }
 
+    // 3. Sort active sponsors by priority (descending)
+    activeSponsors.sort((a, b) => (b.sponsor?.priority ?? 0) - (a.sponsor?.priority ?? 0));
+
+    // 4. Sort other POIs by distance if location is available
+    if (userLocation) {
+      otherPois.sort((a, b) => {
+        const distA = getDistance(userLocation.lat, userLocation.lng, a.location.lat, a.location.lng);
+        const distB = getDistance(userLocation.lat, userLocation.lng, b.location.lat, b.location.lng);
+        return distA - distB;
+      });
+    }
+
+    // 5. Concatenate the lists
+    return [...activeSponsors, ...otherPois];
+  }, [pois, categoryFilter, userLocation]);
+
+  const visiblePois = useMemo(() => {
+    // ✅ Festival mode = pas de limitation
+    if (appConfig?.festivalMode) {
+      return sortedAndFilteredPois;
+    }
+
+    // ✅ User connecté = pas de limitation
+    if (user) {
+      return sortedAndFilteredPois;
+    }
+
+    // ✅ Visiteur = limitation
+    return sortedAndFilteredPois.slice(0, 2);
+  }, [sortedAndFilteredPois, user, appConfig]);
+
+  if (loading) {
     return (
-      <>
-        <div className="flex flex-col gap-1 px-2 mt-2">
-            {visiblePois.map((poi) => (
-                <button
-                    key={poi.id}
-                    onClick={() => handleSelectPoi(poi)}
-                    className={cn(
-                        'w-full text-left p-2 rounded-md transition-colors text-sm flex flex-col',
-                        selectedPoiId === poi.id
-                            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                            : 'hover:bg-sidebar-accent/50'
-                    )}
-                >
-                    <div className="flex items-center justify-between">
-                        <span className="font-medium">{poi.title}</span>
-                         <SponsorBadge sponsor={poi.sponsor} />
-                    </div>
-                     {userLocation ? (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Navigation className="h-3 w-3" />
-                            <span>
-                                {`${getDistance(userLocation.lat, userLocation.lng, poi.location.lat, poi.location.lng).toFixed(2)} km`}
-                            </span>
-                        </div>
-                    ) : geoLoading ? (
-                        <Skeleton className="h-3 w-16 mt-1" />
-                    ) : null}
-                </button>
-            ))}
-        </div>
-        {!user && pois.length > 2 && (
-          <div className="p-2">
-            <Card className="p-3 text-center bg-sidebar-accent/50 border-sidebar-border">
-              <CardDescription className="text-xs">
-                Connectez-vous pour laisser des avis et recevoir les dernières infos du festival.
-              </CardDescription>
-              <AuthDialog trigger={
+      <div className="px-2 space-y-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-10 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex flex-col gap-1 px-2 mt-2">
+        {visiblePois.map((poi) => (
+          <button
+            key={poi.id}
+            onClick={() => handleSelectPoi(poi)}
+            className={cn(
+              'w-full text-left p-2 rounded-md transition-colors text-sm flex flex-col',
+              selectedPoiId === poi.id
+                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                : 'hover:bg-sidebar-accent/50'
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-medium">{poi.title}</span>
+              <SponsorBadge sponsor={poi.sponsor} />
+            </div>
+
+            {userLocation ? (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Navigation className="h-3 w-3" />
+                <span>
+                  {`${getDistance(
+                    userLocation.lat,
+                    userLocation.lng,
+                    poi.location.lat,
+                    poi.location.lng
+                  ).toFixed(2)} km`}
+                </span>
+              </div>
+            ) : geoLoading ? (
+              <Skeleton className="h-3 w-16 mt-1" />
+            ) : null}
+          </button>
+        ))}
+      </div>
+
+      {/* ✅ Incitation connexion seulement hors festivalMode */}
+      {!user && !appConfig?.festivalMode && pois.length > 2 && (
+        <div className="p-2">
+          <Card className="p-3 text-center bg-sidebar-accent/50 border-sidebar-border">
+            <CardDescription className="text-xs">
+              Connectez-vous pour laisser des avis et recevoir les dernières infos du festival.
+            </CardDescription>
+            <AuthDialog
+              trigger={
                 <Button size="sm" className="mt-3 w-full">
                   Se connecter
                 </Button>
-              }/>
-            </Card>
-          </div>
-        )}
-      </>
-    )
+              }
+            />
+          </Card>
+        </div>
+      )}
+    </>
+  );
 }
-
 
 export function SidebarNav() {
   const { user, role } = useAuth();
@@ -174,7 +197,7 @@ export function SidebarNav() {
       href: '/dashboard',
       icon: LayoutDashboard,
       label: 'Tableau de bord',
-      auth: true, 
+      auth: true,
     },
     {
       href: '/pois',
@@ -190,7 +213,7 @@ export function SidebarNav() {
       roles: ['admin'],
       auth: true,
     },
-     {
+    {
       href: '/admin/monitor',
       icon: Monitor,
       label: 'Monitoring',
@@ -201,11 +224,11 @@ export function SidebarNav() {
 
   const canAddPoi = role === 'admin' || role === 'editor';
 
-  const filteredNavItems = navItems.filter(item => {
-      if (!item.auth) return true;
-      if (!user) return false; 
-      if (item.roles) return role && item.roles.includes(role); 
-      return true;
+  const filteredNavItems = navItems.filter((item) => {
+    if (!item.auth) return true;
+    if (!user) return false;
+    if (item.roles) return role && item.roles.includes(role);
+    return true;
   });
 
   const isDashboard = pathname.startsWith('/dashboard');
@@ -216,52 +239,47 @@ export function SidebarNav() {
         <Link href="/" className="flex items-center gap-2">
           <Mountain className="h-8 w-8 text-primary" />
           <div className="flex flex-col">
-            <h2 className="text-lg font-semibold tracking-tight">
-              Leu Tempo
-            </h2>
+            <h2 className="text-lg font-semibold tracking-tight">Leu Tempo</h2>
             <p className="text-sm text-muted-foreground">
               {user ? `Bienvenue, ${user.displayName?.split(' ')[0] || 'Utilisateur'} !` : 'Bienvenue !'}
             </p>
           </div>
         </Link>
       </SidebarHeader>
-      
+
       <SidebarContent>
         <ScrollArea className="h-full">
-            <SidebarMenu className="p-2">
+          <SidebarMenu className="p-2">
             {filteredNavItems.map((item) => (
-                <SidebarMenuItem key={item.href + item.label}>
-                <SidebarMenuButton
-                    asChild
-                    isActive={pathname.startsWith(item.href)}
-                >
-                    <Link href={item.href}>
+              <SidebarMenuItem key={item.href + item.label}>
+                <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)}>
+                  <Link href={item.href}>
                     <item.icon />
                     <span>{item.label}</span>
-                    </Link>
+                  </Link>
                 </SidebarMenuButton>
-                </SidebarMenuItem>
+              </SidebarMenuItem>
             ))}
-            </SidebarMenu>
-            
-            {isDashboard && (
-                <>
-                    <SidebarSeparator />
-                    <div className="p-2 space-y-2">
-                        <div className="flex items-center justify-between px-2">
-                            <h3 className="text-sm font-semibold text-muted-foreground">Explorer</h3>
-                             {canAddPoi && (
-                                <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                                    <Link href="/pois/new" title="Ajouter un nouveau POI">
-                                        <PlusCircle className="h-4 w-4" />
-                                    </Link>
-                                </Button>
-                            )}
-                        </div>
-                        <POISidebarList />
-                    </div>
-                </>
-            )}
+          </SidebarMenu>
+
+          {isDashboard && (
+            <>
+              <SidebarSeparator />
+              <div className="p-2 space-y-2">
+                <div className="flex items-center justify-between px-2">
+                  <h3 className="text-sm font-semibold text-muted-foreground">Explorer</h3>
+                  {canAddPoi && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                      <Link href="/pois/new" title="Ajouter un nouveau POI">
+                        <PlusCircle className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+                <POISidebarList />
+              </div>
+            </>
+          )}
         </ScrollArea>
       </SidebarContent>
 

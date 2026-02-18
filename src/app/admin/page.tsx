@@ -45,7 +45,6 @@ function AppConfigCard() {
       toast({ title: "Configuration mise à jour", description: `La page d'accueil a été ${isActive ? 'activée' : 'désactivée'}.` });
     } catch (error) {
       toast({ title: "Erreur", description: "Impossible de mettre à jour la configuration.", variant: "destructive" });
-      // Revert UI change on error
       setConfig(prev => prev ? { ...prev, isLandingPageActive: !isActive } : { isLandingPageActive: !isActive });
     } finally {
       setSaving(false);
@@ -174,7 +173,7 @@ function MarketingConfigCard() {
                     </div>
                     <div className="space-y-2">
                         <Label>Image de fond</Label>
-                         <Input id="hero-image-upload" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFileChange} className="hidden" />
+                        <Input id="hero-image-upload" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFileChange} className="hidden" />
                         <label htmlFor="hero-image-upload" className="relative aspect-video w-full border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
                            {(previewUrl || config.heroImageUrl) ? (
                                 <Image src={previewUrl || config.heroImageUrl} alt="Aperçu du Hero" fill className="object-cover rounded-lg" />
@@ -199,6 +198,7 @@ function MarketingConfigCard() {
                             <SelectContent>
                                 <SelectItem value="auth">Ouvrir la modale de connexion</SelectItem>
                                 <SelectItem value="external">Ouvrir un lien externe</SelectItem>
+                                <SelectItem value="close">Fermer l’overlay</SelectItem>
                                 <SelectItem value="none">Aucun bouton</SelectItem>
                             </SelectContent>
                         </Select>

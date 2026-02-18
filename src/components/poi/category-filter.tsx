@@ -24,7 +24,7 @@ export function CategoryFilter({
   ];
 
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="w-full overflow-x-auto relative z-20 bg-background">
       <div className="flex gap-2 p-2 min-w-max">
         {allCategories.map((category) => {
           const Icon = category.icon;

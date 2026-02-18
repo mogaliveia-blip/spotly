@@ -1,16 +1,22 @@
 {
-  "name": "Eventide Guide",
-  "short_name": "Eventide",
-  "description": "Your guide to event points of interest.",
-  "icons": [
-    {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
-    }
-  ],
+  "name": "Leu Tempo – Guide Officiel",
+  "short_name": "Leu Tempo",
+  "description": "Le guide officiel du festival Leu Tempo : scènes, food, services et infos en temps réel.",
   "start_url": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "theme_color": "#673AB7",
-  "background_color": "#EEEEEE"
+  "background_color": "#EEEEEE",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
 }

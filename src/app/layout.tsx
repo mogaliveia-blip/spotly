@@ -30,9 +30,11 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icon.svg" />
       </head>
 
-      <body className={cn(
-        'h-full font-body antialiased bg-background'
-      )}>
+      <body
+        className={cn(
+          'min-h-screen w-full font-body antialiased bg-background'
+        )}
+      >
         <MapsApiProvider>
           <AuthProvider>
             <GeolocationProvider>

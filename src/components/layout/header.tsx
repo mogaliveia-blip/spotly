@@ -3,8 +3,8 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { UserNav } from './user-nav';
 import { Mountain } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
-import { Button } from '@/components/ui/button';
-import { AuthDialog } from '../auth/auth-dialog';
+import { Button } from '../ui/button';
+import { AuthDialog } from '../auth/dialog';
 import Link from 'next/link';
 
 export function Header() {

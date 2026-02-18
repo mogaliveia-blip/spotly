@@ -1,4 +1,3 @@
-// src/components/poi/poi-map.tsx
 'use client';
 
 import type { POI } from '@/lib/types';
@@ -29,16 +28,21 @@ function MapController({
   const map = useMap();
   const isMobile = useIsMobile();
 
-  // Effect to pan to a selected POI
+  // Pan vers un POI sélectionné
   useEffect(() => {
     if (selectedPoi && map) {
       map.panTo(selectedPoi.location);
     }
   }, [selectedPoi, map]);
 
-  // Effect to fit bounds when category changes (and no POI is selected)
+  // FitBounds automatique si aucun POI sélectionné
   useEffect(() => {
     if (selectedPoi || !map || pois.length === 0) {
+      return;
+    }
+
+    // Sécurité : vérifier que Google Maps est bien chargé
+    if (typeof window === 'undefined' || !window.google?.maps) {
       return;
     }
 
@@ -46,14 +50,13 @@ function MapController({
       map.panTo(pois[0].location);
       map.setZoom(15);
     } else {
-      const bounds = new google.maps.LatLngBounds();
-      pois.forEach(poi => {
+      const bounds = new window.google.maps.LatLngBounds();
+      pois.forEach((poi) => {
         bounds.extend(poi.location);
       });
-      map.fitBounds(bounds, 100); // 100px padding
+      map.fitBounds(bounds, 100);
     }
   }, [pois, selectedPoi, map]);
-
 
   const handleRecenter = () => {
     if (map && userLocation) {
@@ -73,17 +76,20 @@ function MapController({
         </AdvancedMarker>
       )}
 
-      {/* POI Markers */}
+      {/* Markers POI */}
       {pois.map((poi) => {
         const isSelected = selectedPoi?.id === poi.id;
         const sponsorIsActive = isSponsorActive(poi);
-        
-        let colorClass = categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
+
+        let colorClass =
+          categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
+
         if (sponsorIsActive) {
-            colorClass = 'text-amber-500'; // Specific color for active sponsors
+          colorClass = 'text-amber-500';
         }
+
         if (isSelected) {
-            colorClass = 'text-accent';
+          colorClass = 'text-accent';
         }
 
         return (
@@ -96,9 +102,7 @@ function MapController({
               className={cn(
                 'transition-transform drop-shadow-md',
                 colorClass,
-                isSelected
-                  ? 'scale-125'
-                  : 'hover:scale-110',
+                isSelected ? 'scale-125' : 'hover:scale-110',
                 sponsorIsActive && !isSelected && 'drop-shadow-lg'
               )}
             >
@@ -108,7 +112,7 @@ function MapController({
         );
       })}
 
-      {/* InfoWindow desktop */}
+      {/* InfoWindow Desktop */}
       {!isMobile && selectedPoi && (
         <InfoWindow
           position={selectedPoi.location}
@@ -157,14 +161,14 @@ export function POIMap({
     userLocation ||
     (pois.length > 0
       ? pois[0].location
-      : { lat: -21.3393, lng: 55.4781 }); // Default to Réunion Island
+      : { lat: -21.3393, lng: 55.4781 });
 
   if (geoLoading && pois.length === 0) {
     return <Skeleton className="w-full h-full" />;
   }
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full min-h-0">
       <Map
         defaultCenter={defaultCenter}
         defaultZoom={13}

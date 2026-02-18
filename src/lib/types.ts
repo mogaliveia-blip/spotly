@@ -1,7 +1,14 @@
 // src/lib/types.ts
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { LucideIcon } from 'lucide-react';
-import { Music, UtensilsCrossed, HeartPulse, Bus, ShoppingBag, Shapes } from 'lucide-react';
+import {
+  Music,
+  UtensilsCrossed,
+  HeartPulse,
+  Bus,
+  ShoppingBag,
+  Shapes,
+} from 'lucide-react';
 
 export type UserRole = 'user' | 'editor' | 'admin';
 
@@ -173,12 +180,20 @@ export interface AppConfig {
   festivalMode?: boolean;
 }
 
+/* 🔥 NOUVEAU MODE CLOSE AJOUTÉ ICI */
+
+export type HeroCtaMode =
+  | 'auth'
+  | 'external'
+  | 'none'
+  | 'close';
+
 export interface MarketingConfig {
   heroEnabled: boolean;
   heroTitle: string;
   heroSubtitle: string;
   heroImageUrl: string;
   heroCtaText: string;
-  heroCtaMode: 'auth' | 'external' | 'none';
+  heroCtaMode: HeroCtaMode;
   heroCtaLink?: string;
 }
