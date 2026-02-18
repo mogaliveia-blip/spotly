@@ -17,7 +17,7 @@ type AppMode = "normal" | "map-fallback" | "static-fallback";
 export default function DashboardPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { setOpen } = useSidebar();
+  const { setOpen, setOpenMobile, isMobile } = useSidebar();
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -31,7 +31,9 @@ export default function DashboardPage() {
   const selectedPoiId = searchParams.get('poi');
   const categoryFilter = searchParams.get('category') || 'all';
 
-  // Chargement initial
+  /* =============================
+     CHARGEMENT INITIAL
+  ============================= */
   useEffect(() => {
     async function init() {
       try {
@@ -57,29 +59,34 @@ export default function DashboardPage() {
     init();
   }, [toast]);
 
-  // Affichage une seule fois par session
+  /* =============================
+     HERO - UNE FOIS PAR SESSION
+  ============================= */
   useEffect(() => {
     if (!marketingConfig?.heroEnabled) return;
 
     const dismissed = sessionStorage.getItem('heroDismissed');
-
     if (!dismissed) {
       setHeroVisible(true);
     }
   }, [marketingConfig]);
 
-  // Synchronisation POI actif via URL
+  /* =============================
+     SYNC POI VIA URL
+  ============================= */
   useEffect(() => {
-    if (pois.length > 0) {
-      const poiFromUrl = selectedPoiId
-        ? pois.find((p) => p.id === selectedPoiId)
-        : null;
+    if (!pois.length) return;
 
-      setActivePoi(poiFromUrl || null);
-    }
+    const poiFromUrl = selectedPoiId
+      ? pois.find((p) => p.id === selectedPoiId)
+      : null;
+
+    setActivePoi(poiFromUrl || null);
   }, [selectedPoiId, pois]);
 
-  // Navigation 100% client
+  /* =============================
+     NAVIGATION 100% CLIENT
+  ============================= */
   const updateUrl = (params: URLSearchParams) => {
     const newUrl = `${pathname}?${params.toString()}`;
     window.history.replaceState(null, '', newUrl);
@@ -89,24 +96,44 @@ export default function DashboardPage() {
     setActivePoi(poi);
 
     const params = new URLSearchParams(searchParams.toString());
-    if (poi) params.set('poi', poi.id);
-    else params.delete('poi');
+
+    if (poi) {
+      params.set('poi', poi.id);
+    } else {
+      params.delete('poi');
+    }
 
     updateUrl(params);
+
+    // ✅ Ferme l'overlay mobile lors de la sélection
+    if (isMobile) {
+      setOpenMobile(false);
+    }
   };
 
   const handleCategorySelect = (category: MainCategory | 'all') => {
     const params = new URLSearchParams(searchParams.toString());
 
-    if (category === 'all') params.delete('category');
-    else params.set('category', category);
+    if (category === 'all') {
+      params.delete('category');
+    } else {
+      params.set('category', category);
+    }
 
     params.delete('poi');
     setActivePoi(null);
 
     updateUrl(params);
+
+    // ✅ Ferme aussi le menu sur mobile lors du changement de catégorie
+    if (isMobile) {
+      setOpenMobile(false);
+    }
   };
 
+  /* =============================
+     TRI + SPONSORS
+  ============================= */
   const visiblePois = useMemo(() => {
     const filtered = pois.filter(
       (p) => categoryFilter === 'all' || p.mainCategory === categoryFilter
@@ -116,38 +143,47 @@ export default function DashboardPage() {
     const others: POI[] = [];
 
     for (const poi of filtered) {
-      if (isSponsorActive(poi)) activeSponsors.push(poi);
-      else others.push(poi);
+      if (isSponsorActive(poi)) {
+        activeSponsors.push(poi);
+      } else {
+        others.push(poi);
+      }
     }
 
     activeSponsors.sort(
       (a, b) => (b.sponsor?.priority ?? 0) - (a.sponsor?.priority ?? 0)
     );
 
-    const sortedPois = [...activeSponsors, ...others];
+    const sorted = [...activeSponsors, ...others];
 
     if (appConfig?.festivalMode || user) {
-      return sortedPois;
+      return sorted;
     }
 
-    return sortedPois.slice(0, 2);
+    return sorted.slice(0, 2);
   }, [pois, categoryFilter, user, appConfig]);
 
-  const showHero = heroVisible && !user && marketingConfig?.heroEnabled;
+  const showHero =
+    heroVisible &&
+    !user &&
+    marketingConfig?.heroEnabled;
 
+  /* =============================
+     RENDER
+  ============================= */
   return (
-    <div className="flex flex-col h-screen w-full overflow-hidden">
+    <div className="flex flex-col h-full w-full">
 
       {/* Barre catégories */}
-      <div className="relative z-20 bg-background">
+      <div className="relative z-30 bg-background shadow-md">
         <CategoryFilter
           selectedCategory={categoryFilter as MainCategory | 'all'}
           onSelectCategory={handleCategorySelect}
         />
       </div>
 
-      {/* Contenu principal */}
-      <div className="flex-1 relative overflow-hidden min-h-0 flex">
+      {/* Zone carte */}
+      <div className="flex-1 relative min-h-0">
 
         {showHero && marketingConfig && (
           <HeroOverlay
