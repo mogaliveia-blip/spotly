@@ -4,7 +4,7 @@ import { UserNav } from './user-nav';
 import { Mountain } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { Button } from '../ui/button';
-import { AuthDialog } from '../auth/dialog';
+import { AuthDialog } from '../auth/auth-dialog';
 import Link from 'next/link';
 
 export function Header() {
