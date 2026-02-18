@@ -9,6 +9,7 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarSeparator,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/use-auth-user';
 import {
@@ -42,6 +43,7 @@ function POISidebarList() {
   const [loading, setLoading] = useState(true);
 
   const { userLocation, loading: geoLoading } = useGeolocation();
+  const { setOpenMobile, isMobile } = useSidebar();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -68,6 +70,11 @@ function POISidebarList() {
     const params = new URLSearchParams(searchParams.toString());
     params.set('poi', poi.id);
     router.push(`${pathname}?${params.toString()}`);
+    
+    // ✅ Ferme la barre latérale mobile lors de la sélection depuis la liste
+    if (isMobile) {
+      setOpenMobile(false);
+    }
   };
 
   const sortedAndFilteredPois = useMemo(() => {
