@@ -1,4 +1,3 @@
-// src/components/layout/sidebar-nav.tsx
 'use client';
 
 import {
@@ -23,7 +22,7 @@ import {
   Navigation,
   Monitor,
 } from 'lucide-react';
-import Link from 'link';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '../ui/button';
 import { useEffect, useState, useMemo } from 'react';
