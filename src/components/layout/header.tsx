@@ -1,24 +1,31 @@
 'use client';
 
-import { SidebarTrigger } from '@/components/ui/sidebar';
+import { useSidebar } from '@/components/ui/sidebar';
 import { UserNav } from './user-nav';
-import { Mountain } from 'lucide-react';
+import { Mountain, PanelLeft } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 
 export function Header() {
   const { user } = useAuth();
+  const { toggleSidebar } = useSidebar();
 
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
       
       <div className="flex items-center gap-3">
         
-        {/* Mobile uniquement */}
-        <div className="flex items-center gap-2 md:hidden">
-          <SidebarTrigger className="h-9 w-9" />
-          <span className="text-sm font-medium">Événements</span>
-        </div>
+        {/* Mobile uniquement : Bouton avec zone de clic étendue et design dynamique */}
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={toggleSidebar}
+          className="flex md:hidden items-center gap-2 h-9 px-3 rounded-full border-primary/20 bg-background hover:bg-primary/5 active:scale-95 transition-all shadow-sm"
+        >
+          <PanelLeft className="h-4 w-4 text-primary" />
+          <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Événements</span>
+        </Button>
 
         <Link href="/" className="flex items-center gap-2">
           <div className="p-1.5 rounded-lg bg-primary/10">
