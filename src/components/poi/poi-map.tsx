@@ -173,13 +173,13 @@ function MapController({
         </InfoWindow>
       )}
 
-      {/* Bouton recentrage personnalisé */}
+      {/* Bouton recentrage personnalisé amélioré */}
       <div className="absolute top-4 right-4 z-10">
         <Button
           onClick={handleRecenter}
           type="button"
           variant="secondary"
-          className="shadow-md bg-white hover:bg-white/90 text-primary border-primary/10 flex items-center gap-2 h-10 px-4 rounded-full transition-all active:scale-95"
+          className="shadow-lg bg-background/95 backdrop-blur-sm hover:bg-background text-primary border border-primary/30 flex items-center gap-2 h-10 px-4 rounded-full transition-all active:scale-95 hover:border-primary/50"
           title="Recentrer sur ma position"
         >
           <Crosshair className={cn("h-4 w-4", !userLocation && "text-muted-foreground")} />
