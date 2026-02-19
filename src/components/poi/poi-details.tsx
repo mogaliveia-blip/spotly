@@ -63,7 +63,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
                   À env. {getDistance(userLocation.lat, userLocation.lng, poi.location.lat, poi.location.lng).toFixed(1)} km
               </p>
           )}
-           <Button asChild size="sm" variant="outline">
+           <Button asChild size="sm" variant="default" className="shadow-md">
               <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
                   <Navigation className="mr-2 h-4 w-4" />
                   Itinéraire à pied
