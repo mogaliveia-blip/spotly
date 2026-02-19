@@ -56,7 +56,8 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
     const handleError = (error: GeolocationPositionError) => {
       if (!isMounted) return;
 
-      if (!hasLoggedErrorRef.current) {
+      // On ne log en console que les erreurs réelles, pas les timeouts fréquents
+      if (!hasLoggedErrorRef.current && error.code !== 3) {
         console.warn(
           '[Geolocation]',
           error.code,
@@ -102,7 +103,7 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
           }
         }
 
-        // Position initiale
+        // Position initiale rapide
         navigator.geolocation.getCurrentPosition(
           updateLocation,
           handleError,

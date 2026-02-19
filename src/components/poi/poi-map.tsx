@@ -4,7 +4,7 @@
 import type { POI } from '@/lib/types';
 import { Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
 import { useEffect } from 'react';
-import { User, Crosshair, MapPin, AlertCircle } from 'lucide-react';
+import { User, Crosshair, MapPin } from 'lucide-react';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
 import { Button } from '../ui/button';
@@ -58,18 +58,15 @@ function MapController({
   }, [pois, selectedPoi, map]);
 
   /* =============================
-     NOTIFICATION ERREUR GEO
+     NOTIFICATION INTELLIGENTE
+     On ne toast automatiquement que si la permission est refusée
   ============================= */
   useEffect(() => {
-    if (geoError) {
-      const message = geoError.code === 1 
-        ? "La géolocalisation a été refusée. Veuillez l'activer dans vos réglages pour vous situer."
-        : "Impossible de récupérer votre position précise.";
-      
+    if (geoError && geoError.code === 1) { // 1 = PERMISSION_DENIED
       toast({
         variant: "destructive",
-        title: "Géolocalisation",
-        description: message,
+        title: "Géolocalisation bloquée",
+        description: "Veuillez autoriser l'accès GPS dans vos réglages pour vous situer sur la carte.",
       });
     }
   }, [geoError, toast]);
@@ -78,11 +75,16 @@ function MapController({
     if (map && userLocation) {
       map.panTo(userLocation);
       map.setZoom(15);
-    } else if (!userLocation && geoError) {
-       toast({
+    } else {
+      // Si l'utilisateur clique et qu'on n'a pas de position, on explique pourquoi
+      let message = "Impossible de récupérer votre position actuelle.";
+      if (geoError?.code === 1) message = "L'accès au GPS est désactivé.";
+      else if (geoError?.code === 3) message = "Délai d'attente dépassé. Vérifiez votre signal.";
+      
+      toast({
         variant: "destructive",
         title: "Position indisponible",
-        description: "Veuillez autoriser l'accès GPS pour utiliser cette fonctionnalité.",
+        description: message,
       });
     }
   };
