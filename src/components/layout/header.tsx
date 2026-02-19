@@ -4,8 +4,6 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { UserNav } from './user-nav';
 import { Mountain } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
-import { Button } from '../ui/button';
-import { AuthDialog } from '../auth/auth-dialog';
 import Link from 'next/link';
 
 export function Header() {
@@ -23,17 +21,15 @@ export function Header() {
         </div>
 
         <Link href="/" className="flex items-center gap-2">
-          <Mountain className="h-6 w-6 text-primary" />
+          <div className="p-1.5 rounded-lg bg-primary/10">
+            <Mountain className="h-5 w-5 text-primary" />
+          </div>
           <h1 className="text-lg font-semibold tracking-tight">Leu Tempo</h1>
         </Link>
       </div>
 
       <div className="ml-auto flex items-center gap-4">
-        {user ? (
-          <UserNav />
-        ) : (
-          <AuthDialog trigger={<Button>Se connecter</Button>} />
-        )}
+        {user && <UserNav />}
       </div>
 
     </header>

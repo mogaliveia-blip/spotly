@@ -33,7 +33,6 @@ import { getDistance } from '@/lib/utils';
 import { Skeleton } from '../ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
-import { Card, CardDescription } from '../ui/card';
 import { AuthDialog } from '../auth/auth-dialog';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { SponsorBadge } from '../sponsor/sponsor-badge';
@@ -108,10 +107,7 @@ function POISidebarList() {
   }, [pois, categoryFilter, userLocation]);
 
   const visiblePois = useMemo(() => {
-    if (appConfig?.festivalMode) {
-      return sortedAndFilteredPois;
-    }
-    if (user) {
+    if (appConfig?.festivalMode || user) {
       return sortedAndFilteredPois;
     }
     return sortedAndFilteredPois.slice(0, 2);
@@ -128,82 +124,60 @@ function POISidebarList() {
   }
 
   return (
-    <>
-      <div className="flex flex-col gap-2 px-3">
-        {visiblePois.map((poi) => {
-          const categoryData = categoriesMap[poi.mainCategory];
-          const CategoryIcon = categoryData?.icon || MapPin;
-          const isSelected = selectedPoiId === poi.id;
+    <div className="flex flex-col gap-2 px-3">
+      {visiblePois.map((poi) => {
+        const categoryData = categoriesMap[poi.mainCategory];
+        const CategoryIcon = categoryData?.icon || MapPin;
+        const isSelected = selectedPoiId === poi.id;
 
-          return (
-            <button
-              key={poi.id}
-              onClick={() => handleSelectPoi(poi)}
-              className={cn(
-                'w-full text-left p-3 rounded-md transition-all text-sm flex items-start gap-3 border-l-4',
-                isSelected
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground border-primary shadow-sm'
-                  : 'hover:bg-sidebar-accent/50 border-transparent'
-              )}
-            >
-              <div className={cn(
-                "p-1.5 rounded-full bg-background/80 shadow-sm shrink-0 mt-0.5",
-                categoryData?.color || "text-primary"
-              )}>
-                <CategoryIcon size={16} />
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <span className="font-semibold whitespace-normal leading-snug line-clamp-2">
-                    {poi.title}
-                  </span>
-                  <div className="shrink-0 pt-0.5">
-                    <SponsorBadge sponsor={poi.sponsor} />
-                  </div>
+        return (
+          <button
+            key={poi.id}
+            onClick={() => handleSelectPoi(poi)}
+            className={cn(
+              'w-full text-left p-3 rounded-md transition-all text-sm flex items-start gap-3 border-l-4',
+              isSelected
+                ? 'bg-sidebar-accent text-sidebar-accent-foreground border-primary shadow-sm'
+                : 'hover:bg-sidebar-accent/50 border-transparent'
+            )}
+          >
+            <div className={cn(
+              "p-1.5 rounded-full bg-background/80 shadow-sm shrink-0 mt-0.5",
+              categoryData?.color || "text-primary"
+            )}>
+              <CategoryIcon size={16} />
+            </div>
+            
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <span className="font-semibold whitespace-normal leading-snug line-clamp-2">
+                  {poi.title}
+                </span>
+                <div className="shrink-0 pt-0.5">
+                  <SponsorBadge sponsor={poi.sponsor} />
                 </div>
-
-                {userLocation ? (
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
-                    <Navigation className="h-3 w-3" />
-                    <span>
-                      {`${getDistance(
-                        userLocation.lat,
-                        userLocation.lng,
-                        poi.location.lat,
-                        poi.location.lng
-                      ).toFixed(2)} km`}
-                    </span>
-                  </div>
-                ) : geoLoading ? (
-                  <Skeleton className="h-3 w-16 mt-1" />
-                ) : null}
               </div>
-            </button>
-          );
-        })}
-      </div>
 
-      {!user && !appConfig?.festivalMode && pois.length > 2 && (
-        <div className="p-3">
-          <Card className="p-4 text-center bg-sidebar-accent/30 border-dashed border-2 border-sidebar-border/50">
-            <CardDescription className="text-[10px] uppercase tracking-widest font-bold text-primary mb-3">
-              Rejoignez l'aventure
-            </CardDescription>
-            <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
-              Connectez-vous pour laisser des avis et recevoir les dernières infos du festival.
-            </p>
-            <AuthDialog
-              trigger={
-                <Button size="sm" className="w-full shadow-sm">
-                  Se connecter
-                </Button>
-              }
-            />
-          </Card>
-        </div>
-      )}
-    </>
+              {userLocation ? (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+                  <Navigation className="h-3 w-3" />
+                  <span>
+                    {`${getDistance(
+                      userLocation.lat,
+                      userLocation.lng,
+                      poi.location.lat,
+                      poi.location.lng
+                    ).toFixed(2)} km`}
+                  </span>
+                </div>
+              ) : geoLoading ? (
+                <Skeleton className="h-3 w-16 mt-1" />
+              ) : null}
+            </div>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -310,7 +284,20 @@ export function SidebarNav() {
       </SidebarContent>
 
       <SidebarFooter>
-        {/* Le menu utilisateur dans le header gère la connexion/déconnexion */}
+        {!user && (
+          <div className="p-4 border-t bg-sidebar-accent/20 rounded-t-xl">
+             <p className="text-[11px] text-muted-foreground mb-3 text-center leading-relaxed">
+               Connectez-vous pour laisser des avis et recevoir les dernières infos du festival.
+             </p>
+             <AuthDialog
+               trigger={
+                 <Button size="sm" className="w-full shadow-sm font-semibold">
+                   Se connecter
+                 </Button>
+               }
+             />
+          </div>
+        )}
       </SidebarFooter>
     </>
   );
