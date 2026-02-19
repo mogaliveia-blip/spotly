@@ -9,6 +9,8 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarSeparator,
+  SidebarGroup,
+  SidebarGroupLabel,
   useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/use-auth-user';
@@ -36,6 +38,7 @@ import { Card, CardDescription } from '../ui/card';
 import { AuthDialog } from '../auth/auth-dialog';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { SponsorBadge } from '../sponsor/sponsor-badge';
+import { categoriesMap } from '@/lib/types';
 
 function POISidebarList() {
   const [pois, setPois] = useState<POI[]>([]);
@@ -71,19 +74,16 @@ function POISidebarList() {
     params.set('poi', poi.id);
     router.push(`${pathname}?${params.toString()}`);
     
-    // ✅ Ferme la barre latérale mobile lors de la sélection depuis la liste
     if (isMobile) {
       setOpenMobile(false);
     }
   };
 
   const sortedAndFilteredPois = useMemo(() => {
-    // 1. Filter by category
     const filteredByCategory = pois.filter(
       (p) => categoryFilter === 'all' || p.mainCategory === categoryFilter
     );
 
-    // 2. Separate active sponsors from other POIs
     const activeSponsors: POI[] = [];
     const otherPois: POI[] = [];
 
@@ -95,10 +95,8 @@ function POISidebarList() {
       }
     }
 
-    // 3. Sort active sponsors by priority (descending)
     activeSponsors.sort((a, b) => (b.sponsor?.priority ?? 0) - (a.sponsor?.priority ?? 0));
 
-    // 4. Sort other POIs by distance if location is available
     if (userLocation) {
       otherPois.sort((a, b) => {
         const distA = getDistance(userLocation.lat, userLocation.lng, a.location.lat, a.location.lng);
@@ -107,30 +105,24 @@ function POISidebarList() {
       });
     }
 
-    // 5. Concatenate the lists
     return [...activeSponsors, ...otherPois];
   }, [pois, categoryFilter, userLocation]);
 
   const visiblePois = useMemo(() => {
-    // ✅ Festival mode = pas de limitation
     if (appConfig?.festivalMode) {
       return sortedAndFilteredPois;
     }
-
-    // ✅ User connecté = pas de limitation
     if (user) {
       return sortedAndFilteredPois;
     }
-
-    // ✅ Visiteur = limitation
     return sortedAndFilteredPois.slice(0, 2);
   }, [sortedAndFilteredPois, user, appConfig]);
 
   if (loading) {
     return (
-      <div className="px-2 space-y-2">
+      <div className="px-3 space-y-3">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-10 w-full" />
+          <Skeleton key={i} className="h-14 w-full rounded-md" />
         ))}
       </div>
     );
@@ -138,52 +130,69 @@ function POISidebarList() {
 
   return (
     <>
-      <div className="flex flex-col gap-1 px-2 mt-2">
-        {visiblePois.map((poi) => (
-          <button
-            key={poi.id}
-            onClick={() => handleSelectPoi(poi)}
-            className={cn(
-              'w-full text-left p-2 rounded-md transition-colors text-sm flex flex-col',
-              selectedPoiId === poi.id
-                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                : 'hover:bg-sidebar-accent/50'
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-medium">{poi.title}</span>
-              <SponsorBadge sponsor={poi.sponsor} />
-            </div>
+      <div className="flex flex-col gap-2 px-3">
+        {visiblePois.map((poi) => {
+          const categoryData = categoriesMap[poi.mainCategory];
+          const CategoryIcon = categoryData?.icon || MapPin;
+          const isSelected = selectedPoiId === poi.id;
 
-            {userLocation ? (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Navigation className="h-3 w-3" />
-                <span>
-                  {`${getDistance(
-                    userLocation.lat,
-                    userLocation.lng,
-                    poi.location.lat,
-                    poi.location.lng
-                  ).toFixed(2)} km`}
-                </span>
+          return (
+            <button
+              key={poi.id}
+              onClick={() => handleSelectPoi(poi)}
+              className={cn(
+                'w-full text-left p-3 rounded-md transition-all text-sm flex items-start gap-3 border-l-4',
+                isSelected
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground border-primary shadow-sm'
+                  : 'hover:bg-sidebar-accent/50 border-transparent'
+              )}
+            >
+              <div className={cn(
+                "p-1.5 rounded-full bg-background/80 shadow-sm shrink-0",
+                categoryData?.color || "text-primary"
+              )}>
+                <CategoryIcon size={16} />
               </div>
-            ) : geoLoading ? (
-              <Skeleton className="h-3 w-16 mt-1" />
-            ) : null}
-          </button>
-        ))}
+              
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                  <span className="font-semibold truncate">{poi.title}</span>
+                  <SponsorBadge sponsor={poi.sponsor} />
+                </div>
+
+                {userLocation ? (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Navigation className="h-3 w-3" />
+                    <span>
+                      {`${getDistance(
+                        userLocation.lat,
+                        userLocation.lng,
+                        poi.location.lat,
+                        poi.location.lng
+                      ).toFixed(2)} km`}
+                    </span>
+                  </div>
+                ) : geoLoading ? (
+                  <Skeleton className="h-3 w-16 mt-1" />
+                ) : null}
+              </div>
+            </button>
+          );
+        })}
       </div>
 
-      {/* ✅ Incitation connexion seulement hors festivalMode */}
       {!user && !appConfig?.festivalMode && pois.length > 2 && (
-        <div className="p-2">
-          <Card className="p-3 text-center bg-sidebar-accent/50 border-sidebar-border">
-            <CardDescription className="text-xs">
-              Connectez-vous pour laisser des avis et recevoir les dernières infos du festival.
+        <div className="p-3">
+          <Card className="p-4 text-center bg-sidebar-accent/30 border-dashed border-2 border-sidebar-border/50">
+            <CardDescription className="text-[10px] uppercase tracking-widest font-bold text-primary mb-3">
+              Rejoignez l'aventure
             </CardDescription>
+            <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+              Connectez-vous pour laisser des avis et recevoir les dernières infos du festival.
+            </p>
             <AuthDialog
               trigger={
-                <Button size="sm" className="mt-3 w-full">
+                <Button size="sm" className="w-full shadow-sm">
                   Se connecter
                 </Button>
               }
@@ -216,14 +225,14 @@ export function SidebarNav() {
     {
       href: '/admin',
       icon: Users,
-      label: 'Admin',
+      label: 'Administration',
       roles: ['admin'],
       auth: true,
     },
     {
       href: '/admin/monitor',
       icon: Monitor,
-      label: 'Monitoring',
+      label: 'Supervision',
       roles: ['admin'],
       auth: true,
     },
@@ -242,13 +251,15 @@ export function SidebarNav() {
 
   return (
     <>
-      <SidebarHeader>
-        <Link href="/" className="flex items-center gap-2">
-          <Mountain className="h-8 w-8 text-primary" />
+      <SidebarHeader className="p-6">
+        <Link href="/" className="flex items-center gap-3 group">
+          <div className="p-2 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
+            <Mountain className="h-8 w-8 text-primary" />
+          </div>
           <div className="flex flex-col">
-            <h2 className="text-lg font-semibold tracking-tight">Leu Tempo</h2>
-            <p className="text-sm text-muted-foreground">
-              {user ? `Bienvenue, ${user.displayName?.split(' ')[0] || 'Utilisateur'} !` : 'Bienvenue !'}
+            <h2 className="text-xl font-bold tracking-tight text-foreground">Leu Tempo</h2>
+            <p className="text-xs text-muted-foreground font-medium">
+              {user ? `Salut, ${user.displayName?.split(' ')[0]} !` : 'Bienvenue !'}
             </p>
           </div>
         </Link>
@@ -256,42 +267,47 @@ export function SidebarNav() {
 
       <SidebarContent>
         <ScrollArea className="h-full">
-          <SidebarMenu className="p-2">
-            {filteredNavItems.map((item) => (
-              <SidebarMenuItem key={item.href + item.label}>
-                <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)}>
-                  <Link href={item.href}>
-                    <item.icon />
-                    <span>{item.label}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
+          <SidebarGroup className="py-2">
+            <SidebarGroupLabel className="px-6 text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground/80 mb-2">
+              Menu Principal
+            </SidebarGroupLabel>
+            <SidebarMenu className="px-3">
+              {filteredNavItems.map((item) => (
+                <SidebarMenuItem key={item.href + item.label}>
+                  <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)} className="px-4 h-10">
+                    <Link href={item.href}>
+                      <item.icon className="mr-2" />
+                      <span className="font-medium">{item.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroup>
 
           {isDashboard && (
-            <>
-              <SidebarSeparator />
-              <div className="p-2 space-y-2">
-                <div className="flex items-center justify-between px-2">
-                  <h3 className="text-sm font-semibold text-muted-foreground">Explorer</h3>
-                  {canAddPoi && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                      <Link href="/pois/new" title="Ajouter un nouveau POI">
-                        <PlusCircle className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  )}
-                </div>
-                <POISidebarList />
+            <SidebarGroup className="py-4">
+              <SidebarSeparator className="mx-6 mb-6" />
+              <div className="flex items-center justify-between px-6 mb-4">
+                <SidebarGroupLabel className="p-0 text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground/80">
+                  Exploration
+                </SidebarGroupLabel>
+                {canAddPoi && (
+                  <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full hover:bg-primary/10 text-primary" asChild>
+                    <Link href="/pois/new" title="Ajouter un nouveau POI">
+                      <PlusCircle className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                )}
               </div>
-            </>
+              <POISidebarList />
+            </SidebarGroup>
           )}
         </ScrollArea>
       </SidebarContent>
 
       <SidebarFooter>
-        {/* The user nav in the header now handles login/logout */}
+        {/* Le menu utilisateur dans le header gère la connexion/déconnexion */}
       </SidebarFooter>
     </>
   );
