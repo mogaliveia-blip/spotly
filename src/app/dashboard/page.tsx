@@ -17,7 +17,10 @@ type AppMode = "normal" | "map-fallback" | "static-fallback";
 export default function DashboardPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { setOpenMobile, isMobile } = useSidebar();
+
+  // ✅ On récupère maintenant setOpen AUSSI
+  const { setOpenMobile, setOpen, isMobile } = useSidebar();
+
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -105,7 +108,7 @@ export default function DashboardPage() {
 
     updateUrl(params);
 
-    // ✅ Ferme l'overlay mobile lors de la sélection (ex: clic sur un marker)
+    // ✅ Ferme la sidebar mobile après sélection
     if (isMobile) {
       setOpenMobile(false);
     }
@@ -125,9 +128,11 @@ export default function DashboardPage() {
 
     updateUrl(params);
 
-    // ✅ Ferme aussi le menu sur mobile lors du changement de catégorie
+    // ✅ Ouvre la sidebar pour montrer la liste filtrée
     if (isMobile) {
-      setOpenMobile(false);
+      setOpenMobile(true);
+    } else {
+      setOpen(true);
     }
   };
 

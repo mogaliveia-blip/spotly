@@ -2,7 +2,7 @@
 
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { UserNav } from './user-nav';
-import { Mountain, PanelLeft } from 'lucide-react';
+import { Mountain } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { Button } from '../ui/button';
 import { AuthDialog } from '../auth/auth-dialog';
@@ -14,14 +14,12 @@ export function Header() {
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
       
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         
-        {/* Version mobile uniquement */}
-        <div className="md:hidden">
-          <SidebarTrigger className="h-9 w-auto px-3 gap-2">
-            <PanelLeft className="h-5 w-5" />
-            <span className="text-sm font-medium">Événements</span>
-          </SidebarTrigger>
+        {/* Mobile uniquement */}
+        <div className="flex items-center gap-2 md:hidden">
+          <SidebarTrigger className="h-9 w-9" />
+          <span className="text-sm font-medium">Événements</span>
         </div>
 
         <Link href="/" className="flex items-center gap-2">

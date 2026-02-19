@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -55,7 +56,6 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
     const handleError = (error: GeolocationPositionError) => {
       if (!isMounted) return;
 
-      // On évite le spam console en prod
       if (!hasLoggedErrorRef.current) {
         console.warn(
           '[Geolocation]',
@@ -73,13 +73,14 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const startWatching = () => {
+      // Configuration équilibrée : Précision élevée mais tolérance sur le cache pour la batterie
       watchIdRef.current = navigator.geolocation.watchPosition(
         updateLocation,
         handleError,
         {
           enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 5000, // tolère 5s de cache
+          timeout: 10000,
+          maximumAge: 10000, // 10 secondes de cache pour économiser la batterie
         }
       );
     };
@@ -92,19 +93,22 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
           } as PermissionDescriptor);
 
           if (permission.state === 'denied') {
-            setState(prev => ({ ...prev, loading: false }));
+            setState(prev => ({ 
+              ...prev, 
+              loading: false, 
+              error: { code: 1, message: "Permission denied" } as GeolocationPositionError 
+            }));
             return;
           }
         }
 
-        // Première position rapide
+        // Position initiale
         navigator.geolocation.getCurrentPosition(
           updateLocation,
           handleError,
-          { enableHighAccuracy: true, timeout: 10000 }
+          { enableHighAccuracy: true, timeout: 5000 }
         );
 
-        // Puis watch en live
         startWatching();
       } catch {
         setState(prev => ({ ...prev, loading: false }));
