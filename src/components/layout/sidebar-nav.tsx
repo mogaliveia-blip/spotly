@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -21,6 +22,7 @@ import {
   PlusCircle,
   Navigation,
   Monitor,
+  Filter,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -37,6 +39,13 @@ import { AuthDialog } from '../auth/auth-dialog';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { SponsorBadge } from '../sponsor/sponsor-badge';
 import { categoriesMap } from '@/lib/types';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
 
 function POISidebarList() {
   const [pois, setPois] = useState<POI[]>([]);
@@ -75,6 +84,17 @@ function POISidebarList() {
     if (isMobile) {
       setOpenMobile(false);
     }
+  };
+
+  const handleCategoryChange = (val: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (val === 'all') {
+      params.delete('category');
+    } else {
+      params.set('category', val);
+    }
+    params.delete('poi'); // Reset POI selection when changing filter
+    router.push(`${pathname}?${params.toString()}`);
   };
 
   const sortedAndFilteredPois = useMemo(() => {
@@ -124,59 +144,83 @@ function POISidebarList() {
   }
 
   return (
-    <div className="flex flex-col gap-2 px-3">
-      {visiblePois.map((poi) => {
-        const categoryData = categoriesMap[poi.mainCategory];
-        const CategoryIcon = categoryData?.icon || MapPin;
-        const isSelected = selectedPoiId === poi.id;
-
-        return (
-          <button
-            key={poi.id}
-            onClick={() => handleSelectPoi(poi)}
-            className={cn(
-              'w-full text-left p-3 rounded-md transition-all text-sm flex items-start gap-3 border-l-4',
-              isSelected
-                ? 'bg-sidebar-accent text-sidebar-accent-foreground border-primary shadow-sm'
-                : 'hover:bg-sidebar-accent/50 border-transparent'
-            )}
-          >
-            <div className={cn(
-              "p-1.5 rounded-full bg-background/80 shadow-sm shrink-0 mt-0.5",
-              categoryData?.color || "text-primary"
-            )}>
-              <CategoryIcon size={16} />
+    <div className="flex flex-col">
+      {/* Barre de Contrôle de Liste */}
+      <div className="flex items-center justify-between px-3 mb-4 mt-1">
+        <Select value={categoryFilter} onValueChange={handleCategoryChange}>
+          <SelectTrigger className="h-7 w-[160px] text-[10px] bg-sidebar-accent/50 border-none shadow-none focus:ring-0 rounded-full px-3">
+            <div className="flex items-center gap-2">
+              <Filter className="h-3 w-3 text-muted-foreground" />
+              <SelectValue placeholder="Catégorie" />
             </div>
-            
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2 mb-1">
-                <span className="font-semibold whitespace-normal leading-snug line-clamp-2">
-                  {poi.title}
-                </span>
-                <div className="shrink-0 pt-0.5">
-                  <SponsorBadge sponsor={poi.sponsor} />
-                </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" className="text-xs">Toutes les catégories</SelectItem>
+            {Object.entries(categoriesMap).map(([key, { label }]) => (
+              <SelectItem key={key} value={key} className="text-xs">{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest pr-2">
+           {visiblePois.length} Résultats
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 px-3">
+        {visiblePois.map((poi) => {
+          const categoryData = categoriesMap[poi.mainCategory];
+          const CategoryIcon = categoryData?.icon || MapPin;
+          const isSelected = selectedPoiId === poi.id;
+
+          return (
+            <button
+              key={poi.id}
+              onClick={() => handleSelectPoi(poi)}
+              className={cn(
+                'w-full text-left p-3 rounded-md transition-all text-sm flex items-start gap-3 border-l-4',
+                isSelected
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground border-primary shadow-sm'
+                  : 'hover:bg-sidebar-accent/50 border-transparent'
+              )}
+            >
+              <div className={cn(
+                "p-1.5 rounded-full bg-background/80 shadow-sm shrink-0 mt-0.5",
+                categoryData?.color || "text-primary"
+              )}>
+                <CategoryIcon size={16} />
               </div>
-
-              {userLocation ? (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
-                  <Navigation className="h-3 w-3" />
-                  <span>
-                    {`${getDistance(
-                      userLocation.lat,
-                      userLocation.lng,
-                      poi.location.lat,
-                      poi.location.lng
-                    ).toFixed(2)} km`}
+              
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <span className="font-semibold whitespace-normal leading-snug line-clamp-2">
+                    {poi.title}
                   </span>
+                  <div className="shrink-0 pt-0.5">
+                    <SponsorBadge sponsor={poi.sponsor} />
+                  </div>
                 </div>
-              ) : geoLoading ? (
-                <Skeleton className="h-3 w-16 mt-1" />
-              ) : null}
-            </div>
-          </button>
-        );
-      })}
+
+                {userLocation ? (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+                    <Navigation className="h-3 w-3" />
+                    <span>
+                      {`${getDistance(
+                        userLocation.lat,
+                        userLocation.lng,
+                        poi.location.lat,
+                        poi.location.lng
+                      ).toFixed(2)} km`}
+                    </span>
+                  </div>
+                ) : geoLoading ? (
+                  <Skeleton className="h-3 w-16 mt-1" />
+                ) : null}
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
