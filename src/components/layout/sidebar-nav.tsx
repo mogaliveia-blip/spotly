@@ -23,7 +23,7 @@ import {
   Navigation,
   Monitor,
 } from 'lucide-react';
-import Link from 'next/link';
+import Link from 'link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '../ui/button';
 import { useEffect, useState, useMemo } from 'react';
@@ -148,20 +148,24 @@ function POISidebarList() {
               )}
             >
               <div className={cn(
-                "p-1.5 rounded-full bg-background/80 shadow-sm shrink-0",
+                "p-1.5 rounded-full bg-background/80 shadow-sm shrink-0 mt-0.5",
                 categoryData?.color || "text-primary"
               )}>
                 <CategoryIcon size={16} />
               </div>
               
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2 mb-0.5">
-                  <span className="font-semibold truncate">{poi.title}</span>
-                  <SponsorBadge sponsor={poi.sponsor} />
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <span className="font-semibold whitespace-normal leading-snug line-clamp-2">
+                    {poi.title}
+                  </span>
+                  <div className="shrink-0 pt-0.5">
+                    <SponsorBadge sponsor={poi.sponsor} />
+                  </div>
                 </div>
 
                 {userLocation ? (
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
                     <Navigation className="h-3 w-3" />
                     <span>
                       {`${getDistance(
