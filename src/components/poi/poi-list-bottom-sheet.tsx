@@ -79,12 +79,11 @@ export function PoiListBottomSheet({
       )}
       style={{ height: snapHeights[snapPoint] }}
     >
-      {/* Container interne qui gère les événements souris uniquement là où il y a du contenu */}
-      <div className="flex flex-col h-full w-full pointer-events-none">
+      <div className="flex flex-col h-full w-full pointer-events-none px-4">
         
-        {/* Zone de poignée interactive - Fond semi-transparent avec flou */}
+        {/* Poignée flottante arrondie aux 4 coins */}
         <div 
-          className="flex flex-col items-center py-3 cursor-pointer group shrink-0 bg-background/80 backdrop-blur-md rounded-t-3xl border-t shadow-[0_-8px_30px_rgb(0,0,0,0.12)] pointer-events-auto"
+          className="flex flex-col items-center py-3 cursor-pointer group shrink-0 bg-background/80 backdrop-blur-md rounded-3xl border shadow-[0_-8px_30px_rgb(0,0,0,0.12)] pointer-events-auto mb-2"
           onClick={cycleSnapPoint}
         >
           <div className="w-12 h-1.5 bg-muted-foreground/20 rounded-full group-hover:bg-muted-foreground/40 transition-colors mb-2" />
@@ -94,11 +93,10 @@ export function PoiListBottomSheet({
           </div>
         </div>
 
-        {/* Liste scrollable - Fond transparent pour voir la carte */}
         <ScrollArea className="flex-1 pointer-events-auto bg-transparent">
-          <div className="px-4 pt-3 space-y-3 pb-32">
+          <div className="space-y-3 pb-32">
             {sortedPois.length === 0 ? (
-              <div className="py-10 text-center text-muted-foreground bg-background/60 backdrop-blur-md rounded-2xl border border-white/20">
+              <div className="py-10 text-center text-muted-foreground bg-background/60 backdrop-blur-md rounded-3xl border border-white/20">
                 Aucun résultat pour cette catégorie.
               </div>
             ) : (
@@ -114,7 +112,7 @@ export function PoiListBottomSheet({
                     key={poi.id}
                     onClick={() => onSelectPoi(poi)}
                     className={cn(
-                      'w-full text-left p-4 rounded-2xl transition-all flex items-start gap-4 border shadow-sm backdrop-blur-md',
+                      'w-full text-left p-4 rounded-3xl transition-all flex items-start gap-4 border shadow-sm backdrop-blur-md',
                       isSelected
                         ? 'bg-primary/90 text-primary-foreground border-primary ring-1 ring-primary/20'
                         : sponsorIsActive
@@ -123,7 +121,7 @@ export function PoiListBottomSheet({
                     )}
                   >
                     <div className={cn(
-                      "p-3 rounded-xl shadow-sm shrink-0 transition-colors",
+                      "p-3 rounded-2xl shadow-sm shrink-0 transition-colors",
                       isSelected ? "bg-background text-primary" : (categoryData?.color || "bg-muted text-muted-foreground")
                     )}>
                       <CategoryIcon size={20} />

@@ -1,7 +1,7 @@
 'use client';
 
 import { UserNav } from './user-nav';
-import { Mountain, LayoutDashboard, MapPin, Users, Monitor, Menu } from 'lucide-react';
+import { Mountain, LayoutDashboard, MapPin, Users, Monitor } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { Button } from '@/components/ui/button';
 import { usePathname } from 'next/navigation';
@@ -29,10 +29,10 @@ export function Header() {
     <header className="sticky top-0 z-50 flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur-sm px-4 md:px-6 shrink-0 shadow-sm">
       <div className="flex items-center gap-3">
         <a href="/" className="flex items-center gap-2 group">
-          <div className="p-1.5 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+          <div className="p-1.5 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
             <Mountain className="h-5 w-5 text-primary" />
           </div>
-          <h1 className="text-lg font-bold tracking-tight hidden sm:block">Leu Tempo</h1>
+          <h1 className="text-lg font-bold tracking-tight hidden sm:block text-primary">Leu Tempo</h1>
         </a>
       </div>
 
@@ -47,8 +47,8 @@ export function Header() {
               size="sm"
               asChild
               className={cn(
-                "h-9 px-3 text-xs md:text-sm font-medium",
-                isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                "h-9 px-3 text-xs md:text-sm font-bold rounded-2xl transition-all",
+                isActive ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
               )}
             >
               <a href={item.href}>
@@ -64,7 +64,7 @@ export function Header() {
         {!user ? (
           <AuthDialog
             trigger={
-              <Button size="sm" className="font-semibold shadow-sm">
+              <Button size="sm" className="font-bold shadow-sm rounded-2xl px-5">
                 Se connecter
               </Button>
             }
