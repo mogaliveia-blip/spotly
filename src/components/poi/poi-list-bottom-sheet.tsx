@@ -81,9 +81,9 @@ export function PoiListBottomSheet({
     >
       <div className="flex flex-col h-full w-full pointer-events-none px-4">
         
-        {/* Poignée flottante arrondie aux 4 coins */}
+        {/* Poignée flottante arrondie aux 4 coins, sans ombre */}
         <div 
-          className="flex flex-col items-center py-3 cursor-pointer group shrink-0 bg-background/80 backdrop-blur-md rounded-3xl border shadow-[0_-8px_30px_rgb(0,0,0,0.12)] pointer-events-auto mb-2"
+          className="flex flex-col items-center py-3 cursor-pointer group shrink-0 bg-background/80 backdrop-blur-md rounded-3xl border pointer-events-auto mb-2"
           onClick={cycleSnapPoint}
         >
           <div className="w-12 h-1.5 bg-muted-foreground/20 rounded-full group-hover:bg-muted-foreground/40 transition-colors mb-2" />
