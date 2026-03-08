@@ -1,16 +1,24 @@
-// src/app/pois/edit/[id]/page.tsx
 'use client';
 
+import * as React from 'react';
 import { POIForm } from '@/components/poi/poi-form';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
 import { AppLayout } from '@/components/layout/app-layout';
 
-export default function EditPOIPage() {
-  const params = useParams();
-  const id = params.id as string;
+/**
+ * Page d'édition d'un point d'intérêt.
+ * Utilise React.use() pour désenvelopper les params conformément à Next.js 15.
+ */
+export default function EditPOIPage({ 
+  params 
+}: { 
+  params: Promise<{ id: string }> 
+}) {
+  // Désenveloppement synchrone du paramètre de route 'id'
+  const resolvedParams = React.use(params);
+  const id = resolvedParams.id;
 
   return (
     <AppLayout>
@@ -24,7 +32,14 @@ export default function EditPOIPage() {
             </Link>
           </Button>
         </div>
-        {id ? <POIForm poiId={id} /> : <p>Chargement...</p>}
+        
+        {id ? (
+          <POIForm poiId={id} />
+        ) : (
+          <div className="flex items-center justify-center p-12">
+            <p className="text-muted-foreground">Préparation de l'éditeur...</p>
+          </div>
+        )}
       </div>
     </AppLayout>
   );
