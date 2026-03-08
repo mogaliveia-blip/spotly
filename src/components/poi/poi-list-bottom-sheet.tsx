@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -5,7 +6,7 @@ import type { POILite, MainCategory } from '@/lib/types';
 import { categoriesMap } from '@/lib/types';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { getDistance, cn } from '@/lib/utils';
-import { MapPin, Navigation, ChevronUp, ChevronDown, Star } from 'lucide-react';
+import { MapPin, Navigation, Star } from 'lucide-react';
 import { SponsorBadge } from '../sponsor/sponsor-badge';
 import { ScrollArea } from '../ui/scroll-area';
 
@@ -17,14 +18,6 @@ interface PoiListBottomSheetProps {
   categoryFilter: MainCategory | 'all';
 }
 
-type SnapPoint = 'low' | 'mid' | 'high';
-
-const snapHeights: Record<SnapPoint, string> = {
-  low: '25vh',
-  mid: '60vh',
-  high: '92vh',
-};
-
 export function PoiListBottomSheet({
   pois,
   onSelectPoi,
@@ -32,11 +25,16 @@ export function PoiListBottomSheet({
   userLocation,
   categoryFilter,
 }: PoiListBottomSheetProps) {
-  const [snapPoint, setSnapPoint] = useState<SnapPoint>('mid');
+  // On simplifie la gestion des hauteurs. 
+  // Par défaut, on affiche la liste à hauteur intermédiaire (60vh).
+  // Si un POI est sélectionné, on réduit à 25vh pour laisser la place aux détails.
+  const [isMinimized, setIsMinimized] = useState(false);
 
   useEffect(() => {
     if (selectedPoiId) {
-      setSnapPoint('low');
+      setIsMinimized(true);
+    } else {
+      setIsMinimized(false);
     }
   }, [selectedPoiId]);
 
@@ -65,30 +63,19 @@ export function PoiListBottomSheet({
     return [...activeSponsors, ...others];
   }, [pois, userLocation]);
 
-  const cycleSnapPoint = () => {
-    if (snapPoint === 'low') setSnapPoint('mid');
-    else if (snapPoint === 'mid') setSnapPoint('high');
-    else setSnapPoint('low');
-  };
-
   return (
     <div
       className={cn(
-        "fixed inset-x-0 bottom-0 z-40 bg-transparent transition-all duration-300 ease-in-out overflow-hidden pointer-events-none",
-        snapPoint === 'high' ? "h-screen" : ""
+        "fixed inset-x-0 bottom-0 z-40 bg-transparent transition-all duration-500 ease-in-out overflow-hidden pointer-events-none",
+        isMinimized ? "h-[25vh]" : "h-[60vh]"
       )}
-      style={{ height: snapHeights[snapPoint] }}
     >
       <div className="flex flex-col h-full w-full pointer-events-none px-4">
         
-        {/* Poignée flottante arrondie aux 4 coins, sans ombre */}
-        <div 
-          className="flex flex-col items-center py-3 cursor-pointer group shrink-0 bg-background/80 backdrop-blur-md rounded-3xl border pointer-events-auto mb-2"
-          onClick={cycleSnapPoint}
-        >
-          <div className="w-12 h-1.5 bg-muted-foreground/20 rounded-full group-hover:bg-muted-foreground/40 transition-colors mb-2" />
+        {/* Poignée flottante visuelle (sans action de clic, le scroll est naturel) */}
+        <div className="flex flex-col items-center py-3 shrink-0 bg-background/80 backdrop-blur-md rounded-3xl border pointer-events-auto mb-2">
+          <div className="w-12 h-1.5 bg-muted-foreground/20 rounded-full mb-2" />
           <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">
-            {snapPoint === 'low' || snapPoint === 'mid' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
             {sortedPois.length} Résultats
           </div>
         </div>

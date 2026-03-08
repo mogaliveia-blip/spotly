@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { POI, POILite } from '@/lib/types';
@@ -51,9 +52,10 @@ function MapController({
       const bounds = new window.google.maps.LatLngBounds();
       pois.forEach((poi) => bounds.extend(poi.location));
       
-      // Calcul des marges pour que les marqueurs s'affichent entre le Header et la Bottom Sheet
+      // Calcul des marges pour que les marqueurs s'affichent entre le Header et la Bottom Sheet (60vh)
       const topPadding = 100; // Header (64) + marge confort
-      const bottomPadding = window.innerHeight * 0.35; // Hauteur Bottom Sheet (25vh) + poignée + marge
+      // La Bottom Sheet occupe 60% de la hauteur. On laisse une marge de sécurité.
+      const bottomPadding = window.innerHeight * 0.65; 
       
       map.fitBounds(bounds, {
         top: topPadding,
