@@ -41,33 +41,33 @@ export function MobilePOIBottomSheet({
 
   return (
     <>
-      {/* Overlay sombre */}
+      {/* Overlay sombre - Z-55 pour être juste en dessous du contenu mais au-dessus du reste */}
       <div
-        className="fixed inset-0 bg-black/30 z-40"
+        className="fixed inset-0 bg-black/40 z-[55] backdrop-blur-sm"
         onClick={() => onOpenChange(false)}
       />
 
-      {/* Bottom Sheet */}
+      {/* Bottom Sheet - Z-60 pour être au sommet absolu de la pile */}
       <div
         className="
-          fixed inset-x-0 bottom-0 z-50
+          fixed inset-x-0 bottom-0 z-[60]
           bg-background
-          rounded-t-2xl shadow-xl
+          rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.2)]
           flex flex-col
         "
         style={{
-          height: '60%',
-          maxHeight: '60%',
+          height: '70%',
+          maxHeight: '70%',
         }}
       >
         {/* Header avec poignée + bouton fermeture */}
-        <div className="relative flex items-center justify-center py-3 border-b">
-          <div className="w-10 h-1.5 bg-muted rounded-full" />
+        <div className="relative flex items-center justify-center py-4 border-b">
+          <div className="w-12 h-1.5 bg-muted rounded-full" />
 
           <Button
             size="icon"
             variant="ghost"
-            className="absolute right-3"
+            className="absolute right-4 rounded-full"
             onClick={() => onOpenChange(false)}
           >
             <X className="h-5 w-5" />
@@ -75,7 +75,7 @@ export function MobilePOIBottomSheet({
         </div>
 
         {/* Contenu scrollable */}
-        <div ref={containerRef} className="overflow-y-auto flex-1 p-4">
+        <div ref={containerRef} className="overflow-y-auto flex-1 p-5 pb-10">
           <POIDetails poi={poi} />
         </div>
       </div>

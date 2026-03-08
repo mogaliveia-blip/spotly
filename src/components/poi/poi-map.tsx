@@ -32,18 +32,12 @@ function MapController({
   const isMobile = useIsMobile();
   const { toast } = useToast();
 
-  /* =============================
-     PAN VERS POI SÉLECTIONNÉ
-  ============================= */
   useEffect(() => {
     if (selectedPoi && map) {
       map.panTo(selectedPoi.location);
     }
   }, [selectedPoi, map]);
 
-  /* =============================
-     FIT BOUNDS AUTOMATIQUE
-  ============================= */
   useEffect(() => {
     if (selectedPoi || !map || pois.length === 0) return;
     if (typeof window === 'undefined' || !window.google?.maps) return;
@@ -58,12 +52,8 @@ function MapController({
     }
   }, [pois, selectedPoi, map]);
 
-  /* =============================
-     NOTIFICATION INTELLIGENTE
-     On ne toast automatiquement que si la permission est refusée
-  ============================= */
   useEffect(() => {
-    if (geoError && geoError.code === 1) { // 1 = PERMISSION_DENIED
+    if (geoError && geoError.code === 1) {
       toast({
         variant: "destructive",
         title: "Géolocalisation bloquée",
@@ -91,7 +81,6 @@ function MapController({
 
   return (
     <>
-      {/* Position utilisateur */}
       {userLocation && (
         <AdvancedMarker position={userLocation}>
           <div className="text-blue-500 rounded-full bg-white p-1 shadow-lg ring-2 ring-white">
@@ -100,7 +89,6 @@ function MapController({
         </AdvancedMarker>
       )}
 
-      {/* Markers POI */}
       {pois.map((poi) => {
         const isSelected = selectedPoi?.id === poi.id;
         const sponsorIsActive = isSponsorActive(poi);
@@ -180,8 +168,8 @@ function MapController({
         </InfoWindow>
       )}
 
-      {/* Bouton recentrage positionné sous la barre de catégories (top-24) */}
-      <div className="absolute top-24 right-4 z-10">
+      {/* Z-30 pour être au-dessus du gradient de catégorie (Z-20) mais sous le header (Z-50) */}
+      <div className="absolute top-24 right-4 z-30">
         <Button
           onClick={handleRecenter}
           type="button"
