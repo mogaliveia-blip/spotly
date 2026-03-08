@@ -647,13 +647,13 @@ className = "hidden"
 id = "header-upload"
   />
   </FormControl>
-  < div className = "relative aspect-video w-full border-2 border-dashed rounded-lg flex items-center justify-center" >
+  < div className = "relative aspect-video w-full border-2 border-dashed rounded-lg flex items-center justify-center bg-muted/30" >
     {(headerPreviewUrl || headerPhotoUrl) ? (
       <Image
                               src= { headerPreviewUrl || headerPhotoUrl!}
 alt = "Aperçu de l'en-tête"
 fill
-className = "object-cover rounded-lg"
+className = "object-contain rounded-lg"
   />
                           ) : (
   <label htmlFor= "header-upload" className = "cursor-pointer text-center text-muted-foreground p-4" >
@@ -764,4 +764,3 @@ onClick = {(e) => {
   </APIProvider>
   );
 }
-

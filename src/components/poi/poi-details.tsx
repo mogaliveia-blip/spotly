@@ -104,14 +104,14 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   return (
     <div className="space-y-4">
 
-      {/* Header */}
+      {/* Header - object-contain pour éviter de tronquer l'image originale */}
       {poi.headerPhotoUrl ? (
-        <div className="relative aspect-video w-full">
+        <div className="relative aspect-video w-full bg-muted/30 rounded-md overflow-hidden">
           <Image
             src={poi.headerPhotoUrl}
             alt={poi.title}
             fill
-            className="object-cover rounded-md"
+            className="object-contain"
           />
         </div>
       ) : (
