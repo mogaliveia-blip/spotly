@@ -116,14 +116,14 @@ export default function DashboardPage() {
   const visiblePois = useMemo(() => {
     const filtered = pois.filter((p) => categoryFilter === 'all' || p.mainCategory === categoryFilter)
     if (appConfig?.festivalMode || user) return filtered
-    return filtered.slice(0, 5) // Increased limit for visitors in new UI
+    return filtered.slice(0, 5)
   }, [pois, categoryFilter, user, appConfig])
 
   const showHero = heroVisible && !user && marketingConfig?.heroEnabled
 
   return (
     <div className="flex flex-col h-full w-full relative">
-      {/* Category bar floating or sticky */}
+      {/* Barre de catégories flottante */}
       <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-background/90 to-transparent pt-2 pb-6">
         <CategoryFilter
           selectedCategory={categoryFilter as MainCategory | 'all'}
@@ -131,7 +131,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Main content area */}
+      {/* Zone de contenu principal (Carte) */}
       <div className="flex-1 relative">
         {showHero && marketingConfig && (
           <HeroOverlay
@@ -159,7 +159,7 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Persistent POI List Bottom Sheet */}
+      {/* Bottom Sheet persistante pour la liste des POIs */}
       <PoiListBottomSheet
         pois={visiblePois}
         onSelectPoi={handleSelectPoi}

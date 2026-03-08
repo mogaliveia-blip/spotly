@@ -180,8 +180,8 @@ function MapController({
         </InfoWindow>
       )}
 
-      {/* Bouton recentrage personnalisé amélioré */}
-      <div className="absolute top-4 right-4 z-10">
+      {/* Bouton recentrage positionné sous la barre de catégories (top-24) */}
+      <div className="absolute top-24 right-4 z-10">
         <Button
           onClick={handleRecenter}
           type="button"
