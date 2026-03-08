@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { POI, POILite } from '@/lib/types';
@@ -53,12 +54,14 @@ function MapController({
       const bounds = new window.google.maps.LatLngBounds();
       pois.forEach((poi) => bounds.extend(poi.location));
       
-      // La Bottom Sheet occupe 60% de la hauteur quand elle est visible.
-      // On définit les marges pour que les marqueurs s'affichent uniquement dans la zone libre.
-      const topPadding = 120; // Header + Categories + marge de confort
+      // La zone occupée par les contrôles et listes
+      const topPadding = 120; // Header + Categories
+      
+      // Si la liste est visible, on réserve 65% de la hauteur en bas (pour les marqueurs)
+      // Si elle est cachée, on ne laisse qu'une petite marge pour le bouton de rappel
       const bottomPadding = isListVisible 
         ? window.innerHeight * 0.65 
-        : 100; // Un peu de marge en bas quand cachée pour le bouton de rappel
+        : 100;
       
       map.fitBounds(bounds, {
         top: topPadding,
@@ -239,6 +242,7 @@ export function POIMap({
         disableDefaultUI={false}
         mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID || 'default_map_id'}
         className="w-full h-full"
+        onClick={() => onSelectPoi(null)}
       >
         <MapController
           pois={pois}

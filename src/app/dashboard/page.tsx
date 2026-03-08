@@ -1,3 +1,4 @@
+
 'use client'
 
 import { POIMapAdapter } from '@/components/poi/poi-map-adapter'
