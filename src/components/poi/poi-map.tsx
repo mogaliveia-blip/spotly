@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { POI, POILite } from '@/lib/types';
@@ -52,16 +51,16 @@ function MapController({
       const bounds = new window.google.maps.LatLngBounds();
       pois.forEach((poi) => bounds.extend(poi.location));
       
-      // Calcul des marges pour que les marqueurs s'affichent entre le Header et la Bottom Sheet (60vh)
-      const topPadding = 100; // Header (64) + marge confort
-      // La Bottom Sheet occupe 60% de la hauteur. On laisse une marge de sécurité.
-      const bottomPadding = window.innerHeight * 0.65; 
+      // La Bottom Sheet occupe 60% de la hauteur. 
+      // On définit les marges pour que les marqueurs s'affichent uniquement dans les 40% supérieurs libres.
+      const topPadding = 120; // Header + Categories + marge de confort
+      const bottomPadding = window.innerHeight * 0.65; // On laisse 65% de marge en bas
       
       map.fitBounds(bounds, {
         top: topPadding,
         bottom: bottomPadding,
-        left: 50,
-        right: 50
+        left: 60,
+        right: 60
       });
     }
   }, [pois, selectedPoi, map]);
@@ -182,6 +181,7 @@ function MapController({
         </InfoWindow>
       )}
 
+      {/* Positionné sous le Header pour éviter la Bottom Sheet */}
       <div className="absolute top-24 right-4 z-30">
         <Button
           onClick={handleRecenter}

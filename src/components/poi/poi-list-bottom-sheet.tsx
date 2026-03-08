@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -25,9 +24,8 @@ export function PoiListBottomSheet({
   userLocation,
   categoryFilter,
 }: PoiListBottomSheetProps) {
-  // On simplifie la gestion des hauteurs. 
-  // Par défaut, on affiche la liste à hauteur intermédiaire (60vh).
-  // Si un POI est sélectionné, on réduit à 25vh pour laisser la place aux détails.
+  // On maintient la liste à 60vh par défaut pour laisser 40% de carte libre en haut.
+  // On réduit à 25vh uniquement si un POI est sélectionné pour laisser la place aux détails.
   const [isMinimized, setIsMinimized] = useState(false);
 
   useEffect(() => {
@@ -72,7 +70,7 @@ export function PoiListBottomSheet({
     >
       <div className="flex flex-col h-full w-full pointer-events-none px-4">
         
-        {/* Poignée flottante visuelle (sans action de clic, le scroll est naturel) */}
+        {/* Poignée flottante sans ombre, coins arrondis, laisse voir la carte */}
         <div className="flex flex-col items-center py-3 shrink-0 bg-background/80 backdrop-blur-md rounded-3xl border pointer-events-auto mb-2">
           <div className="w-12 h-1.5 bg-muted-foreground/20 rounded-full mb-2" />
           <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">
@@ -81,7 +79,7 @@ export function PoiListBottomSheet({
         </div>
 
         <ScrollArea className="flex-1 pointer-events-auto bg-transparent">
-          <div className="space-y-3 pb-32">
+          <div className="space-y-4 pb-32 pt-2">
             {sortedPois.length === 0 ? (
               <div className="py-10 text-center text-muted-foreground bg-background/60 backdrop-blur-md rounded-3xl border border-white/20">
                 Aucun résultat pour cette catégorie.
@@ -99,7 +97,7 @@ export function PoiListBottomSheet({
                     key={poi.id}
                     onClick={() => onSelectPoi(poi)}
                     className={cn(
-                      'w-full text-left p-4 rounded-3xl transition-all flex items-start gap-4 border shadow-sm backdrop-blur-md',
+                      'w-full text-left p-4 rounded-[2rem] transition-all flex items-start gap-4 border backdrop-blur-md',
                       isSelected
                         ? 'bg-primary/90 text-primary-foreground border-primary ring-1 ring-primary/20'
                         : sponsorIsActive
