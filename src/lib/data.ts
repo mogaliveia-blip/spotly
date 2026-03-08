@@ -12,8 +12,7 @@ import {
   deleteDoc,
   addDoc,
   serverTimestamp,
-  runTransaction,
-  Timestamp
+  runTransaction
 } from 'firebase/firestore'
 import type {
   POI,
@@ -128,7 +127,6 @@ export async function uploadFile(
   path: string
 ): Promise<{ url: string; path: string }> {
   const storageRef = ref(storage, path)
-  // uploadBytes returns an UploadResult, and we should use its reference for getDownloadURL
   const uploadResult = await uploadBytes(storageRef, file, {
     contentType: file.type || 'image/jpeg'
   })
@@ -145,7 +143,6 @@ export async function deleteFileByPath(filePath: string): Promise<void> {
   try {
     await deleteObject(storageRef)
   } catch (error: any) {
-    // It's not critical if the file doesn't exist, so we can ignore 'object-not-found' errors.
     if (error.code !== 'storage/object-not-found') {
       console.error('Erreur lors de la suppression du fichier:', error)
       throw error
@@ -189,18 +186,11 @@ export async function fetchPois(): Promise<POI[]> {
   return poiList
 }
 
-/**
- * ✅ NOUVEAU : fetch POIs LITE depuis pois_public
- * Cache-first -> serveur, avec refresh serveur non bloquant.
- *
- * ⚠️ Fallback obligatoire : si pois_public vide / inexistant / permission, on retourne fetchPois()
- */
 export async function fetchPoisLite(): Promise<POILite[]> {
   const colRef = collection(db, 'pois_public')
 
   const fallback = async () => {
     const full = await fetchPois()
-    // On peut caster : POI contient forcément les champs du lite.
     return full as unknown as POILite[]
   }
 
@@ -211,16 +201,10 @@ export async function fetchPoisLite(): Promise<POILite[]> {
       const cached = cacheSnap.docs.map(
         (d) => ({ id: d.id, ...d.data() } as POILite)
       )
-
-      // Refresh serveur non bloquant
-      void getDocsFromServer(colRef).catch(() => {
-        // silence: on ne casse pas l'app
-      })
-
+      void getDocsFromServer(colRef).catch(() => {})
       return cached
     }
 
-    // Cache vide -> serveur
     const serverSnap = await getDocsFromServer(colRef)
     if (serverSnap.empty) {
       return await fallback()
@@ -230,26 +214,8 @@ export async function fetchPoisLite(): Promise<POILite[]> {
       (d) => ({ id: d.id, ...d.data() } as POILite)
     )
   } catch (e: any) {
-    // permission denied / rules / etc -> fallback sur pois (full)
-    if (e?.code && String(e.code).includes('permission')) {
-      return await fallback()
-    }
     return await fallback()
   }
-}
-
-/**
- * (Facultatif) : lire un POI lite par ID depuis pois_public
- */
-export async function fetchPoiPublicById(
-  id: string
-): Promise<POILite | undefined> {
-  const poiRef = doc(db, 'pois_public', id)
-  const poiSnap = await getDoc(poiRef)
-  if (poiSnap.exists()) {
-    return { id: poiSnap.id, ...poiSnap.data() } as POILite
-  }
-  return undefined
 }
 
 export async function fetchPoiById(id: string): Promise<POI | undefined> {
@@ -266,7 +232,6 @@ export async function fetchReviewsByPoiId(poiId: string): Promise<Review[]> {
   const reviewSnapshot = await getDocs(reviewsCollection)
   const reviewList = reviewSnapshot.docs.map((doc) => {
     const data = doc.data()
-    // Handle both Timestamp and Date objects
     const createdAt = data.createdAt?.toDate
       ? data.createdAt.toDate()
       : new Date(data.createdAt)
@@ -286,44 +251,30 @@ export async function addReview(
     let newReviewId = '';
 
     await runTransaction(db, async (tx) => {
-
-      // 1️⃣ LIRE D'ABORD (obligatoire avant toute écriture)
       const poiSnap = await tx.get(poiRef);
-
       const currentCount = poiSnap.exists()
         ? (poiSnap.data().reviewCount || 0)
         : 0;
 
-      // 2️⃣ Préparer la référence du nouvel avis
       const newReviewRef = doc(reviewsCollection);
       newReviewId = newReviewRef.id;
-
-      // 3️⃣ ÉCRITURES (après les lectures)
 
       tx.set(newReviewRef, {
         ...reviewData,
         poiId,
         createdAt: serverTimestamp(),
-        hidden: false,
-        reportCount: 0,
-        hiddenAt: null,
       });
 
       tx.update(poiRef, {
         reviewCount: currentCount + 1,
       });
-
     });
 
-    // Retour optimiste pour l'UI
     return {
       id: newReviewId,
       ...reviewData,
       createdAt: new Date(),
       poiId,
-      hidden: false,
-      reportCount: 0,
-      hiddenAt: null,
     };
 
   } catch (e: any) {
@@ -393,13 +344,9 @@ export async function deletePoi(poiId: string): Promise<void> {
   const imagesFolderRef = ref(storage, `poi-images/${poiId}`)
 
   try {
-    // Delete Firestore document first
     await deleteDoc(poiRef)
-
-    // Then delete all files in the corresponding Storage folder
     const res = await listAll(imagesFolderRef)
     const deletePromises = res.items.map((itemRef) => deleteObject(itemRef))
-    // Also delete items in subfolders (like gallery)
     const subfolderPromises = res.prefixes.map(async (folderRef) => {
       const subfolderItems = await listAll(folderRef)
       return subfolderItems.items.map((itemRef) => deleteObject(itemRef))
@@ -410,7 +357,6 @@ export async function deletePoi(poiId: string): Promise<void> {
       ...(await Promise.all(subfolderPromises)).flat()
     ])
   } catch (serverError: any) {
-    // Handle potential permission errors for both Firestore and Storage
     if (serverError.code?.includes('permission-denied')) {
       const permissionError = new FirestorePermissionError({
         path: poiRef.path,
@@ -420,32 +366,6 @@ export async function deletePoi(poiId: string): Promise<void> {
     } else {
       console.error('Erreur lors de la suppression du POI et de ses images', serverError)
     }
-    throw serverError // Re-throw the error to be caught by the caller
+    throw serverError
   }
-}
-
-/**
- * Seeds the database with initial sample data to create collections.
- */
-export async function seedDatabase(): Promise<void> {
-  const poiId = await createPoi({
-    title: "Scène Principale",
-    description: "La scène principale du festival Leu Tempo, accueillant les plus grands artistes.",
-    mainCategory: "programmation",
-    subCategory: "concert_headliner",
-    location: { lat: -21.3393, lng: 55.4781 },
-    headerPhotoUrl: "https://picsum.photos/seed/main-stage/1200/800",
-    galleryUrls: []
-  });
-
-  await addReview(poiId, {
-    userId: "system-seed",
-    userDisplayName: "Équipe Festival",
-    userPhotoURL: null,
-    rating: 5,
-    comment: "Hâte de vous retrouver devant cette scène magnifique !",
-    hidden: false,
-    reportCount: 0,
-    hiddenAt: null
-  });
 }
