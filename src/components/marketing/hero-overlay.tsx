@@ -26,14 +26,14 @@ function CtaButton({
   if (config.heroCtaMode === 'auth') {
     return (
       <AuthDialog
-        trigger={<Button className="mt-4">{config.heroCtaText}</Button>}
+        trigger={<Button className="mt-4 rounded-full px-8 h-12 font-bold shadow-lg text-base">{config.heroCtaText}</Button>}
       />
     );
   }
 
   if (config.heroCtaMode === 'external' && config.heroCtaLink) {
     return (
-      <Button className="mt-4" asChild>
+      <Button className="mt-4 rounded-full px-8 h-12 font-bold shadow-lg text-base" asChild>
         <a
           href={config.heroCtaLink}
           target="_blank"
@@ -47,7 +47,7 @@ function CtaButton({
 
   if (config.heroCtaMode === 'close') {
     return (
-      <Button className="mt-4" onClick={onClose}>
+      <Button className="mt-4 rounded-full px-8 h-12 font-bold shadow-lg text-base" onClick={onClose}>
         {config.heroCtaText}
       </Button>
     );
@@ -58,18 +58,18 @@ function CtaButton({
 
 export function HeroOverlay({ config, onClose }: HeroOverlayProps) {
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center p-4">
-      <div className="relative w-full h-full max-w-4xl max-h-[80vh]">
-        <Card className="relative h-full w-full overflow-hidden flex flex-col justify-end">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-500">
+      <div className="relative w-full h-full max-w-4xl max-h-[80vh] animate-in zoom-in-95 duration-500">
+        <Card className="relative h-full w-full overflow-hidden flex flex-col justify-end shadow-2xl rounded-[3rem] border-none">
 
           {/* Bouton croix */}
           {onClose && (
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 z-30 bg-black/50 hover:bg-black/70 text-white rounded-full p-2"
+              className="absolute top-6 right-6 z-30 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-all active:scale-95 shadow-lg"
               aria-label="Fermer"
             >
-              <X size={18} />
+              <X size={24} />
             </button>
           )}
 
@@ -85,22 +85,22 @@ export function HeroOverlay({ config, onClose }: HeroOverlayProps) {
           )}
 
           {/* Dégradé sombre */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
 
           {/* Contenu texte */}
-          <CardHeader className="relative z-10 text-primary-foreground p-6">
-            <CardTitle className="text-3xl md:text-4xl font-bold">
+          <div className="relative z-10 p-8 md:p-16 space-y-4">
+            <h2 className="text-4xl md:text-6xl font-bold text-white tracking-tight">
               {config.heroTitle}
-            </CardTitle>
-            <CardDescription className="text-primary-foreground/90 text-base">
+            </h2>
+            <p className="text-lg md:text-xl text-white/90 max-w-2xl font-medium leading-relaxed">
               {config.heroSubtitle}
-            </CardDescription>
-          </CardHeader>
-
-          {/* CTA */}
-          <CardContent className="relative z-10 p-6 pt-0">
-            <CtaButton config={config} onClose={onClose} />
-          </CardContent>
+            </p>
+            
+            {/* CTA */}
+            <div className="pt-4">
+              <CtaButton config={config} onClose={onClose} />
+            </div>
+          </div>
 
         </Card>
       </div>
