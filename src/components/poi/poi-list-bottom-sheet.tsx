@@ -64,7 +64,7 @@ export function PoiListBottomSheet({
   return (
     <div
       className={cn(
-        "fixed bottom-0 left-1/2 -translate-x-1/2 z-40 bg-transparent transition-all duration-500 ease-in-out overflow-hidden pointer-events-none w-full sm:max-w-[60%]",
+        "fixed bottom-0 left-1/2 -translate-x-1/2 z-40 bg-transparent transition-all duration-500 ease-in-out overflow-hidden pointer-events-none w-[60%]",
         isMinimized ? "h-[25vh]" : "h-[60vh]"
       )}
     >
