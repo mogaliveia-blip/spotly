@@ -11,6 +11,8 @@ import { CategoryFilter } from '@/components/poi/category-filter'
 import { HeroOverlay } from '@/components/marketing/hero-overlay'
 import { PoiListBottomSheet } from '@/components/poi/poi-list-bottom-sheet'
 import { useGeolocation } from '@/providers/geolocation-provider'
+import { Button } from '@/components/ui/button'
+import { List } from 'lucide-react'
 
 type AppMode = 'normal' | 'map-fallback' | 'static-fallback'
 
@@ -28,6 +30,7 @@ export default function DashboardPage() {
   const [activePoi, setActivePoi] = useState<POILite | POI | null>(null)
   const [heroVisible, setHeroVisible] = useState(false)
   const [appMode, setAppMode] = useState<AppMode>('normal')
+  const [isListVisible, setIsListVisible] = useState(true)
 
   const selectedPoiId = searchParams.get('poi')
   const categoryFilter = searchParams.get('category') || 'all'
@@ -59,8 +62,10 @@ export default function DashboardPage() {
       const params = new URLSearchParams(searchParams.toString())
       if (poi) {
         params.set('poi', poi.id)
+        setIsListVisible(true) // Always show list/details when a POI is selected
       } else {
         params.delete('poi')
+        setIsListVisible(false) // Hide list when clicking map background
       }
       updateUrl(params)
       if (poi) void loadFullPoi(poi.id)
@@ -101,7 +106,10 @@ export default function DashboardPage() {
     if (!pois.length) return
     const poiFromUrl = selectedPoiId ? pois.find((p) => p.id === selectedPoiId) : null
     setActivePoi(poiFromUrl || null)
-    if (poiFromUrl?.id) void loadFullPoi(poiFromUrl.id)
+    if (poiFromUrl?.id) {
+      void loadFullPoi(poiFromUrl.id)
+      setIsListVisible(true)
+    }
   }, [selectedPoiId, pois, loadFullPoi])
 
   const handleCategorySelect = (category: MainCategory | 'all') => {
@@ -111,6 +119,7 @@ export default function DashboardPage() {
     params.delete('poi')
     setActivePoi(null)
     updateUrl(params)
+    setIsListVisible(true) // Re-show list when changing category
   }
 
   const visiblePois = useMemo(() => {
@@ -157,6 +166,19 @@ export default function DashboardPage() {
             La carte est momentanément indisponible. Utilisez la liste ci-dessous.
           </div>
         )}
+
+        {/* Bouton de rappel de la liste quand elle est masquée */}
+        {!isListVisible && !activePoi && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <Button 
+              onClick={() => setIsListVisible(true)}
+              className="rounded-full shadow-2xl px-6 h-12 gap-2 bg-primary/90 backdrop-blur-sm hover:bg-primary"
+            >
+              <List className="h-4 w-4" />
+              Afficher la liste
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Bottom Sheet persistante pour la liste des POIs */}
@@ -166,6 +188,7 @@ export default function DashboardPage() {
         selectedPoiId={activePoi?.id || null}
         userLocation={userLocation}
         categoryFilter={categoryFilter as MainCategory | 'all'}
+        isVisible={isListVisible}
       />
     </div>
   )

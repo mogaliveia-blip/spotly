@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -16,6 +15,7 @@ interface PoiListBottomSheetProps {
   selectedPoiId: string | null;
   userLocation: { lat: number; lng: number } | null;
   categoryFilter: MainCategory | 'all';
+  isVisible?: boolean;
 }
 
 export function PoiListBottomSheet({
@@ -24,6 +24,7 @@ export function PoiListBottomSheet({
   selectedPoiId,
   userLocation,
   categoryFilter,
+  isVisible = true,
 }: PoiListBottomSheetProps) {
   // On maintient la liste à 60vh par défaut pour laisser 40% de carte libre en haut.
   // On réduit à 25vh uniquement si un POI est sélectionné pour laisser la place aux détails.
@@ -65,8 +66,9 @@ export function PoiListBottomSheet({
   return (
     <div
       className={cn(
-        "fixed bottom-0 left-1/2 -translate-x-1/2 z-40 bg-transparent transition-all duration-500 ease-in-out overflow-hidden pointer-events-none w-[92%] md:w-[60%]",
-        isMinimized ? "h-[25vh]" : "h-[60vh]"
+        "fixed bottom-0 left-1/2 -translate-x-1/2 z-40 bg-transparent transition-all duration-500 ease-in-out overflow-hidden pointer-events-none w-[90%] md:w-[60%]",
+        isMinimized ? "h-[25vh]" : "h-[60vh]",
+        !isVisible && "translate-y-full opacity-0"
       )}
     >
       <div className="flex flex-col h-full w-full pointer-events-none px-4">
