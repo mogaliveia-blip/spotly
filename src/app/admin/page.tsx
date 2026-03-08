@@ -11,7 +11,8 @@ import {
   updateAppConfig,
   fetchMarketingConfig,
   updateMarketingConfig,
-  uploadFile
+  uploadFile,
+  seedDatabase
 } from '@/lib/data';
 import type { AppUser, UserRole, AppConfig, MarketingConfig } from '@/lib/types';
 import { AppLayout } from '@/components/layout/app-layout';
@@ -22,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Trash2, Loader2, ImagePlus } from 'lucide-react';
+import { Trash2, Loader2, ImagePlus, Database } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -36,7 +37,7 @@ import Image from 'next/image';
 function AppConfigCard() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [savingKey, setSavingKey] = useState<'landing' | 'reviews' | null>(null);
+  const [savingKey, setSavingKey] = useState<'landing' | 'reviews' | 'seed' | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -97,6 +98,25 @@ function AppConfigCard() {
     }
   };
 
+  const handleSeedData = async () => {
+    setSavingKey('seed');
+    try {
+      await seedDatabase();
+      toast({
+        title: 'Données initialisées',
+        description: 'Les collections ont été créées avec des données de test.'
+      });
+    } catch (error) {
+      toast({
+        title: 'Erreur',
+        description: "Impossible d'initialiser les données. Vérifiez vos règles Firestore.",
+        variant: 'destructive'
+      });
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
   if (loading) {
     return <Skeleton className="h-20 w-full" />;
   }
@@ -144,6 +164,28 @@ function AppConfigCard() {
             disabled={savingKey !== null}
           />
         </div>
+      </div>
+
+      {/* SEED DATABASE */}
+      <div className="flex items-center space-x-4 rounded-md border border-primary/20 bg-primary/5 p-4">
+        <div className="flex-1 space-y-1">
+          <Label className="text-base font-medium">
+            Initialiser la base de données
+          </Label>
+          <p className="text-sm text-muted-foreground">
+            Créez instantanément les collections Firestore avec des données de démonstration pour tester l'application.
+          </p>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={handleSeedData} 
+          disabled={savingKey !== null}
+          className="gap-2"
+        >
+          {savingKey === 'seed' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
+          Initialiser
+        </Button>
       </div>
     </div>
   );

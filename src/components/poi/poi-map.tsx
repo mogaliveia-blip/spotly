@@ -48,19 +48,44 @@ function MapController({
     if (typeof window === 'undefined' || !window.google?.maps) return;
 
     if (pois.length === 1) {
-      map.panTo(pois[0].location);
-      map.setZoom(15);
+      const poi = pois[0];
+    
+      const latOffset = 0.002; // ≈ 200 m
+      const lngOffset = 0.002;
+    
+      const bounds = new window.google.maps.LatLngBounds(
+        {
+          lat: poi.location.lat - latOffset,
+          lng: poi.location.lng - lngOffset
+        },
+        {
+          lat: poi.location.lat + latOffset,
+          lng: poi.location.lng + lngOffset
+        }
+      );
+    
+      const topPadding = 140;
+      const bottomPadding = isListVisible
+        ? window.innerHeight * 0.55
+        : 100;
+    
+      map.fitBounds(bounds, {
+        top: topPadding,
+        bottom: bottomPadding,
+        left: 60,
+        right: 60
+      });
     } else {
       const bounds = new window.google.maps.LatLngBounds();
       pois.forEach((poi) => bounds.extend(poi.location));
       
       // La zone occupée par les contrôles et listes
-      const topPadding = 120; // Header + Categories
+      const topPadding = 140; // Header + Categories
       
       // Si la liste est visible, on réserve 65% de la hauteur en bas (pour les marqueurs)
       // Si elle est cachée, on ne laisse qu'une petite marge pour le bouton de rappel
       const bottomPadding = isListVisible 
-        ? window.innerHeight * 0.65 
+        ? window.innerHeight * 0.55 
         : 100;
       
       map.fitBounds(bounds, {

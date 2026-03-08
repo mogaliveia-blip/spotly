@@ -333,7 +333,7 @@ export async function addReview(
         operation: 'create',
         requestResourceData: reviewData
       });
-      errorEmitter.emit('permission-error', permissionError);
+      errorEmitter.emit('permission-error', permissionError)
     }
     throw e;
   }
@@ -422,4 +422,30 @@ export async function deletePoi(poiId: string): Promise<void> {
     }
     throw serverError // Re-throw the error to be caught by the caller
   }
+}
+
+/**
+ * Seeds the database with initial sample data to create collections.
+ */
+export async function seedDatabase(): Promise<void> {
+  const poiId = await createPoi({
+    title: "Scène Principale",
+    description: "La scène principale du festival Leu Tempo, accueillant les plus grands artistes.",
+    mainCategory: "programmation",
+    subCategory: "concert_headliner",
+    location: { lat: -21.3393, lng: 55.4781 },
+    headerPhotoUrl: "https://picsum.photos/seed/main-stage/1200/800",
+    galleryUrls: []
+  });
+
+  await addReview(poiId, {
+    userId: "system-seed",
+    userDisplayName: "Équipe Festival",
+    userPhotoURL: null,
+    rating: 5,
+    comment: "Hâte de vous retrouver devant cette scène magnifique !",
+    hidden: false,
+    reportCount: 0,
+    hiddenAt: null
+  });
 }
