@@ -96,7 +96,7 @@ export function PoiListBottomSheet({
 
         {/* Liste scrollable - Fond transparent pour voir la carte */}
         <ScrollArea className="flex-1 pointer-events-auto bg-transparent">
-          <div className="px-4 space-y-3 pb-32">
+          <div className="px-4 pt-3 space-y-3 pb-32">
             {sortedPois.length === 0 ? (
               <div className="py-10 text-center text-muted-foreground bg-background/60 backdrop-blur-md rounded-2xl border border-white/20">
                 Aucun résultat pour cette catégorie.
