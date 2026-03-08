@@ -122,7 +122,7 @@ export default function DashboardPage() {
   const showHero = heroVisible && !user && marketingConfig?.heroEnabled
 
   return (
-    <div className="flex flex-col h-full w-full relative">
+    <div className="flex flex-col h-full w-full relative overflow-hidden">
       {/* Barre de catégories flottante */}
       <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-background/90 to-transparent pt-2 pb-6">
         <CategoryFilter
@@ -132,7 +132,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Zone de contenu principal (Carte) */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative w-full h-full">
         {showHero && marketingConfig && (
           <HeroOverlay
             config={marketingConfig}

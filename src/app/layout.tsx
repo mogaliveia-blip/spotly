@@ -32,7 +32,7 @@ export default function RootLayout({
 
       <body
         className={cn(
-          'min-h-screen w-full font-body antialiased bg-background'
+          'h-full w-full font-body antialiased bg-background'
         )}
       >
         <MapsApiProvider>
