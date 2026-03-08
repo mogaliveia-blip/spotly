@@ -32,7 +32,8 @@ export function PoiListBottomSheet({
   userLocation,
   categoryFilter,
 }: PoiListBottomSheetProps) {
-  const [snapPoint, setSnapPoint] = useState<SnapPoint>('low');
+  // L'état initial est maintenant 'mid' pour une meilleure visibilité immédiate
+  const [snapPoint, setSnapPoint] = useState<SnapPoint>('mid');
 
   // Abaisse automatiquement la liste au niveau bas lorsqu'un POI est sélectionné
   // Cela permet de libérer l'espace pour le panneau de détails qui s'ouvrira par-dessus.
@@ -88,7 +89,7 @@ export function PoiListBottomSheet({
       >
         <div className="w-12 h-1.5 bg-muted-foreground/20 rounded-full group-hover:bg-muted-foreground/40 transition-colors mb-2" />
         <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">
-          {snapPoint === 'low' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          {snapPoint === 'low' || snapPoint === 'mid' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           {sortedPois.length} Résultats
         </div>
       </div>
@@ -106,7 +107,7 @@ export function PoiListBottomSheet({
               const isSelected = selectedPoiId === poi.id;
               const sponsorIsActive = isSponsorActive(poi as any);
 
-              // Libellé de la sous-catégorie pour plus de précision (L'information du lieu)
+              // Libellé de la sous-catégorie pour plus de précision
               const subCatLabel = categoryData?.subCategories[poi.subCategory] || poi.subCategory;
 
               return (
