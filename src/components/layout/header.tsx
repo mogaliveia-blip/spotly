@@ -1,9 +1,8 @@
 'use client';
 
 import { UserNav } from './user-nav';
-import { Mountain, LayoutDashboard, MapPin, Users, Monitor } from 'lucide-react';
+import { Mountain, LayoutDashboard, MapPin, Users, Monitor, Menu } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
-import Link from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -15,9 +14,9 @@ export function Header() {
 
   const navItems = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Carte' },
-    { href: '/pois', icon: MapPin, label: 'POIs', roles: ['editor', 'admin'] },
+    { href: '/pois', icon: MapPin, label: 'Gérer les POIs', roles: ['editor', 'admin'] },
     { href: '/admin', icon: Users, label: 'Admin', roles: ['admin'] },
-    { href: '/admin/monitor', icon: Monitor, label: 'Stats', roles: ['admin'] },
+    { href: '/admin/monitor', icon: Monitor, label: 'Supervision', roles: ['admin'] },
   ];
 
   const filteredNavItems = navItems.filter((item) => {
