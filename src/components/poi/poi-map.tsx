@@ -21,11 +21,13 @@ type POIAny = POILite | POI;
 function MapController({
   pois,
   onSelectPoi,
-  selectedPoi
+  selectedPoi,
+  isListVisible
 }: {
   pois: POIAny[];
   onSelectPoi: (poi: POIAny | null) => void;
   selectedPoi: POIAny | null;
+  isListVisible: boolean;
 }) {
   const { userLocation, error: geoError } = useGeolocation();
   const map = useMap();
@@ -51,10 +53,12 @@ function MapController({
       const bounds = new window.google.maps.LatLngBounds();
       pois.forEach((poi) => bounds.extend(poi.location));
       
-      // La Bottom Sheet occupe 60% de la hauteur. 
-      // On définit les marges pour que les marqueurs s'affichent uniquement dans les 40% supérieurs libres.
+      // La Bottom Sheet occupe 60% de la hauteur quand elle est visible.
+      // On définit les marges pour que les marqueurs s'affichent uniquement dans la zone libre.
       const topPadding = 120; // Header + Categories + marge de confort
-      const bottomPadding = window.innerHeight * 0.65; // On laisse 65% de marge en bas
+      const bottomPadding = isListVisible 
+        ? window.innerHeight * 0.65 
+        : 100; // Un peu de marge en bas quand cachée pour le bouton de rappel
       
       map.fitBounds(bounds, {
         top: topPadding,
@@ -63,7 +67,7 @@ function MapController({
         right: 60
       });
     }
-  }, [pois, selectedPoi, map]);
+  }, [pois, selectedPoi, map, isListVisible]);
 
   useEffect(() => {
     if (geoError && geoError.code === 1) {
@@ -202,11 +206,13 @@ function MapController({
 export function POIMap({
   selectedPoi,
   onSelectPoi,
-  pois
+  pois,
+  isListVisible
 }: {
   selectedPoi: POIAny | null;
   onSelectPoi: (poi: POIAny | null) => void;
   pois: POIAny[];
+  isListVisible: boolean;
 }) {
   const { userLocation, loading: geoLoading } = useGeolocation();
   const isMobile = useIsMobile();
@@ -238,6 +244,7 @@ export function POIMap({
           pois={pois}
           onSelectPoi={onSelectPoi}
           selectedPoi={selectedPoi}
+          isListVisible={isListVisible}
         />
       </Map>
 

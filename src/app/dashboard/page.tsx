@@ -158,6 +158,7 @@ export default function DashboardPage() {
             onSelectPoi={handleSelectPoi}
             pois={visiblePois}
             onCrash={() => setAppMode('map-fallback')}
+            isListVisible={isListVisible}
           />
         )}
 
@@ -169,7 +170,7 @@ export default function DashboardPage() {
 
         {/* Bouton de rappel de la liste quand elle est masquée */}
         {!isListVisible && !activePoi && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-bottom-4 duration-500 pointer-events-auto">
             <Button 
               onClick={() => setIsListVisible(true)}
               className="rounded-full shadow-2xl px-6 h-12 gap-2 bg-primary/90 backdrop-blur-sm hover:bg-primary"
