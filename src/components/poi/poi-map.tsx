@@ -1,7 +1,6 @@
-
 'use client';
 
-import type { POI } from '@/lib/types';
+import type { POI, POILite } from '@/lib/types';
 import { Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
 import { useEffect } from 'react';
 import { User, Crosshair, MapPin } from 'lucide-react';
@@ -17,14 +16,16 @@ import { ScrollArea } from '../ui/scroll-area';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { useToast } from '@/hooks/use-toast';
 
+type POIAny = POILite | POI;
+
 function MapController({
   pois,
   onSelectPoi,
   selectedPoi
 }: {
-  pois: POI[];
-  onSelectPoi: (poi: POI | null) => void;
-  selectedPoi: POI | null;
+  pois: POIAny[];
+  onSelectPoi: (poi: POIAny | null) => void;
+  selectedPoi: POIAny | null;
 }) {
   const { userLocation, error: geoError } = useGeolocation();
   const map = useMap();
@@ -76,11 +77,10 @@ function MapController({
       map.panTo(userLocation);
       map.setZoom(15);
     } else {
-      // Si l'utilisateur clique et qu'on n'a pas de position, on explique pourquoi
       let message = "Impossible de récupérer votre position actuelle.";
       if (geoError?.code === 1) message = "L'accès au GPS est désactivé.";
       else if (geoError?.code === 3) message = "Délai d'attente dépassé. Vérifiez votre signal.";
-      
+
       toast({
         variant: "destructive",
         title: "Position indisponible",
@@ -122,15 +122,13 @@ function MapController({
                 <div
                   className={cn(
                     "rounded-full bg-white shadow-md p-1 transition-all",
-                    sponsorIsActive && "border-2 border-amber-400",
+                    sponsorIsActive && "border-2 border-amber-400 bg-amber-50",
                     isSelected && "ring-2 ring-accent scale-110"
                   )}
                 >
                   <MapPin
                     size={18}
-                    className={
-                      sponsorIsActive ? "text-amber-500" : "text-primary"
-                    }
+                    className={sponsorIsActive ? "text-amber-500" : colorClass}
                   />
                 </div>
                 <div
@@ -145,15 +143,22 @@ function MapController({
                 </div>
               </div>
             ) : (
-              <div
-                className={cn(
-                  "transition-transform drop-shadow-md",
-                  colorClass,
-                  isSelected ? "scale-125" : "hover:scale-110",
-                  sponsorIsActive && !isSelected && "drop-shadow-lg"
+              <div className="relative">
+                {sponsorIsActive && !isSelected && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full bg-amber-400/20 blur-md" />
+                  </div>
                 )}
-              >
-                <MapPin size={36} />
+
+                <MapPin
+                  size={36}
+                  className={cn(
+                    "relative transition-transform drop-shadow-md",
+                    colorClass,
+                    isSelected ? "scale-125" : "hover:scale-110",
+                    sponsorIsActive && !isSelected && "drop-shadow-lg"
+                  )}
+                />
               </div>
             )}
           </AdvancedMarker>
@@ -198,9 +203,9 @@ export function POIMap({
   onSelectPoi,
   pois
 }: {
-  selectedPoi: POI | null;
-  onSelectPoi: (poi: POI | null) => void;
-  pois: POI[];
+  selectedPoi: POIAny | null;
+  onSelectPoi: (poi: POIAny | null) => void;
+  pois: POIAny[];
 }) {
   const { userLocation, loading: geoLoading } = useGeolocation();
   const isMobile = useIsMobile();

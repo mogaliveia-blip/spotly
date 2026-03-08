@@ -13,10 +13,12 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { createPoi, updatePoi, fetchPoiById, uploadFile, deleteFileByPath } from '@/lib/data';
+import { deleteField } from "firebase/firestore";
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
@@ -119,14 +121,15 @@ function MapController() {
 
   return (
     <>
-      {userLocation && (
-        <div className="absolute bottom-4 left-4 z-10">
-          <Button size="icon" onClick={handleRecenter} type="button" title="Recentrer sur ma position">
-            <Crosshair className="h-5 w-5" />
-          </Button>
+    { userLocation && (
+      <div className= "absolute bottom-4 left-4 z-10" >
+    <Button size="icon" onClick = { handleRecenter } type = "button" title = "Recentrer sur ma position" >
+      <Crosshair className="h-5 w-5" />
+        </Button>
         </div>
-      )}
-    </>
+      )
+}
+</>
   );
 }
 
@@ -177,16 +180,21 @@ export function POIForm({ poiId }: POIFormProps) {
   const [galleryImageFiles, setGalleryImageFiles] = useState<File[]>([]);
   const [galleryPreviewUrls, setGalleryPreviewUrls] = useState<string[]>([]);
 
-  // Reset subcategory when main category changes, but not on initial edit load
+  // Reset automatique de la sous-catégorie UNIQUEMENT en mode création
   useEffect(() => {
-    if (isEditMode && pageIsLoading) return;
+    if (isEditMode) return; // 🔥 En édition, on respecte la valeur existante
 
     const availableSubCategories = categoriesMap[selectedMainCategory]?.subCategories;
+
     if (availableSubCategories) {
       const firstSubCategory = Object.keys(availableSubCategories)[0] as SubCategory;
-      form.setValue('subCategory', firstSubCategory, { shouldValidate: true });
+
+      form.setValue('subCategory', firstSubCategory, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
     }
-  }, [selectedMainCategory, form, isEditMode, pageIsLoading]);
+  }, [selectedMainCategory]);
 
   useEffect(() => {
     async function getPoi() {
@@ -266,24 +274,22 @@ export function POIForm({ poiId }: POIFormProps) {
     let poiIdToUpdate = poiId;
 
     try {
-      // 🔥 On nettoie proprement sponsor pour ne JAMAIS envoyer undefined
+      // 🔥 Séparation claire CREATE / UPDATE
       const { sponsor, ...rest } = values;
 
-      const poiPayload: Partial<POI> = {
-        ...rest,
-        ...(sponsor?.enabled ? { sponsor } : {}),
-      };
-
+      /* =============================
+         CREATE MODE
+      ============================= */
       if (!isEditMode) {
         const createPayload = {
-          title: poiPayload.title!,
-          description: poiPayload.description!,
-          mainCategory: poiPayload.mainCategory!,
-          subCategory: poiPayload.subCategory!,
-          location: poiPayload.location!,
+          title: rest.title!,
+          description: rest.description!,
+          mainCategory: rest.mainCategory!,
+          subCategory: rest.subCategory!,
+          location: rest.location!,
           headerPhotoUrl: '',
           galleryUrls: [],
-          ...(poiPayload.sponsor ? { sponsor: poiPayload.sponsor } : {}),
+          ...(sponsor?.enabled ? { sponsor } : {}),
         };
 
         poiIdToUpdate = await createPoi(createPayload);
@@ -293,6 +299,9 @@ export function POIForm({ poiId }: POIFormProps) {
         throw new Error('ID du POI manquant.');
       }
 
+      /* =============================
+         HEADER IMAGE
+      ============================= */
       let finalHeaderUrl = values.headerPhotoUrl || '';
 
       if (headerImageFile) {
@@ -301,6 +310,9 @@ export function POIForm({ poiId }: POIFormProps) {
         finalHeaderUrl = url;
       }
 
+      /* =============================
+         GALLERY
+      ============================= */
       const existingGallery = values.galleryUrls || [];
       let newGalleryUploads: { url: string; path: string }[] = [];
 
@@ -315,11 +327,17 @@ export function POIForm({ poiId }: POIFormProps) {
 
       const finalGalleryUrls = [...existingGallery, ...newGalleryUploads];
 
-      await updatePoi(poiIdToUpdate, {
-        ...poiPayload,
+      /* =============================
+         UPDATE (après création éventuelle)
+      ============================= */
+      const updatePayload: Partial<POI> = {
+        ...rest,
         headerPhotoUrl: finalHeaderUrl,
         galleryUrls: finalGalleryUrls,
-      });
+        sponsor: sponsor?.enabled ? sponsor : deleteField(),
+      };
+
+      await updatePoi(poiIdToUpdate, updatePayload);
 
       toast({
         title: isEditMode ? 'POI mis à jour !' : 'POI créé !',
@@ -365,373 +383,385 @@ export function POIForm({ poiId }: POIFormProps) {
 
   if (pageIsLoading || geoLoading) {
     return (
-      <div className="space-y-8">
-        <Skeleton className="h-10 w-32 ml-auto" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className= "space-y-8" >
+      <Skeleton className="h-10 w-32 ml-auto" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8" >
           <Skeleton className="h-96 w-full" />
-          <Skeleton className="h-96 w-full" />
-        </div>
-      </div>
+            <Skeleton className="h-96 w-full" />
+              </div>
+              </div>
     );
   }
 
   return (
-    <APIProvider apiKey={mapsConfig.apiKey}>
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Colonne 1: Détails & Galerie */}
-            <div className="lg:col-span-2 space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Détails du POI</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="title"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Titre</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Ex : Scène principale" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+    <APIProvider apiKey= { mapsConfig.apiKey } >
+    <Form { ...form } >
+    <form onSubmit={ form.handleSubmit(onSubmit) } className = "space-y-8" >
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8" >
+        {/* Colonne 1: Détails & Galerie */ }
+        < div className = "lg:col-span-2 space-y-6" >
+          <Card>
+          <CardHeader>
+          <CardTitle>Détails du POI </CardTitle>
+            </CardHeader>
+            < CardContent className = "space-y-4" >
+              <FormField
+                    control={ form.control }
+  name = "title"
+  render = {({ field }) => (
+    <FormItem>
+    <FormLabel>Titre </FormLabel>
+    < FormControl >
+    <Input placeholder= "Ex : Scène principale" {...field } />
+      </FormControl>
+      < FormMessage />
+      </FormItem>
+                    )
+}
+                  />
+  < FormField
+control = { form.control }
+name = "description"
+render = {({ field }) => (
+  <FormItem>
+  <FormLabel>Description </FormLabel>
+  < FormControl >
+  <Textarea placeholder= "Une brève description du point d'intérêt." {...field } rows = { 5} />
+    </FormControl>
+    < FormMessage />
+    </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="Une brève description du point d'intérêt." {...field} rows={5} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="mainCategory"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Catégorie principale</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Sélectionner une catégorie" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {mainCategories.map((cat) => (
-                                <SelectItem key={cat} value={cat}>
-                                  {categoriesMap[cat].label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
+  < div className = "grid grid-cols-1 sm:grid-cols-2 gap-4" >
+    <FormField
+                      control={ form.control }
+name = "mainCategory"
+render = {({ field }) => (
+  <FormItem>
+  <FormLabel>Catégorie principale </FormLabel>
+    < Select onValueChange = { field.onChange } value = { field.value } >
+      <FormControl>
+      <SelectTrigger>
+      <SelectValue placeholder="Sélectionner une catégorie" />
+        </SelectTrigger>
+        </FormControl>
+        <SelectContent>
+{
+  mainCategories.map((cat) => (
+    <SelectItem key= { cat } value = { cat } >
+    { categoriesMap[cat].label }
+    </SelectItem>
+  ))
+}
+</SelectContent>
+  </Select>
+  < FormMessage />
+  </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name="subCategory"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Sous-catégorie</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Sélectionner une sous-catégorie" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {selectedMainCategory &&
-                                categoriesMap[selectedMainCategory] &&
-                                Object.entries(categoriesMap[selectedMainCategory].subCategories).map(([value, label]) => (
-                                  <SelectItem key={value} value={value}>
-                                    {label as string}
-                                  </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
+  < FormField
+control = { form.control }
+name = "subCategory"
+render = {({ field }) => (
+  <FormItem>
+  <FormLabel>Sous - catégorie </FormLabel>
+  < Select onValueChange = { field.onChange } value = { field.value } >
+    <FormControl>
+    <SelectTrigger>
+    <SelectValue placeholder="Sélectionner une sous-catégorie" />
+      </SelectTrigger>
+      </FormControl>
+      <SelectContent>
+{
+  selectedMainCategory &&
+  categoriesMap[selectedMainCategory] &&
+  Object.entries(categoriesMap[selectedMainCategory].subCategories).map(([value, label]) => (
+    <SelectItem key= { value } value = { value } >
+    { label as string }
+    </SelectItem>
+  ))
+}
+</SelectContent>
+  </Select>
+  < FormMessage />
+  </FormItem>
                       )}
                     />
-                  </div>
-                </CardContent>
-              </Card>
+  </div>
+  </CardContent>
+  </Card>
 
-              {canManageSponsor && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Partenariat (optionnel)</CardTitle>
-                    <CardDescription>Gérez la mise en avant de ce POI.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <FormField
-                      control={form.control}
-                      name="sponsor.enabled"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                          <div className="space-y-0.5">
-                            <FormLabel>Activer le partenariat</FormLabel>
-                            <FormDescription>Mettre ce POI en avant.</FormDescription>
-                          </div>
-                          <FormControl>
-                            <Switch checked={field.value} onCheckedChange={field.onChange} />
-                          </FormControl>
-                        </FormItem>
-                      )}
+{
+  canManageSponsor && (
+    <Card>
+    <CardHeader>
+    <CardTitle>Partenariat(optionnel) </CardTitle>
+    < CardDescription > Gérez la mise en avant de ce POI.</CardDescription>
+      </CardHeader>
+      < CardContent className = "space-y-6" >
+        <FormField
+                      control={ form.control }
+  name = "sponsor.enabled"
+  render = {({ field }) => (
+    <FormItem className= "flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm" >
+    <div className="space-y-0.5" >
+      <FormLabel>Activer le partenariat </FormLabel>
+        < FormDescription > Mettre ce POI en avant.</FormDescription>
+          </div>
+          < FormControl >
+          <Switch checked={ field.value } onCheckedChange = { field.onChange } />
+            </FormControl>
+            </FormItem>
+                      )
+}
                     />
 
-                    {sponsorEnabled && (
-                      <div className="space-y-4 pt-4 border-t">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <FormField
-                            control={form.control}
-                            name="sponsor.level"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Niveau de partenariat</FormLabel>
-                                {/* ✅ FIX: Select contrôlé */}
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                  <FormControl>
-                                    <SelectTrigger>
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    <SelectItem value="standard">Standard</SelectItem>
-                                    <SelectItem value="premium">Premium</SelectItem>
-                                    <SelectItem value="official">Officiel</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <FormMessage />
-                              </FormItem>
-                            )}
+{
+  sponsorEnabled && (
+    <div className="space-y-4 pt-4 border-t" >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" >
+        <FormField
+                            control={ form.control }
+  name = "sponsor.level"
+  render = {({ field }) => (
+    <FormItem>
+    <FormLabel>Niveau de partenariat </FormLabel>
+  {/* ✅ FIX: Select contrôlé */ }
+  <Select onValueChange={ field.onChange } value = { field.value } >
+    <FormControl>
+    <SelectTrigger>
+    <SelectValue />
+    </SelectTrigger>
+    </FormControl>
+    < SelectContent >
+    <SelectItem value="standard" > Standard </SelectItem>
+      < SelectItem value = "premium" > Premium </SelectItem>
+        < SelectItem value = "official" > Officiel </SelectItem>
+          </SelectContent>
+          </Select>
+          < FormMessage />
+          </FormItem>
+                            )
+}
                           />
 
-                          <FormField
-                            control={form.control}
-                            name="sponsor.priority"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Priorité</FormLabel>
-                                <FormControl>
-                                  {/* ✅ FIX: Input toujours contrôlé */}
-                                  <Input
+  < FormField
+control = { form.control }
+name = "sponsor.priority"
+render = {({ field }) => (
+  <FormItem>
+  <FormLabel>Priorité </FormLabel>
+  <FormControl>
+                                  {/* ✅ FIX: Input toujours contrôlé */ }
+<Input
                                     type="number"
-                                    min="0"
-                                    value={field.value ?? 0}
-                                    onChange={(e) => field.onChange(Number(e.target.value))}
+min = "0"
+value = { field.value ?? 0 }
+onChange = {(e) => field.onChange(Number(e.target.value))}
                                   />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
+  </FormControl>
+  < FormMessage />
+  </FormItem>
                             )}
                           />
-                        </div>
+  </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <FormField
-                            control={form.control}
-                            name="sponsor.startDate"
-                            render={({ field }) => (
-                              <FormItem className="flex flex-col">
-                                <FormLabel>Date de début (optionnel)</FormLabel>
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <FormControl>
-                                      <Button
-                                        variant={'outline'}
-                                        className={cn('pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}
-                                      >
-                                        {field.value ? format(field.value, 'PPP', { locale: fr }) : <span>Choisir une date</span>}
-                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                      </Button>
-                                    </FormControl>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
-                                  </PopoverContent>
-                                </Popover>
-                                <FormMessage />
-                              </FormItem>
+  < div className = "grid grid-cols-1 sm:grid-cols-2 gap-4" >
+    <FormField
+                            control={ form.control }
+name = "sponsor.startDate"
+render = {({ field }) => (
+  <FormItem className= "flex flex-col" >
+  <FormLabel>Date de début(optionnel) </FormLabel>
+    < Popover >
+    <PopoverTrigger asChild >
+    <FormControl>
+    <Button
+                                        variant={ 'outline' }
+className = { cn('pl-3 text-left font-normal', !field.value && 'text-muted-foreground') }
+  >
+  { field.value ? format(field.value, 'PPP', { locale: fr }) : <span>Choisir une date</ span >}
+<CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+  </Button>
+  </FormControl>
+  </PopoverTrigger>
+  < PopoverContent className = "w-auto p-0" align = "start" >
+    <Calendar mode="single" selected = { field.value } onSelect = { field.onChange } initialFocus />
+      </PopoverContent>
+      </Popover>
+      < FormMessage />
+      </FormItem>
                             )}
                           />
 
-                          <FormField
-                            control={form.control}
-                            name="sponsor.endDate"
-                            render={({ field }) => (
-                              <FormItem className="flex flex-col">
-                                <FormLabel>Date de fin (optionnel)</FormLabel>
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <FormControl>
-                                      <Button
-                                        variant={'outline'}
-                                        className={cn('pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}
-                                      >
-                                        {field.value ? format(field.value, 'PPP', { locale: fr }) : <span>Choisir une date</span>}
-                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                      </Button>
-                                    </FormControl>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
-                                  </PopoverContent>
-                                </Popover>
-                                <FormMessage />
-                              </FormItem>
+  < FormField
+control = { form.control }
+name = "sponsor.endDate"
+render = {({ field }) => (
+  <FormItem className= "flex flex-col" >
+  <FormLabel>Date de fin(optionnel) </FormLabel>
+    < Popover >
+    <PopoverTrigger asChild >
+    <FormControl>
+    <Button
+                                        variant={ 'outline' }
+className = { cn('pl-3 text-left font-normal', !field.value && 'text-muted-foreground') }
+  >
+  { field.value ? format(field.value, 'PPP', { locale: fr }) : <span>Choisir une date</ span >}
+<CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+  </Button>
+  </FormControl>
+  </PopoverTrigger>
+  < PopoverContent className = "w-auto p-0" align = "start" >
+    <Calendar mode="single" selected = { field.value } onSelect = { field.onChange } initialFocus />
+      </PopoverContent>
+      </Popover>
+      < FormMessage />
+      </FormItem>
                             )}
                           />
-                        </div>
-                      </div>
+  </div>
+  </div>
                     )}
-                  </CardContent>
-                </Card>
+</CardContent>
+  </Card>
               )}
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Image d'en-tête</CardTitle>
-                  <CardDescription>Cette image sera affichée en grand sur la page du POI.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <FormField
-                    control={form.control}
-                    name="headerPhotoUrl"
-                    render={() => (
-                      <FormItem>
-                        <FormControl>
-                          <Input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => setHeaderImageFile(e.target.files?.[0] || null)}
-                            className="hidden"
-                            id="header-upload"
-                          />
-                        </FormControl>
-                        <div className="relative aspect-video w-full border-2 border-dashed rounded-lg flex items-center justify-center">
-                          {(headerPreviewUrl || headerPhotoUrl) ? (
-                            <Image
-                              src={headerPreviewUrl || headerPhotoUrl!}
-                              alt="Aperçu de l'en-tête"
-                              fill
-                              className="object-cover rounded-lg"
-                            />
+<Card>
+  <CardHeader>
+  <CardTitle>Image d'en-tête</CardTitle>
+    < CardDescription > Cette image sera affichée en grand sur la page du POI.</CardDescription>
+      </CardHeader>
+      < CardContent >
+      <FormField
+                    control={ form.control }
+name = "headerPhotoUrl"
+render = {() => (
+  <FormItem>
+  <FormControl>
+  <Input
+                            type= "file"
+accept = "image/*"
+onChange = {(e) => setHeaderImageFile(e.target.files?.[0] || null)}
+className = "hidden"
+id = "header-upload"
+  />
+  </FormControl>
+  < div className = "relative aspect-video w-full border-2 border-dashed rounded-lg flex items-center justify-center" >
+    {(headerPreviewUrl || headerPhotoUrl) ? (
+      <Image
+                              src= { headerPreviewUrl || headerPhotoUrl!}
+alt = "Aperçu de l'en-tête"
+fill
+className = "object-cover rounded-lg"
+  />
                           ) : (
-                            <label htmlFor="header-upload" className="cursor-pointer text-center text-muted-foreground p-4">
-                              <ImagePlus className="mx-auto h-12 w-12" />
-                              <p>Cliquez pour ajouter une image</p>
-                            </label>
+  <label htmlFor= "header-upload" className = "cursor-pointer text-center text-muted-foreground p-4" >
+    <ImagePlus className="mx-auto h-12 w-12" />
+      <p>Cliquez pour ajouter une image </p>
+        </label>
                           )}
-                        </div>
-                      </FormItem>
+</div>
+  </FormItem>
                     )}
                   />
-                </CardContent>
-              </Card>
+  </CardContent>
+  </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Galerie d'images</CardTitle>
-                  <CardDescription>Ajoutez des images supplémentaires pour illustrer le POI.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {galleryFields.map((field, index) => (
-                      <div key={field.id} className="relative aspect-square group">
-                        <Image src={field.url} alt={`Galerie ${index + 1}`} fill className="object-cover rounded-md border" />
-                        <Button
+  < Card >
+  <CardHeader>
+  <CardTitle>Galerie d'images</CardTitle>
+    < CardDescription > Ajoutez des images supplémentaires pour illustrer le POI.</CardDescription>
+      </CardHeader>
+      < CardContent >
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4" >
+      {
+        galleryFields.map((field, index) => (
+          <div key= { field.id } className = "relative aspect-square group" >
+          <Image src={ field.url } alt = {`Galerie ${index + 1}`} fill className = "object-cover rounded-md border" />
+            <Button
                           type="button"
-                          variant="destructive"
-                          size="icon"
-                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => handleRemoveExistingGalleryImage(index, field.path)}
+variant = "destructive"
+size = "icon"
+className = "absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+onClick = {() => handleRemoveExistingGalleryImage(index, field.path)}
                         >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
+  <X className="h-4 w-4" />
+    </Button>
+    </div>
                     ))}
 
-                    {galleryPreviewUrls.map((url, index) => (
-                      <div key={url} className="relative aspect-square group">
-                        <Image src={url} alt={`Nouvelle image ${index + 1}`} fill className="object-cover rounded-md border" />
-                        <Button
+{
+  galleryPreviewUrls.map((url, index) => (
+    <div key= { url } className = "relative aspect-square group" >
+    <Image src={ url } alt = {`Nouvelle image ${index + 1}`} fill className = "object-cover rounded-md border" />
+      <Button
                           type="button"
-                          variant="destructive"
-                          size="icon"
-                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => handleRemoveNewGalleryImage(index)}
+variant = "destructive"
+size = "icon"
+className = "absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+onClick = {() => handleRemoveNewGalleryImage(index)}
                         >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
+  <X className="h-4 w-4" />
+    </Button>
+    </div>
                     ))}
 
-                    <label
+<label
                       htmlFor="gallery-upload"
-                      className="cursor-pointer aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-muted-foreground hover:bg-accent/50"
-                    >
-                      <ImagePlus className="h-8 w-8" />
-                      <span className="text-xs text-center mt-1">Ajouter</span>
-                    </label>
-                    <Input id="gallery-upload" type="file" multiple accept="image/*" className="hidden" onChange={handleGalleryFileChange} />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+className = "cursor-pointer aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-muted-foreground hover:bg-accent/50"
+  >
+  <ImagePlus className="h-8 w-8" />
+    <span className="text-xs text-center mt-1" > Ajouter </span>
+      </label>
+      < Input id = "gallery-upload" type = "file" multiple accept = "image/*" className = "hidden" onChange = { handleGalleryFileChange } />
+        </div>
+        </CardContent>
+        </Card>
+        </div>
 
-            {/* Colonne 2: Emplacement */}
-            <div className="lg:col-span-1 space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Emplacement</CardTitle>
-                </CardHeader>
-                <CardContent className="relative">
-                  <FormLabel>Cliquez sur la carte pour définir l'emplacement</FormLabel>
-                  <div className="h-[400px] w-full overflow-hidden rounded-lg border mt-2">
-                    <Map
-                      defaultCenter={form.getValues('location')}
-                      defaultZoom={13}
-                      gestureHandling={'greedy'}
-                      disableDefaultUI={false}
-                      mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
-                      onClick={(e) => {
-                        if (e.detail.latLng) {
-                          form.setValue('location', e.detail.latLng, { shouldValidate: true });
-                        }
-                      }}
+{/* Colonne 2: Emplacement */ }
+<div className="lg:col-span-1 space-y-6" >
+  <Card>
+  <CardHeader>
+  <CardTitle>Emplacement </CardTitle>
+  </CardHeader>
+  < CardContent className = "relative" >
+    <FormLabel>Cliquez sur la carte pour définir l'emplacement</FormLabel>
+      < div className = "h-[400px] w-full overflow-hidden rounded-lg border mt-2" >
+        <Map
+                      defaultCenter={ form.getValues('location') }
+defaultZoom = { 13}
+gestureHandling = { 'greedy'}
+disableDefaultUI = { false}
+mapId = { process.env.NEXT_PUBLIC_GOOGLE_MAP_ID }
+onClick = {(e) => {
+  if (e.detail.latLng) {
+    form.setValue('location', e.detail.latLng, { shouldValidate: true });
+  }
+}}
                     >
-                      <AdvancedMarker position={selectedLocation}>
-                        <div className="text-primary">
-                          <MapPin size={36} />
-                        </div>
-                      </AdvancedMarker>
-                      <MapController />
-                    </Map>
-                  </div>
-                  <FormMessage>{form.formState.errors.location?.message}</FormMessage>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+  <AdvancedMarker position={ selectedLocation }>
+    <div className="text-primary" >
+      <MapPin size={ 36 } />
+        </div>
+        </AdvancedMarker>
+        < MapController />
+        </Map>
+        </div>
+        < FormMessage > { form.formState.errors.location?.message } </FormMessage>
+        </CardContent>
+        </Card>
+        </div>
+        </div>
 
-          <Button type="submit" disabled={formIsLoading} size="lg">
-            {formIsLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isEditMode ? 'Mettre à jour le POI' : 'Créer le POI'}
-          </Button>
-        </form>
-      </Form>
-    </APIProvider>
+        < Button type = "submit" disabled = { formIsLoading } size = "lg" >
+          { formIsLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+{ isEditMode ? 'Mettre à jour le POI' : 'Créer le POI' }
+</Button>
+  </form>
+  </Form>
+  </APIProvider>
   );
 }
+

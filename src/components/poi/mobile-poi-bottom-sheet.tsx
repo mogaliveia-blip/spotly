@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import type { POI } from '@/lib/types';
+import type { POI, POILite } from '@/lib/types';
 import { POIDetails } from './poi-details';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
+type POIAny = POILite | POI;
+
 interface MobilePOIBottomSheetProps {
-  poi: POI | null;
+  poi: POIAny | null;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -73,10 +75,7 @@ export function MobilePOIBottomSheet({
         </div>
 
         {/* Contenu scrollable */}
-        <div
-          ref={containerRef}
-          className="overflow-y-auto flex-1 p-4"
-        >
+        <div ref={containerRef} className="overflow-y-auto flex-1 p-4">
           <POIDetails poi={poi} />
         </div>
       </div>

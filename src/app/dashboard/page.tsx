@@ -1,250 +1,172 @@
-'use client';
+'use client'
 
-import { POIMapAdapter } from '@/components/poi/poi-map-adapter';
-import type { POI, MainCategory, MarketingConfig, AppConfig } from '@/lib/types';
-import { useSearchParams, usePathname } from 'next/navigation';
-import { useSidebar } from '@/components/ui/sidebar';
-import { useEffect, useState, useMemo } from 'react';
-import { fetchPois, fetchMarketingConfig, fetchAppConfig } from '@/lib/data';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/hooks/use-auth-user';
-import { CategoryFilter } from '@/components/poi/category-filter';
-import { HeroOverlay } from '@/components/marketing/hero-overlay';
-import { isSponsorActive } from '@/lib/sponsor-utils';
+import { POIMapAdapter } from '@/components/poi/poi-map-adapter'
+import type { POI, POILite, MainCategory, MarketingConfig, AppConfig } from '@/lib/types'
+import { useSearchParams, usePathname } from 'next/navigation'
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
+import { fetchPoisLite, fetchPoiById, fetchMarketingConfig, fetchAppConfig } from '@/lib/data'
+import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/hooks/use-auth-user'
+import { CategoryFilter } from '@/components/poi/category-filter'
+import { HeroOverlay } from '@/components/marketing/hero-overlay'
+import { PoiListBottomSheet } from '@/components/poi/poi-list-bottom-sheet'
+import { useGeolocation } from '@/providers/geolocation-provider'
 
-type AppMode = "normal" | "map-fallback" | "static-fallback";
+type AppMode = 'normal' | 'map-fallback' | 'static-fallback'
 
 export default function DashboardPage() {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
 
-  // ✅ On récupère maintenant setOpen AUSSI
-  const { setOpenMobile, setOpen, isMobile } = useSidebar();
+  const { toast } = useToast()
+  const { user } = useAuth()
+  const { userLocation } = useGeolocation()
 
-  const { toast } = useToast();
-  const { user } = useAuth();
+  const [pois, setPois] = useState<POILite[]>([])
+  const [marketingConfig, setMarketingConfig] = useState<MarketingConfig | null>(null)
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null)
+  const [activePoi, setActivePoi] = useState<POILite | POI | null>(null)
+  const [heroVisible, setHeroVisible] = useState(false)
+  const [appMode, setAppMode] = useState<AppMode>('normal')
 
-  const [pois, setPois] = useState<POI[]>([]);
-  const [marketingConfig, setMarketingConfig] = useState<MarketingConfig | null>(null);
-  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
-  const [activePoi, setActivePoi] = useState<POI | null>(null);
-  const [heroVisible, setHeroVisible] = useState(false);
-  const [appMode, setAppMode] = useState<AppMode>("normal");
+  const selectedPoiId = searchParams.get('poi')
+  const categoryFilter = searchParams.get('category') || 'all'
+  const requestIdRef = useRef(0)
 
-  const selectedPoiId = searchParams.get('poi');
-  const categoryFilter = searchParams.get('category') || 'all';
+  const updateUrl = useCallback(
+    (params: URLSearchParams) => {
+      const newUrl = `${pathname}?${params.toString()}`
+      window.history.replaceState(null, '', newUrl)
+    },
+    [pathname]
+  )
 
-  /* =============================
-     CHARGEMENT INITIAL
-  ============================= */
+  const loadFullPoi = useCallback(async (poiId: string) => {
+    const requestId = ++requestIdRef.current
+    try {
+      const full = await fetchPoiById(poiId)
+      if (!full) return
+      if (requestId !== requestIdRef.current) return
+      setActivePoi(full)
+    } catch {
+      // Keep lite if full fetch fails
+    }
+  }, [])
+
+  const handleSelectPoi = useCallback(
+    (poi: POILite | null) => {
+      setActivePoi(poi)
+      const params = new URLSearchParams(searchParams.toString())
+      if (poi) {
+        params.set('poi', poi.id)
+      } else {
+        params.delete('poi')
+      }
+      updateUrl(params)
+      if (poi) void loadFullPoi(poi.id)
+    },
+    [loadFullPoi, searchParams, updateUrl]
+  )
+
   useEffect(() => {
     async function init() {
       try {
         const [poiData, marketing, app] = await Promise.all([
-          fetchPois(),
+          fetchPoisLite(),
           fetchMarketingConfig(),
-          fetchAppConfig(),
-        ]);
-
-        setPois(poiData);
-        setMarketingConfig(marketing);
-        setAppConfig(app);
+          fetchAppConfig()
+        ])
+        setPois(poiData)
+        setMarketingConfig(marketing)
+        setAppConfig(app)
       } catch (error) {
-        setAppMode("static-fallback");
+        setAppMode('static-fallback')
         toast({
           title: 'Erreur',
-          description: "Impossible de charger les données.",
-          variant: 'destructive',
-        });
+          description: 'Impossible de charger les données.',
+          variant: 'destructive'
+        })
       }
     }
+    init()
+  }, [toast])
 
-    init();
-  }, [toast]);
-
-  /* =============================
-     HERO - UNE FOIS PAR SESSION
-  ============================= */
   useEffect(() => {
-    if (!marketingConfig?.heroEnabled) return;
+    if (!marketingConfig?.heroEnabled) return
+    const dismissed = sessionStorage.getItem('heroDismissed')
+    if (!dismissed) setHeroVisible(true)
+  }, [marketingConfig])
 
-    const dismissed = sessionStorage.getItem('heroDismissed');
-    if (!dismissed) {
-      setHeroVisible(true);
-    }
-  }, [marketingConfig]);
-
-  /* =============================
-     SYNC POI VIA URL
-  ============================= */
   useEffect(() => {
-    if (!pois.length) return;
-
-    const poiFromUrl = selectedPoiId
-      ? pois.find((p) => p.id === selectedPoiId)
-      : null;
-
-    setActivePoi(poiFromUrl || null);
-  }, [selectedPoiId, pois]);
-
-  /* =============================
-     NAVIGATION 100% CLIENT
-  ============================= */
-  const updateUrl = (params: URLSearchParams) => {
-    const newUrl = `${pathname}?${params.toString()}`;
-    window.history.replaceState(null, '', newUrl);
-  };
-
-  const handleSelectPoi = (poi: POI | null) => {
-    setActivePoi(poi);
-
-    const params = new URLSearchParams(searchParams.toString());
-
-    if (poi) {
-      params.set('poi', poi.id);
-    } else {
-      params.delete('poi');
-    }
-
-    updateUrl(params);
-
-    // ✅ Ferme la sidebar mobile après sélection
-    if (isMobile) {
-      setOpenMobile(false);
-    }
-  };
+    if (!pois.length) return
+    const poiFromUrl = selectedPoiId ? pois.find((p) => p.id === selectedPoiId) : null
+    setActivePoi(poiFromUrl || null)
+    if (poiFromUrl?.id) void loadFullPoi(poiFromUrl.id)
+  }, [selectedPoiId, pois, loadFullPoi])
 
   const handleCategorySelect = (category: MainCategory | 'all') => {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(searchParams.toString())
+    if (category === 'all') params.delete('category')
+    else params.set('category', category)
+    params.delete('poi')
+    setActivePoi(null)
+    updateUrl(params)
+  }
 
-    if (category === 'all') {
-      params.delete('category');
-    } else {
-      params.set('category', category);
-    }
-
-    params.delete('poi');
-    setActivePoi(null);
-
-    updateUrl(params);
-
-    // ✅ Ouvre la sidebar pour montrer la liste filtrée
-    if (isMobile) {
-      setOpenMobile(true);
-    } else {
-      setOpen(true);
-    }
-  };
-
-  /* =============================
-     TRI + SPONSORS
-  ============================= */
   const visiblePois = useMemo(() => {
-    const filtered = pois.filter(
-      (p) => categoryFilter === 'all' || p.mainCategory === categoryFilter
-    );
+    const filtered = pois.filter((p) => categoryFilter === 'all' || p.mainCategory === categoryFilter)
+    if (appConfig?.festivalMode || user) return filtered
+    return filtered.slice(0, 5) // Increased limit for visitors in new UI
+  }, [pois, categoryFilter, user, appConfig])
 
-    const activeSponsors: POI[] = [];
-    const others: POI[] = [];
+  const showHero = heroVisible && !user && marketingConfig?.heroEnabled
 
-    for (const poi of filtered) {
-      if (isSponsorActive(poi)) {
-        activeSponsors.push(poi);
-      } else {
-        others.push(poi);
-      }
-    }
-
-    activeSponsors.sort(
-      (a, b) => (b.sponsor?.priority ?? 0) - (a.sponsor?.priority ?? 0)
-    );
-
-    const sorted = [...activeSponsors, ...others];
-
-    if (appConfig?.festivalMode || user) {
-      return sorted;
-    }
-
-    return sorted.slice(0, 2);
-  }, [pois, categoryFilter, user, appConfig]);
-
-  const showHero =
-    heroVisible &&
-    !user &&
-    marketingConfig?.heroEnabled;
-
-  /* =============================
-     RENDER
-  ============================= */
   return (
-    <div className="flex flex-col h-full w-full">
-
-      {/* Barre catégories */}
-      <div className="relative z-30 bg-background shadow-md">
+    <div className="flex flex-col h-full w-full relative">
+      {/* Category bar floating or sticky */}
+      <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-background/90 to-transparent pt-2 pb-6">
         <CategoryFilter
           selectedCategory={categoryFilter as MainCategory | 'all'}
           onSelectCategory={handleCategorySelect}
         />
       </div>
 
-      {/* Zone carte */}
-      <div className="flex-1 relative min-h-0">
-
+      {/* Main content area */}
+      <div className="flex-1 relative">
         {showHero && marketingConfig && (
           <HeroOverlay
             config={marketingConfig}
             onClose={() => {
-              sessionStorage.setItem('heroDismissed', 'true');
-              setHeroVisible(false);
+              sessionStorage.setItem('heroDismissed', 'true')
+              setHeroVisible(false)
             }}
           />
         )}
 
-        {appMode === "normal" && (
+        {appMode === 'normal' && (
           <POIMapAdapter
             selectedPoi={activePoi}
             onSelectPoi={handleSelectPoi}
             pois={visiblePois}
-            onCrash={() => setAppMode("map-fallback")}
+            onCrash={() => setAppMode('map-fallback')}
           />
         )}
 
-        {appMode === "map-fallback" && (
-          <div className="flex flex-col h-full overflow-auto p-4 gap-4">
-            <div className="text-sm text-muted-foreground mb-2">
-              Carte temporairement indisponible. Utilisez la liste ci-dessous.
-            </div>
-
-            {visiblePois.map((poi) => (
-              <div
-                key={poi.id}
-                className="p-4 rounded-lg border bg-background shadow-sm"
-              >
-                <div className="font-semibold">{poi.title}</div>
-                <div className="text-sm text-muted-foreground mb-2">
-                  {poi.description}
-                </div>
-
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${poi.location.lat},${poi.location.lng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary text-sm underline"
-                >
-                  Itinéraire
-                </a>
-              </div>
-            ))}
+        {appMode === 'map-fallback' && (
+          <div className="flex items-center justify-center h-full bg-muted text-muted-foreground p-8 text-center">
+            La carte est momentanément indisponible. Utilisez la liste ci-dessous.
           </div>
         )}
-
-        {appMode === "static-fallback" && (
-          <div className="flex items-center justify-center h-full bg-muted text-sm text-muted-foreground">
-            Mode simplifié activé.
-          </div>
-        )}
-
       </div>
+
+      {/* Persistent POI List Bottom Sheet */}
+      <PoiListBottomSheet
+        pois={visiblePois}
+        onSelectPoi={handleSelectPoi}
+        selectedPoiId={activePoi?.id || null}
+        userLocation={userLocation}
+        categoryFilter={categoryFilter as MainCategory | 'all'}
+      />
     </div>
-  );
+  )
 }

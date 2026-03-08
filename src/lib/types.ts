@@ -1,24 +1,24 @@
 // src/lib/types.ts
-import type { User as FirebaseUser } from 'firebase/auth';
-import type { LucideIcon } from 'lucide-react';
+import type { User as FirebaseUser } from 'firebase/auth'
+import type { LucideIcon } from 'lucide-react'
 import {
   Music,
   UtensilsCrossed,
   HeartPulse,
   Bus,
   ShoppingBag,
-  Shapes,
-} from 'lucide-react';
+  Shapes
+} from 'lucide-react'
 
-export type UserRole = 'user' | 'editor' | 'admin';
+export type UserRole = 'user' | 'editor' | 'admin'
 
 export interface AppUser {
-  uid: string;
-  email: string | null;
-  displayName: string | null;
-  role: UserRole;
-  photoURL?: string | null;
-  emailVerified: boolean;
+  uid: string
+  email: string | null
+  displayName: string | null
+  role: UserRole
+  photoURL?: string | null
+  emailVerified: boolean
 }
 
 export type MainCategory =
@@ -27,7 +27,7 @@ export type MainCategory =
   | 'services_essentiels'
   | 'logistique_mobilite'
   | 'merchandising_partenaires'
-  | 'espaces_specifiques';
+  | 'espaces_specifiques'
 
 export type SubCategory =
   | 'concert_headliner'
@@ -53,16 +53,16 @@ export type SubCategory =
   | 'espace_vip'
   | 'espace_enfant'
   | 'zone_detente'
-  | 'backstage';
+  | 'backstage'
 
 export const categoriesMap: Record<
   MainCategory,
   {
-    label: string;
-    subCategories: Partial<Record<SubCategory, string>>;
-    icon: LucideIcon;
-    color: string;
-    markerColor: string;
+    label: string
+    subCategories: Partial<Record<SubCategory, string>>
+    icon: LucideIcon
+    color: string
+    markerColor: string
   }
 > = {
   programmation: {
@@ -71,11 +71,11 @@ export const categoriesMap: Record<
       concert_headliner: 'Concert Headliner',
       concert_scene_secondaire: 'Concert Scène Secondaire',
       spectacle_rue: 'Spectacle de Rue',
-      dj_set: 'DJ Set',
+      dj_set: 'DJ Set'
     },
     icon: Music,
     color: 'text-violet-500',
-    markerColor: 'text-violet-500',
+    markerColor: 'text-violet-500'
   },
   nourriture_boissons: {
     label: 'Nourriture',
@@ -83,11 +83,11 @@ export const categoriesMap: Record<
       food_truck: 'Food Truck',
       restaurant: 'Restaurant',
       bar: 'Bar',
-      buvette: 'Buvette',
+      buvette: 'Buvette'
     },
     icon: UtensilsCrossed,
     color: 'text-orange-500',
-    markerColor: 'text-orange-500',
+    markerColor: 'text-orange-500'
   },
   services_essentiels: {
     label: 'Services',
@@ -95,11 +95,11 @@ export const categoriesMap: Record<
       toilettes: 'Toilettes',
       poste_secours: 'Poste de Secours',
       securite: 'Sécurité',
-      point_eau: "Point d'eau",
+      point_eau: "Point d'eau"
     },
     icon: HeartPulse,
     color: 'text-blue-500',
-    markerColor: 'text-blue-500',
+    markerColor: 'text-blue-500'
   },
   logistique_mobilite: {
     label: 'Mobilité',
@@ -108,22 +108,22 @@ export const categoriesMap: Record<
       parking: 'Parking',
       navette: 'Navette',
       info_point: 'Point Info',
-      acces_pmr: 'Accès PMR',
+      acces_pmr: 'Accès PMR'
     },
     icon: Bus,
     color: 'text-green-500',
-    markerColor: 'text-green-500',
+    markerColor: 'text-green-500'
   },
   merchandising_partenaires: {
     label: 'Partenaires',
     subCategories: {
       boutique_officielle: 'Boutique Officielle',
       stand_partenaire: 'Stand Partenaire',
-      sponsor: 'Sponsor',
+      sponsor: 'Sponsor'
     },
     icon: ShoppingBag,
     color: 'text-pink-500',
-    markerColor: 'text-pink-500',
+    markerColor: 'text-pink-500'
   },
   espaces_specifiques: {
     label: 'Espaces',
@@ -131,69 +131,81 @@ export const categoriesMap: Record<
       espace_vip: 'Espace VIP',
       espace_enfant: 'Espace Enfants',
       zone_detente: 'Zone Détente',
-      backstage: 'Backstage',
+      backstage: 'Backstage'
     },
     icon: Shapes,
     color: 'text-teal-500',
-    markerColor: 'text-teal-500',
-  },
-};
+    markerColor: 'text-teal-500'
+  }
+}
 
 export interface POISponsor {
-  enabled: boolean;
-  level: 'standard' | 'premium' | 'official';
-  priority: number;
-  startDate?: Date;
-  endDate?: Date;
+  enabled: boolean
+  level: 'standard' | 'premium' | 'official'
+  priority: number
+  startDate?: Date
+  endDate?: Date
 }
 
 export interface POI {
-  id: string;
-  title: string;
-  description: string;
-  headerPhotoUrl: string;
-  galleryUrls: { url: string; path: string }[];
+  id: string
+  title: string
+  description: string
+  headerPhotoUrl: string
+  galleryUrls: { url: string; path: string }[]
   location: {
-    lat: number;
-    lng: number;
-  };
-  mainCategory: MainCategory;
-  subCategory: SubCategory;
-  averageRating: number;
-  reviewCount: number;
-  sponsor?: POISponsor;
+    lat: number
+    lng: number
+  }
+  mainCategory: MainCategory
+  subCategory: SubCategory
+  averageRating: number
+  reviewCount: number
+  sponsor?: POISponsor
 }
 
+/**
+ * ✅ POI Lite (projection pour carte + liste)
+ * headerPhotoUrl optionnel pour compatibilité.
+ */
+export type POILite = Pick<
+  POI,
+  | 'id'
+  | 'title'
+  | 'location'
+  | 'mainCategory'
+  | 'subCategory'
+  | 'averageRating'
+  | 'reviewCount'
+  | 'sponsor'
+> & { headerPhotoUrl?: string }
+
 export interface Review {
-  id: string;
-  poiId: string;
-  userId: string;
-  userDisplayName: string;
-  userPhotoURL: string | null;
-  rating: number;
-  comment: string;
-  createdAt: Date;
+  id: string
+  poiId: string
+  userId: string
+  userDisplayName: string
+  userPhotoURL: string | null
+  rating: number
+  comment: string
+  createdAt: Date
 }
 
 export interface AppConfig {
-  isLandingPageActive: boolean;
-  festivalMode?: boolean;
+  isLandingPageActive: boolean
+  festivalMode?: boolean
 }
 
 /* 🔥 NOUVEAU MODE CLOSE AJOUTÉ ICI */
 
-export type HeroCtaMode =
-  | 'auth'
-  | 'external'
-  | 'none'
-  | 'close';
+export type HeroCtaMode = 'auth' | 'external' | 'none' | 'close'
 
 export interface MarketingConfig {
-  heroEnabled: boolean;
-  heroTitle: string;
-  heroSubtitle: string;
-  heroImageUrl: string;
-  heroCtaText: string;
-  heroCtaMode: HeroCtaMode;
-  heroCtaLink?: string;
+  heroEnabled: boolean
+  heroTitle: string
+  heroSubtitle: string
+  heroImageUrl: string
+  heroCtaText: string
+  heroCtaMode: HeroCtaMode
+  heroCtaLink?: string
 }

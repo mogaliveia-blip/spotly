@@ -1,4 +1,3 @@
-// src/components/poi/review-form.tsx
 'use client';
 
 import { useState } from 'react';
@@ -51,44 +50,59 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
       });
       return;
     }
+
     setLoading(true);
-    
+
     const reviewData = {
-        userId: user.uid,
-        userDisplayName: user.displayName || 'Anonyme',
-        userPhotoURL: user.photoURL || null,
-        ...values
+      userId: user.uid,
+      userDisplayName: user.displayName || 'Anonyme',
+      userPhotoURL: user.photoURL || null,
+      ...values
     };
 
     try {
-        const newReview = await addReview(poiId, reviewData);
-        onReviewAdded(newReview);
-        form.reset();
-        toast({
-            title: 'Avis soumis !',
-            description: 'Merci pour votre retour.',
-        });
-        // Rafraîchir les données de la page pour mettre à jour l'en-tête
-        router.refresh(); 
-    } catch (error) {
-        toast({
-            title: 'Erreur lors de la soumission de l\'avis',
-            description: 'Veuillez réessayer plus tard.',
-            variant: 'destructive',
-        });
+      const newReview = await addReview(poiId, reviewData);
+
+      onReviewAdded(newReview);
+      form.reset();
+
+      toast({
+        title: 'Avis soumis !',
+        description: 'Merci pour votre retour.',
+      });
+
+      router.refresh();
+
+    } catch (error: any) {
+
+      // 🔥 DEBUG TEMPORAIRE
+      console.error("🔥 ERREUR FIRESTORE COMPLETE :", error);
+      if (error?.code) {
+        console.error("🔥 CODE :", error.code);
+      }
+      if (error?.message) {
+        console.error("🔥 MESSAGE :", error.message);
+      }
+
+      toast({
+        title: 'Erreur lors de la soumission de l\'avis',
+        description: 'Veuillez réessayer plus tard.',
+        variant: 'destructive',
+      });
+
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   }
 
   if (!user) {
     return (
-        <div className="text-center text-sm text-muted-foreground border rounded-md p-4">
-            <p>Vous souhaitez partager votre expérience ?</p>
-            <Button variant="link" asChild className="p-0 h-auto">
-                <Link href="/login">Connectez-vous pour laisser un avis.</Link>
-            </Button>
-        </div>
+      <div className="text-center text-sm text-muted-foreground border rounded-md p-4">
+        <p>Vous souhaitez partager votre expérience ?</p>
+        <Button variant="link" asChild className="p-0 h-auto">
+          <Link href="/login">Connectez-vous pour laisser un avis.</Link>
+        </Button>
+      </div>
     );
   }
 

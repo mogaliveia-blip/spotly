@@ -3,6 +3,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    /* =========================
+       UTILITAIRES
+    ========================= */
+
     function isSignedIn() {
       return request.auth != null;
     }
@@ -28,6 +32,11 @@ service cloud.firestore {
 
     function isEditorOrAdmin() {
       return isOneOfRoles(['editor', 'admin']);
+    }
+
+    // Si le champ n'existe pas → activé par défaut
+    function reviewsEnabled() {
+      return get(/databases/$(database)/documents/config/main).data.reviewsEnabled != false;
     }
 
     function mainCategories() {
@@ -67,6 +76,10 @@ service cloud.firestore {
         && (!('endDate' in s) || s.endDate is timestamp);
     }
 
+    /* =========================
+       USERS
+    ========================= */
+
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isSignedIn()
@@ -76,6 +89,10 @@ service cloud.firestore {
       allow update: if isAdmin() && ('role' in request.resource.data);
       allow delete: if isAdmin();
     }
+
+    /* =========================
+       CONFIG
+    ========================= */
 
     match /config/main {
       allow read: if true;
@@ -87,10 +104,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    /* =========================
+       POIS
+    ========================= */
+
     match /pois/{poiId} {
+
       allow read: if true;
 
-      allow create, update: if isEditorOrAdmin()
+      /* ---- CREATE POI (admin/editor seulement) ---- */
+      allow create: if isEditorOrAdmin()
         && request.resource.data.mainCategory in mainCategories()
         && request.resource.data.subCategory in subCategories()
         && isValidCategoryPair(
@@ -100,13 +123,34 @@ service cloud.firestore {
         && (!('sponsor' in request.resource.data)
             || isValidSponsor(request.resource.data.sponsor));
 
+      /* ---- UPDATE POI complet (admin/editor) ---- */
+      allow update: if isEditorOrAdmin();
+
+      /* ---- INCRÉMENT reviewCount par user ---- */
+      allow update: if
+        isSignedIn()
+        && reviewsEnabled()
+        && request.resource.data.reviewCount == resource.data.reviewCount + 1
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['reviewCount']);
+
       allow delete: if isEditorOrAdmin();
 
+      /* =========================
+         REVIEWS
+      ========================= */
+
       match /reviews/{reviewId} {
+
         allow read: if true;
+
         allow create: if isSignedIn()
+          && reviewsEnabled()
           && request.resource.data.userId == request.auth.uid;
-        allow update, delete: if isSignedIn()
+
+        allow update: if isSignedIn()
+          && resource.data.userId == request.auth.uid;
+
+        allow delete: if isSignedIn()
           && resource.data.userId == request.auth.uid;
       }
     }

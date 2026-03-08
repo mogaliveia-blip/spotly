@@ -180,8 +180,10 @@ function POISidebarList() {
               className={cn(
                 'w-full text-left p-3 rounded-md transition-all text-sm flex items-start gap-3 border-l-4',
                 isSelected
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground border-primary shadow-sm'
-                  : 'hover:bg-sidebar-accent/50 border-transparent'
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground border-primary shadow-sm'
+                    : isSponsorActive(poi)
+                        ? 'bg-sidebar-accent/40 border-primary/40 shadow-sm'
+                        : 'hover:bg-sidebar-accent/50 border-transparent'
               )}
             >
               <div className={cn(
@@ -192,13 +194,14 @@ function POISidebarList() {
               </div>
               
               <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <span className="font-semibold whitespace-normal leading-snug line-clamp-2">
-                    {poi.title}
-                  </span>
-                  <div className="shrink-0 pt-0.5">
-                    <SponsorBadge sponsor={poi.sponsor} />
-                  </div>
+                <div className="flex flex-col gap-1 mb-1">
+                    {isSponsorActive(poi) && (
+                        <SponsorBadge sponsor={poi.sponsor} />
+                    )}
+
+                    <span className="font-semibold whitespace-normal leading-snug line-clamp-2">
+                        {poi.title}
+                    </span>
                 </div>
 
                 {userLocation ? (
@@ -331,7 +334,7 @@ export function SidebarNav() {
         {!user && (
           <div className="p-4 border-t bg-sidebar-accent/20 rounded-t-xl">
              <p className="text-[11px] text-muted-foreground mb-3 text-center leading-relaxed">
-               Connectez-vous pour laisser des avis et recevoir les dernières infos du festival.
+             Connectez-vous pour accéder à toutes les fonctionnalités et recevoir les dernières infos du festival.
              </p>
              <AuthDialog
                trigger={

@@ -19,6 +19,7 @@ import { useAuth } from '@/hooks/use-auth-user';
 import { fetchPois, deletePoi } from '@/lib/data';
 import type { POI, MainCategory } from '@/lib/types';
 import { categoriesMap } from '@/lib/types';
+import { isSponsorActive } from '@/lib/sponsor-utils';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -116,6 +117,7 @@ function POIsTable() {
             <TableHead className="w-[80px]">Image</TableHead>
             <TableHead>Titre</TableHead>
             <TableHead>Catégorie</TableHead>
+            <TableHead>Partenariat</TableHead>
             <TableHead className="hidden md:table-cell">Description</TableHead>
             <TableHead className="hidden sm:table-cell">Avis</TableHead>
             <TableHead className="text-right">Actions</TableHead>
@@ -138,6 +140,15 @@ function POIsTable() {
               <TableCell className="font-medium">{poi.title}</TableCell>
               <TableCell>
                 <Badge variant="secondary">{poi.mainCategory && categoriesMap[poi.mainCategory] ? categoriesMap[poi.mainCategory].label : 'N/A'}</Badge>
+              </TableCell>
+              <TableCell>
+                {isSponsorActive(poi) ? (
+                  <Badge className="bg-amber-500 hover:bg-amber-500">
+                    Actif
+                  </Badge>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
               </TableCell>
               <TableCell className="hidden md:table-cell truncate max-w-sm">{poi.description}</TableCell>
               <TableCell className="hidden sm:table-cell">
