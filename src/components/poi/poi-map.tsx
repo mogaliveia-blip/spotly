@@ -32,12 +32,14 @@ function MapController({
   const isMobile = useIsMobile();
   const { toast } = useToast();
 
+  // Centrage sur un POI sélectionné
   useEffect(() => {
     if (selectedPoi && map) {
       map.panTo(selectedPoi.location);
     }
   }, [selectedPoi, map]);
 
+  // Ajustement automatique du cadrage pour voir TOUS les POIs
   useEffect(() => {
     if (selectedPoi || !map || pois.length === 0) return;
     if (typeof window === 'undefined' || !window.google?.maps) return;
@@ -48,7 +50,17 @@ function MapController({
     } else {
       const bounds = new window.google.maps.LatLngBounds();
       pois.forEach((poi) => bounds.extend(poi.location));
-      map.fitBounds(bounds, 100);
+      
+      // Calcul des marges pour que les marqueurs s'affichent entre le Header et la Bottom Sheet
+      const topPadding = 100; // Header (64) + marge confort
+      const bottomPadding = window.innerHeight * 0.35; // Hauteur Bottom Sheet (25vh) + poignée + marge
+      
+      map.fitBounds(bounds, {
+        top: topPadding,
+        bottom: bottomPadding,
+        left: 50,
+        right: 50
+      });
     }
   }, [pois, selectedPoi, map]);
 
@@ -91,7 +103,7 @@ function MapController({
 
       {pois.map((poi) => {
         const isSelected = selectedPoi?.id === poi.id;
-        const sponsorIsActive = isSponsorActive(poi);
+        const sponsorIsActive = isSponsorActive(poi as any);
 
         let colorClass =
           categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
@@ -168,7 +180,6 @@ function MapController({
         </InfoWindow>
       )}
 
-      {/* Z-30 pour être au-dessus du gradient de catégorie (Z-20) mais sous le header (Z-50) */}
       <div className="absolute top-24 right-4 z-30">
         <Button
           onClick={handleRecenter}
@@ -209,7 +220,7 @@ export function POIMap({
   }
 
   return (
-    <div className="w-full h-full min-h-0">
+    <div className="w-full h-full min-h-0 relative">
       <Map
         defaultCenter={defaultCenter}
         defaultZoom={13}
@@ -218,7 +229,7 @@ export function POIMap({
         streetViewControl={false}
         fullscreenControl={false}
         disableDefaultUI={false}
-        mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
+        mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID || 'default_map_id'}
         className="w-full h-full"
       >
         <MapController
