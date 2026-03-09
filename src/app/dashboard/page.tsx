@@ -1,4 +1,3 @@
-
 'use client'
 
 import { POIMapAdapter } from '@/components/poi/poi-map-adapter'
@@ -170,8 +169,9 @@ export default function DashboardPage() {
         )}
 
         {/* Bouton de rappel de la liste quand elle est masquée */}
+        {/* On remonte le bouton à bottom-24 pour éviter la barre d'outils mobile */}
         {!isListVisible && !activePoi && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-bottom-4 duration-500 pointer-events-auto">
+          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-bottom-4 duration-500 pointer-events-auto">
             <Button 
               onClick={() => setIsListVisible(true)}
               className="rounded-full shadow-2xl px-6 h-12 gap-2 bg-primary/90 backdrop-blur-sm hover:bg-primary"

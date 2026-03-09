@@ -74,25 +74,25 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const startWatching = () => {
-      // Configuration équilibrée : Précision élevée mais tolérance sur le cache pour la batterie
+      // Configuration équilibrée : précision élevée pour le suivi
       watchIdRef.current = navigator.geolocation.watchPosition(
         updateLocation,
         handleError,
         {
           enableHighAccuracy: true,
           timeout: 10000,
-          maximumAge: 10000, // 10 secondes de cache pour économiser la batterie
+          maximumAge: 10000, // cache 10s pour économiser la batterie
         }
       );
     };
-
+    
     const init = async () => {
       try {
         if ('permissions' in navigator) {
           const permission = await navigator.permissions.query({
             name: 'geolocation',
           } as PermissionDescriptor);
-
+    
           if (permission.state === 'denied') {
             setState(prev => ({ 
               ...prev, 
@@ -102,20 +102,26 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
             return;
           }
         }
-
-        // Position initiale rapide
+    
+        // ⚡ Position initiale rapide (réseau / wifi)
         navigator.geolocation.getCurrentPosition(
           updateLocation,
           handleError,
-          { enableHighAccuracy: true, timeout: 5000 }
+          {
+            enableHighAccuracy: false, // IMPORTANT : beaucoup plus rapide
+            timeout: 5000,
+            maximumAge: 30000          // accepte une position récente
+          }
         );
-
+    
+        // ensuite suivi précis
         startWatching();
+    
       } catch {
         setState(prev => ({ ...prev, loading: false }));
       }
     };
-
+    
     init();
 
     return () => {
