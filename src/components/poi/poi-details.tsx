@@ -121,11 +121,12 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
       )}
 
       <div className="space-y-2 p-1">
-        <div className="flex items-center gap-2">
-          <h3 className="font-bold text-lg">{poi.title}</h3>
+        {/* Titre et Badge Sponsor - Correction responsive */}
+        <div className="flex flex-wrap items-center gap-2">
           {isSponsorActive(poi) && (
             <SponsorBadge sponsor={(poi as any).sponsor} />
           )}
+          <h3 className="font-bold text-lg leading-tight">{poi.title}</h3>
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
