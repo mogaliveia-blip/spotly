@@ -2,6 +2,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { 
+  getFirestore,
   initializeFirestore, 
   persistentLocalCache 
 } from 'firebase/firestore';
@@ -15,21 +16,17 @@ const app = !getApps().length
 
 const auth = getAuth(app);
 
-// 🔥 Firestore with persistent local cache (IndexedDB)
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache()
-});
+/**
+ * 🔥 Firestore with persistent local cache.
+ * We use a check to ensure initializeFirestore is only called once.
+ * If the app was already initialized (HMR), we use getFirestore.
+ */
+const db = !getApps().length
+  ? initializeFirestore(app, {
+      localCache: persistentLocalCache()
+    })
+  : getFirestore(app);
 
 const storage = getStorage(app);
-
-// Optional emulator config (kept intact)
-// if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-//   try {
-//     connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-//     connectFirestoreEmulator(db, '127.0.0.1', 8080);
-//   } catch (e) {
-//     console.error(e);
-//   }
-// }
 
 export { app, auth, db, storage };
