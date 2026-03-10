@@ -40,6 +40,50 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
+/**
+ * Compresse une image côté client via l'API Canvas.
+ * Redimensionne à 1600px max et exporte en JPEG 0.75.
+ */
+async function compressImage(file: File): Promise<File> {
+  const img = new window.Image();
+  const url = URL.createObjectURL(file);
+
+  try {
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = url;
+    });
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    const MAX_WIDTH = 1600;
+    let { width, height } = img;
+
+    if (width > MAX_WIDTH) {
+      height = height * (MAX_WIDTH / width);
+      width = MAX_WIDTH;
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+
+    ctx?.drawImage(img, 0, 0, width, height);
+
+    const blob = await new Promise<Blob>((resolve) =>
+      canvas.toBlob((b) => resolve(b as Blob), 'image/jpeg', 0.75)
+    );
+
+    return new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+      type: 'image/jpeg',
+      lastModified: Date.now(),
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 const mainCategories = Object.keys(categoriesMap) as MainCategory[];
 
 const allSubCategories = Object.values(categoriesMap).flatMap(
@@ -180,9 +224,8 @@ export function POIForm({ poiId }: POIFormProps) {
   const [galleryImageFiles, setGalleryImageFiles] = useState<File[]>([]);
   const [galleryPreviewUrls, setGalleryPreviewUrls] = useState<string[]>([]);
 
-  // Reset automatique de la sous-catégorie UNIQUEMENT en mode création
   useEffect(() => {
-    if (isEditMode) return; // 🔥 En édition, on respecte la valeur existante
+    if (isEditMode) return;
 
     const availableSubCategories = categoriesMap[selectedMainCategory]?.subCategories;
 
@@ -194,7 +237,7 @@ export function POIForm({ poiId }: POIFormProps) {
         shouldDirty: true,
       });
     }
-  }, [selectedMainCategory]);
+  }, [selectedMainCategory, isEditMode, form]);
 
   useEffect(() => {
     async function getPoi() {
@@ -203,7 +246,6 @@ export function POIForm({ poiId }: POIFormProps) {
         try {
           const poiData = await fetchPoiById(poiId);
           if (poiData) {
-            // ✅ FIX: sponsor doit toujours être complet pour éviter undefined → defined en édition
             const sponsorSafe = {
               enabled: poiData.sponsor?.enabled ?? false,
               level: poiData.sponsor?.level ?? 'standard',
@@ -243,7 +285,7 @@ export function POIForm({ poiId }: POIFormProps) {
     }
 
     if (!geoLoading) getPoi();
-  }, [poiId, form, router, toast, geoLoading]);
+  }, [poiId, form, router, toast, geoLoading, userLocation]);
 
   useEffect(() => {
     if (!headerImageFile) {
@@ -274,12 +316,8 @@ export function POIForm({ poiId }: POIFormProps) {
     let poiIdToUpdate = poiId;
 
     try {
-      // 🔥 Séparation claire CREATE / UPDATE
       const { sponsor, ...rest } = values;
 
-      /* =============================
-         CREATE MODE
-      ============================= */
       if (!isEditMode) {
         const createPayload = {
           title: rest.title!,
@@ -299,42 +337,37 @@ export function POIForm({ poiId }: POIFormProps) {
         throw new Error('ID du POI manquant.');
       }
 
-      /* =============================
-         HEADER IMAGE
-      ============================= */
+      // --- HEADER IMAGE WITH COMPRESSION ---
       let finalHeaderUrl = values.headerPhotoUrl || '';
 
       if (headerImageFile) {
+        const compressedHeader = await compressImage(headerImageFile);
         const headerPath = `poi-images/${poiIdToUpdate}/header.jpg`;
-        const { url } = await uploadFile(headerImageFile, headerPath);
+        const { url } = await uploadFile(compressedHeader, headerPath);
         finalHeaderUrl = url;
       }
 
-      /* =============================
-         GALLERY
-      ============================= */
+      // --- GALLERY WITH COMPRESSION ---
       const existingGallery = values.galleryUrls || [];
       let newGalleryUploads: { url: string; path: string }[] = [];
 
       if (galleryImageFiles.length > 0) {
         newGalleryUploads = await Promise.all(
-          galleryImageFiles.map((file) => {
-            const uniquePath = `poi-images/${poiIdToUpdate}/gallery/${crypto.randomUUID()}`;
-            return uploadFile(file, uniquePath);
+          galleryImageFiles.map(async (file) => {
+            const compressed = await compressImage(file);
+            const uniquePath = `poi-images/${poiIdToUpdate}/gallery/${crypto.randomUUID()}.jpg`;
+            return uploadFile(compressed, uniquePath);
           })
         );
       }
 
       const finalGalleryUrls = [...existingGallery, ...newGalleryUploads];
 
-      /* =============================
-         UPDATE (après création éventuelle)
-      ============================= */
       const updatePayload: Partial<POI> = {
         ...rest,
         headerPhotoUrl: finalHeaderUrl,
         galleryUrls: finalGalleryUrls,
-        sponsor: sponsor?.enabled ? sponsor : deleteField(),
+        sponsor: sponsor?.enabled ? sponsor : deleteField() as any,
       };
 
       await updatePoi(poiIdToUpdate, updatePayload);
@@ -362,7 +395,7 @@ export function POIForm({ poiId }: POIFormProps) {
     if (event.target.files) {
       const files = Array.from(event.target.files);
       setGalleryImageFiles((prev) => [...prev, ...files]);
-      event.target.value = ''; // Reset file input to allow selecting the same file again
+      event.target.value = '';
     }
   };
 
@@ -526,7 +559,6 @@ render = {({ field }) => (
   render = {({ field }) => (
     <FormItem>
     <FormLabel>Niveau de partenariat </FormLabel>
-  {/* ✅ FIX: Select contrôlé */ }
   <Select onValueChange={ field.onChange } value = { field.value } >
     <FormControl>
     <SelectTrigger>
@@ -552,7 +584,6 @@ render = {({ field }) => (
   <FormItem>
   <FormLabel>Priorité </FormLabel>
   <FormControl>
-                                  {/* ✅ FIX: Input toujours contrôlé */ }
 <Input
                                     type="number"
 min = "0"
