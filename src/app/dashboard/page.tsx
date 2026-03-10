@@ -13,6 +13,8 @@ import { PoiListBottomSheet } from '@/components/poi/poi-list-bottom-sheet'
 import { useGeolocation } from '@/providers/geolocation-provider'
 import { Button } from '@/components/ui/button'
 import { List } from 'lucide-react'
+import { MobilePOIBottomSheet } from '@/components/poi/mobile-poi-bottom-sheet'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 type AppMode = 'normal' | 'map-fallback' | 'static-fallback'
 
@@ -23,6 +25,7 @@ export default function DashboardPage() {
   const { toast } = useToast()
   const { user } = useAuth()
   const { userLocation } = useGeolocation()
+  const isMobile = useIsMobile()
 
   const [pois, setPois] = useState<POILite[]>([])
   const [marketingConfig, setMarketingConfig] = useState<MarketingConfig | null>(null)
@@ -62,10 +65,10 @@ export default function DashboardPage() {
       const params = new URLSearchParams(searchParams.toString())
       if (poi) {
         params.set('poi', poi.id)
-        setIsListVisible(true) // Always show list/details when a POI is selected
+        setIsListVisible(true) 
       } else {
         params.delete('poi')
-        setIsListVisible(false) // Hide list when clicking map background
+        setIsListVisible(false) 
       }
       updateUrl(params)
       if (poi) void loadFullPoi(poi.id)
@@ -119,7 +122,7 @@ export default function DashboardPage() {
     params.delete('poi')
     setActivePoi(null)
     updateUrl(params)
-    setIsListVisible(true) // Re-show list when changing category
+    setIsListVisible(true) 
   }
 
   const visiblePois = useMemo(() => {
@@ -132,7 +135,6 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col h-full w-full relative overflow-hidden">
-      {/* Barre de catégories flottante */}
       <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-background/90 to-transparent pt-2 pb-6">
         <CategoryFilter
           selectedCategory={categoryFilter as MainCategory | 'all'}
@@ -140,7 +142,6 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Zone de contenu principal (Carte) */}
       <div className="flex-1 relative w-full h-full">
         {showHero && marketingConfig && (
           <HeroOverlay
@@ -168,8 +169,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Bouton de rappel de la liste quand elle est masquée */}
-        {/* On remonte le bouton à bottom-24 pour éviter la barre d'outils mobile */}
         {!isListVisible && !activePoi && (
           <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-bottom-4 duration-500 pointer-events-auto">
             <Button 
@@ -181,9 +180,17 @@ export default function DashboardPage() {
             </Button>
           </div>
         )}
+
+        {/* Panneau de détails indépendant de la carte */}
+        <MobilePOIBottomSheet
+          poi={activePoi}
+          onOpenChange={(open) => {
+            if (!open) handleSelectPoi(null)
+          }}
+          forceShow={appMode === 'map-fallback'}
+        />
       </div>
 
-      {/* Bottom Sheet persistante pour la liste des POIs */}
       <PoiListBottomSheet
         pois={visiblePois}
         onSelectPoi={handleSelectPoi}

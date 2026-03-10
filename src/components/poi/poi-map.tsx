@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { POI, POILite } from '@/lib/types';
@@ -10,7 +9,6 @@ import { Skeleton } from '../ui/skeleton';
 import { Button } from '../ui/button';
 import { POIDetails } from './poi-details';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { MobilePOIBottomSheet } from './mobile-poi-bottom-sheet';
 import { categoriesMap } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
@@ -35,65 +33,33 @@ function MapController({
   const isMobile = useIsMobile();
   const { toast } = useToast();
 
-  // Centrage sur un POI sélectionné
   useEffect(() => {
     if (selectedPoi && map) {
       map.panTo(selectedPoi.location);
     }
   }, [selectedPoi, map]);
 
-  // Ajustement automatique du cadrage pour voir TOUS les POIs
   useEffect(() => {
     if (selectedPoi || !map || pois.length === 0) return;
     if (typeof window === 'undefined' || !window.google?.maps) return;
 
     if (pois.length === 1) {
       const poi = pois[0];
-    
-      const latOffset = 0.002; // ≈ 200 m
+      const latOffset = 0.002;
       const lngOffset = 0.002;
-    
       const bounds = new window.google.maps.LatLngBounds(
-        {
-          lat: poi.location.lat - latOffset,
-          lng: poi.location.lng - lngOffset
-        },
-        {
-          lat: poi.location.lat + latOffset,
-          lng: poi.location.lng + lngOffset
-        }
+        { lat: poi.location.lat - latOffset, lng: poi.location.lng - lngOffset },
+        { lat: poi.location.lat + latOffset, lng: poi.location.lng + lngOffset }
       );
-    
       const topPadding = 140;
-      const bottomPadding = isListVisible
-        ? window.innerHeight * 0.55
-        : 100;
-    
-      map.fitBounds(bounds, {
-        top: topPadding,
-        bottom: bottomPadding,
-        left: 60,
-        right: 60
-      });
+      const bottomPadding = isListVisible ? window.innerHeight * 0.55 : 100;
+      map.fitBounds(bounds, { top: topPadding, bottom: bottomPadding, left: 60, right: 60 });
     } else {
       const bounds = new window.google.maps.LatLngBounds();
       pois.forEach((poi) => bounds.extend(poi.location));
-      
-      // La zone occupée par les contrôles et listes
-      const topPadding = 140; // Header + Categories
-      
-      // Si la liste est visible, on réserve 65% de la hauteur en bas (pour les marqueurs)
-      // Si elle est cachée, on ne laisse qu'une petite marge pour le bouton de rappel
-      const bottomPadding = isListVisible 
-        ? window.innerHeight * 0.55 
-        : 100;
-      
-      map.fitBounds(bounds, {
-        top: topPadding,
-        bottom: bottomPadding,
-        left: 60,
-        right: 60
-      });
+      const topPadding = 140;
+      const bottomPadding = isListVisible ? window.innerHeight * 0.55 : 100;
+      map.fitBounds(bounds, { top: topPadding, bottom: bottomPadding, left: 60, right: 60 });
     }
   }, [pois, selectedPoi, map, isListVisible]);
 
@@ -115,12 +81,7 @@ function MapController({
       let message = "Impossible de récupérer votre position actuelle.";
       if (geoError?.code === 1) message = "L'accès au GPS est désactivé.";
       else if (geoError?.code === 3) message = "Délai d'attente dépassé. Vérifiez votre signal.";
-
-      toast({
-        variant: "destructive",
-        title: "Position indisponible",
-        description: message,
-      });
+      toast({ variant: "destructive", title: "Position indisponible", description: message });
     }
   };
 
@@ -137,41 +98,18 @@ function MapController({
       {pois.map((poi) => {
         const isSelected = selectedPoi?.id === poi.id;
         const sponsorIsActive = isSponsorActive(poi as any);
-
-        let colorClass =
-          categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
-
+        let colorClass = categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
         if (sponsorIsActive) colorClass = 'text-amber-500';
         if (isSelected) colorClass = 'text-accent';
 
         return (
-          <AdvancedMarker
-            key={poi.id}
-            position={poi.location}
-            onClick={() => onSelectPoi(poi)}
-          >
+          <AdvancedMarker key={poi.id} position={poi.location} onClick={() => onSelectPoi(poi)}>
             {isMobile ? (
               <div className="flex flex-col items-center -translate-y-2 select-none">
-                <div
-                  className={cn(
-                    "rounded-full bg-white shadow-md p-1 transition-all",
-                    sponsorIsActive && "border-2 border-amber-400 bg-amber-50",
-                    isSelected && "ring-2 ring-accent scale-110"
-                  )}
-                >
-                  <MapPin
-                    size={18}
-                    className={sponsorIsActive ? "text-amber-500" : colorClass}
-                  />
+                <div className={cn("rounded-full bg-white shadow-md p-1 transition-all", sponsorIsActive && "border-2 border-amber-400 bg-amber-50", isSelected && "ring-2 ring-accent scale-110")}>
+                  <MapPin size={18} className={sponsorIsActive ? "text-amber-500" : colorClass} />
                 </div>
-                <div
-                  className={cn(
-                    "mt-1 px-3 py-1 rounded-full text-[11px] font-semibold shadow-md",
-                    "bg-white border max-w-[140px] text-center truncate",
-                    sponsorIsActive && "border-amber-400",
-                    isSelected && "ring-2 ring-accent scale-105"
-                  )}
-                >
+                <div className={cn("mt-1 px-3 py-1 rounded-full text-[11px] font-semibold shadow-md", "bg-white border max-w-[140px] text-center truncate", sponsorIsActive && "border-amber-400", isSelected && "ring-2 ring-accent scale-105")}>
                   {poi.title}
                 </div>
               </div>
@@ -182,16 +120,7 @@ function MapController({
                     <div className="w-10 h-10 rounded-full bg-amber-400/20 blur-md" />
                   </div>
                 )}
-
-                <MapPin
-                  size={36}
-                  className={cn(
-                    "relative transition-transform drop-shadow-md",
-                    colorClass,
-                    isSelected ? "scale-125" : "hover:scale-110",
-                    sponsorIsActive && !isSelected && "drop-shadow-lg"
-                  )}
-                />
+                <MapPin size={36} className={cn("relative transition-transform drop-shadow-md", colorClass, isSelected ? "scale-125" : "hover:scale-110", sponsorIsActive && !isSelected && "drop-shadow-lg")} />
               </div>
             )}
           </AdvancedMarker>
@@ -199,12 +128,7 @@ function MapController({
       })}
 
       {!isMobile && selectedPoi && (
-        <InfoWindow
-          position={selectedPoi.location}
-          onCloseClick={() => onSelectPoi(null)}
-          pixelOffset={[0, -48]}
-          maxWidth={400}
-        >
+        <InfoWindow position={selectedPoi.location} onCloseClick={() => onSelectPoi(null)} pixelOffset={[0, -48]} maxWidth={400}>
           <ScrollArea className="h-[50vh] w-full max-w-sm">
             <div className="pr-4">
               <POIDetails poi={selectedPoi} />
@@ -213,15 +137,8 @@ function MapController({
         </InfoWindow>
       )}
 
-      {/* Positionné sous le Header pour éviter la Bottom Sheet */}
       <div className="absolute top-24 right-4 z-30">
-        <Button
-          onClick={handleRecenter}
-          type="button"
-          variant="secondary"
-          className="shadow-lg bg-background/95 backdrop-blur-sm hover:bg-background text-primary border border-primary/30 flex items-center gap-2 h-10 px-4 rounded-full transition-all active:scale-95 hover:border-primary/50"
-          title="Recentrer sur ma position"
-        >
+        <Button onClick={handleRecenter} type="button" variant="secondary" className="shadow-lg bg-background/95 backdrop-blur-sm hover:bg-background text-primary border border-primary/30 flex items-center gap-2 h-10 px-4 rounded-full transition-all active:scale-95 hover:border-primary/50" title="Recentrer sur ma position">
           <Crosshair className={cn("h-4 w-4", !userLocation && "text-muted-foreground")} />
           <span className="font-semibold text-xs whitespace-nowrap">Ma position</span>
           {(!userLocation && !geoError) && <Skeleton className="h-2 w-2 rounded-full bg-primary animate-pulse" />}
@@ -243,13 +160,8 @@ export function POIMap({
   isListVisible: boolean;
 }) {
   const { userLocation, loading: geoLoading } = useGeolocation();
-  const isMobile = useIsMobile();
 
-  const defaultCenter =
-    userLocation ||
-    (pois.length > 0
-      ? pois[0].location
-      : { lat: -21.3393, lng: 55.4781 });
+  const defaultCenter = userLocation || (pois.length > 0 ? pois[0].location : { lat: -21.3393, lng: 55.4781 });
 
   if (geoLoading && pois.length === 0) {
     return <Skeleton className="w-full h-full" />;
@@ -269,22 +181,8 @@ export function POIMap({
         className="w-full h-full"
         onClick={() => onSelectPoi(null)}
       >
-        <MapController
-          pois={pois}
-          onSelectPoi={onSelectPoi}
-          selectedPoi={selectedPoi}
-          isListVisible={isListVisible}
-        />
+        <MapController pois={pois} onSelectPoi={onSelectPoi} selectedPoi={selectedPoi} isListVisible={isListVisible} />
       </Map>
-
-      {isMobile && (
-        <MobilePOIBottomSheet
-          poi={selectedPoi}
-          onOpenChange={(open) => {
-            if (!open) onSelectPoi(null);
-          }}
-        />
-      )}
     </div>
   );
 }

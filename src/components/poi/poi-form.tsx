@@ -243,7 +243,7 @@ export function POIForm({ poiId }: POIFormProps) {
     }
 
     if (!geoLoading) getPoi();
-  }, [poiId, form, router, toast, geoLoading, userLocation]);
+  }, [poiId, form, router, toast, geoLoading]);
 
   useEffect(() => {
     if (!headerImageFile) {
