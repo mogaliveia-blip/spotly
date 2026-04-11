@@ -113,7 +113,13 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
             maximumAge: 30000          // accepte une position récente
           }
         );
-    
+        
+        // 🔥 IMPORTANT : ne jamais bloquer l'UI si le GPS est lent
+        setState(prev => ({
+          ...prev,
+          loading: false
+        }));
+
         // ensuite suivi précis
         startWatching();
     

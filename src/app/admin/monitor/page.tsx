@@ -1,4 +1,3 @@
-// src/app/admin/monitor/page.tsx
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -12,7 +11,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Server, Users, MapPin, Star, Handshake, MonitorPlay, Presentation, AlertTriangle, Info, CheckCircle, RefreshCw, Loader2 } from 'lucide-react';
+import {
+  Server,
+  Users,
+  MapPin,
+  Star,
+  Handshake,
+  MonitorPlay,
+  Presentation,
+  AlertTriangle,
+  Info,
+  CheckCircle,
+  RefreshCw,
+  Loader2,
+  BarChart3,
+  Activity
+} from 'lucide-react';
+
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { mapsConfig } from '@/lib/firebase-config';
@@ -63,11 +78,9 @@ export default function MonitorPage() {
     const isInitialLoad = useRef(true);
     const [isPageVisible, setIsPageVisible] = useState(true);
 
-
     const fetchData = useCallback(async (isManualRefresh = false) => {
-        if (!isManualRefresh) {
-            setLoading(true);
-        }
+        if (!isManualRefresh) setLoading(true);
+
         try {
             const [users, pois, appConfig, marketingConfig] = await Promise.all([
                 fetchUsers(),
@@ -91,15 +104,13 @@ export default function MonitorPage() {
             };
 
             setStats(currentStats => {
-                if (!isInitialLoad.current) {
-                    setPrevStats(currentStats);
-                } else {
-                    isInitialLoad.current = false;
-                }
+                if (!isInitialLoad.current) setPrevStats(currentStats);
+                else isInitialLoad.current = false;
                 return newStats;
             });
 
             setLastRefresh(new Date());
+
         } catch (error) {
             console.error("Failed to fetch monitoring data:", error);
         } finally {
@@ -107,7 +118,7 @@ export default function MonitorPage() {
         }
     }, []);
 
-     useEffect(() => {
+    useEffect(() => {
         const handleVisibilityChange = () => setIsPageVisible(document.visibilityState === 'visible');
         document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -115,25 +126,25 @@ export default function MonitorPage() {
 
     useEffect(() => {
         if (authLoading) return;
+
         if (role && role !== 'admin') {
             router.replace('/dashboard');
             return;
         }
+
         if (role === 'admin' && isPageVisible) {
             fetchData();
-            const intervalId = setInterval(() => fetchData(), 30000); // 30 seconds
+            const intervalId = setInterval(() => fetchData(), 30000);
             return () => clearInterval(intervalId);
         }
     }, [role, authLoading, router, fetchData, isPageVisible]);
-    
-    // --- DERIVED STATE ---
+
     const isFestivalMode = stats ? !stats.isLandingPageActive && !stats.isHeroMarketingEnabled : false;
     const poisDelta = stats && prevStats ? stats.totalPois - prevStats.totalPois : 0;
     const reviewsDelta = stats && prevStats ? stats.totalReviews - prevStats.totalReviews : 0;
 
     const isMapIdDefined = !!process.env.NEXT_PUBLIC_GOOGLE_MAP_ID;
     const isMapApiKeyDefined = !!mapsConfig.apiKey;
-
 
     if (authLoading || !stats) {
         return (
@@ -144,11 +155,14 @@ export default function MonitorPage() {
             </AppLayout>
         );
     }
-    
+
     return (
         <AppLayout>
             <div className="h-full overflow-y-auto p-6">
                 <div className="space-y-6">
+
+                    {/* HEADER */}
+
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex items-center gap-4">
                            <div>
@@ -157,51 +171,73 @@ export default function MonitorPage() {
                            </div>
                            {isFestivalMode && <Badge variant="destructive">Mode Festival Actif</Badge>}
                         </div>
+
                         <div className="flex items-center gap-2">
                            <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={loading}>
-                                {loading && !isInitialLoad.current ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4"/>}
+                                {loading && !isInitialLoad.current
+                                  ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
+                                  : <RefreshCw className="mr-2 h-4 w-4"/>}
                                 Rafraîchir
                             </Button>
+
                             <div className="text-sm text-muted-foreground text-left sm:text-right">
-                               {lastRefresh ? <>Dernière mise à jour : {format(lastRefresh, 'HH:mm:ss', { locale: fr })}</> : <Skeleton className="h-5 w-48" />}
+                               {lastRefresh
+                                ? <>Dernière mise à jour : {format(lastRefresh, 'HH:mm:ss', { locale: fr })}</>
+                                : <Skeleton className="h-5 w-48" />}
                             </div>
                         </div>
                     </div>
 
-                     <Card>
+                    {/* ALERTES */}
+
+                    <Card>
                         <CardHeader>
                             <CardTitle>Alertes Système</CardTitle>
                         </CardHeader>
+
                         <CardContent className="space-y-3">
+
                             {stats.totalPois === 0 && (
                                 <Alert variant="destructive">
                                     <AlertTriangle className="h-4 w-4" />
                                     <AlertTitle>Alerte Critique</AlertTitle>
-                                    <AlertDescription>Aucun point d'intérêt (POI) n'est configuré. L'application est vide.</AlertDescription>
+                                    <AlertDescription>
+                                        Aucun point d'intérêt (POI) n'est configuré. L'application est vide.
+                                    </AlertDescription>
                                 </Alert>
                             )}
-                             {stats.isLandingPageActive && stats.isHeroMarketingEnabled && (
+
+                            {stats.isLandingPageActive && stats.isHeroMarketingEnabled && (
                                 <Alert variant="destructive">
                                     <AlertTriangle className="h-4 w-4" />
                                     <AlertTitle>Alerte de Configuration</AlertTitle>
-                                    <AlertDescription>La Landing Page et le Hero Marketing sont activés en même temps, ce qui peut créer un conflit d'intention pour l'utilisateur.</AlertDescription>
+                                    <AlertDescription>
+                                        La Landing Page et le Hero Marketing sont activés en même temps.
+                                    </AlertDescription>
                                 </Alert>
                             )}
-                             {isFestivalMode && stats.totalReviews === 0 && (
+
+                            {isFestivalMode && stats.totalReviews === 0 && (
                                 <Alert>
                                     <AlertTriangle className="h-4 w-4" />
                                     <AlertTitle>Alerte de Contenu</AlertTitle>
-                                    <AlertDescription>Le "Mode Festival" est actif mais aucun avis n'a encore été posté.</AlertDescription>
+                                    <AlertDescription>
+                                        Le mode festival est actif mais aucun avis n'a été posté.
+                                    </AlertDescription>
                                 </Alert>
                             )}
-                             {stats.poisWithSponsorField > 0 && stats.activePartners === 0 && (
-                                <Alert variant="default">
+
+                            {stats.poisWithSponsorField > 0 && stats.activePartners === 0 && (
+                                <Alert>
                                      <Info className="h-4 w-4" />
                                     <AlertTitle>Information Partenariats</AlertTitle>
-                                    <AlertDescription>Des POIs ont des configurations de partenariat, mais aucun n'est actuellement actif (vérifier les dates).</AlertDescription>
+                                    <AlertDescription>
+                                        Des POIs ont un sponsor configuré mais aucun n'est actif.
+                                    </AlertDescription>
                                 </Alert>
                             )}
-                             {stats.totalPois > 0 && !(stats.isLandingPageActive && stats.isHeroMarketingEnabled) && !isFestivalMode && (
+
+                            {stats.totalPois > 0 && !(stats.isLandingPageActive && stats.isHeroMarketingEnabled) && !isFestivalMode && (
                                 <Alert>
                                      <CheckCircle className="h-4 w-4 text-green-500" />
                                     <AlertTitle>Système Nominal</AlertTitle>
@@ -211,6 +247,8 @@ export default function MonitorPage() {
                         </CardContent>
                     </Card>
 
+                    {/* STATS */}
+
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <StatCard title="Total Utilisateurs" value={stats.totalUsers} icon={Users} loading={loading} />
                         <StatCard title="Total POIs" value={stats.totalPois} icon={MapPin} loading={loading} delta={poisDelta} />
@@ -218,56 +256,109 @@ export default function MonitorPage() {
                         <StatCard title="Partenaires Actifs" value={stats.activePartners} icon={Handshake} loading={loading} />
                     </div>
 
+                    {/* SYSTEM + MAP */}
+
                     <div className="grid gap-4 md:grid-cols-2">
+
                         <Card>
                             <CardHeader>
                                 <CardTitle>État du système</CardTitle>
-                                <CardDescription>Configuration actuelle des modules principaux.</CardDescription>
+                                <CardDescription>Configuration actuelle.</CardDescription>
                             </CardHeader>
+
                             <CardContent className="space-y-4">
+
                                 <Alert>
                                     <MonitorPlay className="h-4 w-4" />
                                     <AlertTitle className="flex items-center justify-between">
-                                        <span>Landing Page (pré-événement)</span>
-                                        <Badge variant={stats.isLandingPageActive ? "default" : "secondary"}>{stats.isLandingPageActive ? "Activée" : "Désactivée"}</Badge>
+                                        <span>Landing Page</span>
+                                        <Badge variant={stats.isLandingPageActive ? "default" : "secondary"}>
+                                            {stats.isLandingPageActive ? "Activée" : "Désactivée"}
+                                        </Badge>
                                     </AlertTitle>
                                 </Alert>
+
                                 <Alert>
                                     <Presentation className="h-4 w-4" />
                                     <AlertTitle className="flex items-center justify-between">
-                                        <span>Hero Marketing (visiteurs)</span>
-                                        <Badge variant={stats.isHeroMarketingEnabled ? "default" : "secondary"}>{stats.isHeroMarketingEnabled ? "Activé" : "Désactivé"}</Badge>
+                                        <span>Hero Marketing</span>
+                                        <Badge variant={stats.isHeroMarketingEnabled ? "default" : "secondary"}>
+                                            {stats.isHeroMarketingEnabled ? "Activé" : "Désactivé"}
+                                        </Badge>
                                     </AlertTitle>
                                 </Alert>
+
                             </CardContent>
                         </Card>
-                         <Card>
+
+                        <Card>
                             <CardHeader>
                                 <CardTitle>Santé Google Maps</CardTitle>
-                                <CardDescription>Vérification des configurations essentielles.</CardDescription>
+                                <CardDescription>Vérification configuration.</CardDescription>
                             </CardHeader>
+
                             <CardContent className="space-y-4">
+
                                 <Alert>
                                     <AlertTitle className="flex items-center justify-between">
-                                        <span>Clé d'API Google Maps</span>
-                                        <Badge variant={isMapApiKeyDefined ? "default" : "destructive"}>{isMapApiKeyDefined ? "Présente" : "Absente"}</Badge>
+                                        <span>Clé API Google Maps</span>
+                                        <Badge variant={isMapApiKeyDefined ? "default" : "destructive"}>
+                                            {isMapApiKeyDefined ? "Présente" : "Absente"}
+                                        </Badge>
                                     </AlertTitle>
-                                    <AlertDescription>
-                                        Nécessaire pour l'affichage de la carte.
-                                    </AlertDescription>
                                 </Alert>
+
                                 <Alert>
                                     <AlertTitle className="flex items-center justify-between">
-                                        <span>ID de carte Google Maps</span>
-                                        <Badge variant={isMapIdDefined ? "default" : "destructive"}>{isMapIdDefined ? "Présent" : "Absent"}</Badge>
+                                        <span>ID de carte</span>
+                                        <Badge variant={isMapIdDefined ? "default" : "destructive"}>
+                                            {isMapIdDefined ? "Présent" : "Absent"}
+                                        </Badge>
                                     </AlertTitle>
-                                    <AlertDescription>
-                                        Nécessaire pour le style personnalisé de la carte.
-                                    </AlertDescription>
                                 </Alert>
+
                             </CardContent>
                         </Card>
+
                     </div>
+
+                    {/* GA4 */}
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Analytics & Monitoring</CardTitle>
+                            <CardDescription>
+                                Accès rapide aux outils d'analyse Google Analytics.
+                            </CardDescription>
+                        </CardHeader>
+
+                        <CardContent className="grid gap-4 sm:grid-cols-2">
+
+                            <Button asChild variant="secondary">
+                                <a
+                                  href="https://analytics.google.com/analytics/web/#/realtime"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  <BarChart3 className="mr-2 h-4 w-4"/>
+                                  Analytics temps réel
+                                </a>
+                            </Button>
+
+                            <Button asChild variant="outline">
+                                <a
+                                  href="https://analytics.google.com/analytics/web/#/debugview"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  <Activity className="mr-2 h-4 w-4"/>
+                                  DebugView GA4
+                                </a>
+                            </Button>
+
+                        </CardContent>
+                    </Card>
+
                 </div>
             </div>
         </AppLayout>

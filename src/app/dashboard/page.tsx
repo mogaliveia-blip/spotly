@@ -1,3 +1,4 @@
+
 'use client'
 
 import { POIMapAdapter } from '@/components/poi/poi-map-adapter'
@@ -61,7 +62,10 @@ export default function DashboardPage() {
 
   const handleSelectPoi = useCallback(
     (poi: POILite | null) => {
-      setActivePoi(poi)
+      // On force une nouvelle référence d'objet pour déclencher les effets de scroll
+      // même si c'est le même POI qui est recliqué.
+      setActivePoi(poi ? { ...poi } : null)
+      
       const params = new URLSearchParams(searchParams.toString())
       if (poi) {
         params.set('poi', poi.id)
@@ -107,8 +111,22 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!pois.length) return
-    const poiFromUrl = selectedPoiId ? pois.find((p) => p.id === selectedPoiId) : null
-    setActivePoi(poiFromUrl || null)
+  
+    const poiFromUrl = selectedPoiId
+      ? pois.find((p) => p.id === selectedPoiId)
+      : null
+  
+    setActivePoi(prev => {
+      if (!poiFromUrl) return null
+  
+      // Si on a déjà ce POI et qu'il est complet, on garde la version complète
+      if (prev && prev.id === poiFromUrl.id && 'description' in prev) {
+        return prev
+      }
+  
+      return poiFromUrl
+    })
+  
     if (poiFromUrl?.id) {
       void loadFullPoi(poiFromUrl.id)
       setIsListVisible(true)
@@ -181,7 +199,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Panneau de détails indépendant de la carte */}
         <MobilePOIBottomSheet
           poi={activePoi}
           onOpenChange={(open) => {

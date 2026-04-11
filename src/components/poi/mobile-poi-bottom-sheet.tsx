@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -30,6 +31,7 @@ export function MobilePOIBottomSheet({
   useEffect(() => {
     if (!isOpen) return;
 
+    // Reset du scroll à l'ouverture ou au changement de POI
     const timeout = setTimeout(() => {
       if (containerRef.current) {
         containerRef.current.scrollTo({
@@ -47,36 +49,36 @@ export function MobilePOIBottomSheet({
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/20 z-[55] backdrop-blur-[2px]"
+        className="fixed inset-0 bg-black/40 z-[55] backdrop-blur-[2px] animate-in fade-in duration-300"
         onClick={() => onOpenChange(false)}
       />
 
       <div
         className={cn(
-          "fixed bottom-6 left-1/2 -translate-x-1/2 z-[60]",
-          "w-[90%] md:w-[60%] max-w-2xl",
+          "fixed bottom-4 left-1/2 -translate-x-1/2 z-[60]",
+          "w-[94%] md:w-[75%] lg:w-[60%] max-w-2xl",
           "bg-background/95 backdrop-blur-md",
-          "rounded-[2.5rem] shadow-2xl border border-white/20",
-          "flex flex-col overflow-hidden transition-all duration-300 animate-in slide-in-from-bottom-10"
+          "rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-white/10",
+          "flex flex-col overflow-hidden transition-all duration-300 ease-out animate-in slide-in-from-bottom-10"
         )}
         style={{
-          maxHeight: '70vh',
+          maxHeight: '85vh',
         }}
       >
-        <div className="relative flex items-center justify-center py-3 shrink-0">
-          <div className="w-10 h-1 bg-muted rounded-full opacity-50" />
+        <div className="relative flex items-center justify-center py-4 shrink-0 cursor-grab active:cursor-grabbing">
+          <div className="w-12 h-1.5 bg-muted rounded-full opacity-30" />
 
           <Button
             size="icon"
             variant="ghost"
-            className="absolute right-4 rounded-full h-8 w-8 hover:bg-muted/50"
+            className="absolute right-6 rounded-full h-10 w-10 hover:bg-muted/50 bg-muted/20"
             onClick={() => onOpenChange(false)}
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </Button>
         </div>
 
-        <div ref={containerRef} className="overflow-y-auto flex-1 px-6 pb-8">
+        <div ref={containerRef} className="overflow-y-auto flex-1 px-6 sm:px-8 pb-12 scroll-smooth">
           <POIDetails poi={poi} />
         </div>
       </div>

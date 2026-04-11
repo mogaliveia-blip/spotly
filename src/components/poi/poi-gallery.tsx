@@ -1,4 +1,5 @@
-// src/components/poi/poi-gallery.tsx
+'use client';
+
 import type { POI, POILite } from '@/lib/types';
 import Image from 'next/image';
 
@@ -6,13 +7,14 @@ type POIAny = POI | POILite;
 
 interface POIGalleryProps {
   poi: POIAny;
+  onImageClick?: (url: string) => void;
 }
 
 function hasGallery(poi: POIAny): poi is POI {
   return Array.isArray((poi as any)?.galleryUrls);
 }
 
-export function POIGallery({ poi }: POIGalleryProps) {
+export function POIGallery({ poi, onImageClick }: POIGalleryProps) {
   if (!hasGallery(poi) || !poi.galleryUrls || poi.galleryUrls.length === 0) {
     return null;
   }
@@ -22,7 +24,8 @@ export function POIGallery({ poi }: POIGalleryProps) {
       {poi.galleryUrls.map((photo, index) => (
         <div
           key={index}
-          className="relative aspect-square overflow-hidden rounded-lg border"
+          className="relative aspect-square overflow-hidden rounded-lg border cursor-zoom-in"
+          onClick={() => onImageClick?.(photo.url)}
         >
           <Image
             src={photo.url}
