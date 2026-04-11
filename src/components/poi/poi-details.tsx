@@ -52,7 +52,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   }, []);
 
   useEffect(() => {
-    // Si initialPoi change (nouvelle référence), on met à jour le state local
     setPoi(prev => {
       if (!prev) return initialPoi;
       if (isFullPoi(prev) && prev.id === initialPoi.id) return prev;
@@ -64,8 +63,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
     const poiId = initialPoi.id;
     const isSamePoi = lastPoiIdRef.current === poiId;
   
-    // On ne recharge les avis que si l'ID a changé pour éviter les appels inutiles
-    // lors du forçage de référence (spread) pour le scroll.
     if (isSamePoi && reviews.length > 0) return;
   
     lastPoiIdRef.current = poiId;
@@ -90,6 +87,9 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   if (reviewsEnabled === null) {
     return (
       <div className="space-y-6">
+        <div className="relative aspect-video w-full shrink-0">
+          <Skeleton className="w-full h-full rounded-3xl" />
+        </div>
         <Skeleton className="h-6 w-1/3" />
         <Skeleton className="h-20 w-full" />
       </div>
@@ -97,23 +97,22 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Photo d'en-tête */}
-      {poi.headerPhotoUrl ? (
-        <div className="relative aspect-video w-full bg-muted/30 rounded-3xl overflow-hidden shadow-sm">
+    <div className="space-y-6 min-h-[40vh]">
+      {/* Photo d'en-tête - Stabilisée en ratio 16:9 avec shrink-0 */}
+      <div className="relative aspect-video w-full bg-muted/30 rounded-3xl overflow-hidden shadow-sm shrink-0">
+        {poi.headerPhotoUrl ? (
           <Image
             src={poi.headerPhotoUrl}
             alt={poi.title}
             fill
-            className="object-contain cursor-zoom-in transition-transform hover:scale-105 duration-500"
+            className="object-cover cursor-zoom-in transition-transform hover:scale-105 duration-500"
             onClick={() => setSelectedImage(poi.headerPhotoUrl!)}
+            priority
           />
-        </div>
-      ) : (
-        <div className="relative aspect-video w-full">
-          <Skeleton className="w-full h-full rounded-3xl" />
-        </div>
-      )}
+        ) : (
+          <Skeleton className="w-full h-full" />
+        )}
+      </div>
 
       <div className="space-y-4">
         {/* Titre et Badge Sponsor */}
@@ -150,10 +149,10 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
           </Button>
         </div>
 
-        {/* Description */}
-        <div className="pt-2">
+        {/* Description - Hauteur minimum pour éviter le tassement */}
+        <div className="pt-2 min-h-[80px]">
           {full ? (
-            <p className="text-base text-muted-foreground leading-relaxed">{poi.description}</p>
+            <p className="text-base text-muted-foreground leading-relaxed whitespace-pre-line">{poi.description}</p>
           ) : (
             <div className="space-y-3">
               <Skeleton className="h-4 w-[95%]" />
@@ -178,7 +177,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
 
       {/* Section Avis */}
       {reviewsEnabled === true && (
-        <div className="space-y-6">
+        <div className="space-y-6 pb-6">
           <h4 className="font-bold text-lg tracking-tight">Avis de la communauté</h4>
           
           {user ? (

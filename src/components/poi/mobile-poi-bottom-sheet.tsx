@@ -25,13 +25,11 @@ export function MobilePOIBottomSheet({
   const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   
-  // Le panneau s'affiche si on a un POI ET qu'on est sur mobile OU que la carte est en panne (forceShow)
   const isOpen = !!poi && (isMobile || forceShow);
 
   useEffect(() => {
     if (!isOpen) return;
 
-    // Reset du scroll à l'ouverture ou au changement de POI
     const timeout = setTimeout(() => {
       if (containerRef.current) {
         containerRef.current.scrollTo({
@@ -63,6 +61,7 @@ export function MobilePOIBottomSheet({
         )}
         style={{
           maxHeight: '85vh',
+          minHeight: '60vh', // Hauteur minimum pour stabiliser le layout
         }}
       >
         <div className="relative flex items-center justify-center py-4 shrink-0 cursor-grab active:cursor-grabbing">
