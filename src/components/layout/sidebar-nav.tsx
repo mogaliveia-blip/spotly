@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -49,7 +48,6 @@ import {
 
 function POISidebarList() {
   const [pois, setPois] = useState<POI[]>([]);
-  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
   const { userLocation, loading: geoLoading } = useGeolocation();
@@ -59,14 +57,12 @@ function POISidebarList() {
   const searchParams = useSearchParams();
   const selectedPoiId = searchParams.get('poi');
   const categoryFilter = (searchParams.get('category') as MainCategory) || 'all';
-  const { user } = useAuth();
 
   useEffect(() => {
     async function init() {
       try {
-        const [poiData, config] = await Promise.all([fetchPois(), fetchAppConfig()]);
+        const [poiData] = await Promise.all([fetchPois(), fetchAppConfig()]);
         setPois(poiData);
-        setAppConfig(config);
       } catch (error) {
         console.error('Impossible de récupérer les données (POIs/config)', error);
       } finally {
@@ -127,11 +123,8 @@ function POISidebarList() {
   }, [pois, categoryFilter, userLocation]);
 
   const visiblePois = useMemo(() => {
-    if (appConfig?.festivalMode || user) {
-      return sortedAndFilteredPois;
-    }
-    return sortedAndFilteredPois.slice(0, 2);
-  }, [sortedAndFilteredPois, user, appConfig]);
+    return sortedAndFilteredPois;
+  }, [sortedAndFilteredPois]);
 
   if (loading) {
     return (

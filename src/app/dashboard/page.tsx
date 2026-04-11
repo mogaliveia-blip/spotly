@@ -1,4 +1,3 @@
-
 'use client'
 
 import { POIMapAdapter } from '@/components/poi/poi-map-adapter'
@@ -144,10 +143,8 @@ export default function DashboardPage() {
   }
 
   const visiblePois = useMemo(() => {
-    const filtered = pois.filter((p) => categoryFilter === 'all' || p.mainCategory === categoryFilter)
-    if (appConfig?.festivalMode || user) return filtered
-    return filtered.slice(0, 5)
-  }, [pois, categoryFilter, user, appConfig])
+    return pois.filter((p) => categoryFilter === 'all' || p.mainCategory === categoryFilter)
+  }, [pois, categoryFilter])
 
   const showHero = heroVisible && !user && marketingConfig?.heroEnabled
 
