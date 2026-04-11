@@ -1,4 +1,3 @@
-
 'use client'
 
 import type { POI, POILite, Review, AppConfig } from '@/lib/types';
@@ -14,7 +13,7 @@ import { ReviewList } from './review-list';
 import { POIGallery } from './poi-gallery';
 import { getDistance } from '@/lib/utils';
 import { useGeolocation } from '@/providers/geolocation-provider';
-import { Navigation } from 'lucide-react';
+import { Navigation, X } from 'lucide-react';
 import { SponsorBadge } from '../sponsor/sponsor-badge';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 
@@ -223,10 +222,11 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
             onClick={(e) => e.stopPropagation()}
           />
           <button
-            className="absolute top-8 right-8 text-white bg-white/10 hover:bg-white/20 p-3 rounded-full transition-colors"
+            className="absolute top-6 right-6 z-[1000] bg-black/60 hover:bg-black/80 text-white rounded-full p-3 transition-all active:scale-95 shadow-2xl backdrop-blur-sm border border-white/20"
             onClick={() => setSelectedImage(null)}
+            aria-label="Fermer l'aperçu"
           >
-            ✕
+            <X className="h-6 w-6" />
           </button>
         </div>
       )}
