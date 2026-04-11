@@ -96,8 +96,8 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   }
 
   return (
-    <div className="space-y-6 min-h-[40vh]">
-      {/* Photo d'en-tête - Stabilisée en ratio 16:9 avec shrink-0 */}
+    <div className="space-y-6 min-h-[40vh] flex flex-col">
+      {/* Photo d'en-tête - Taille stabilisée en 16:9 shrink-0 */}
       <div className="relative aspect-video w-full bg-muted/30 rounded-3xl overflow-hidden shadow-sm shrink-0">
         {poi.headerPhotoUrl ? (
           <Image
@@ -113,7 +113,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
         )}
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 flex-1">
         {/* Titre et Badge Sponsor */}
         <div className="space-y-2">
           {poi?.sponsor && isSponsorActive(poi) && (
@@ -148,7 +148,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
           </Button>
         </div>
 
-        {/* Description - Hauteur minimum pour éviter le tassement */}
+        {/* Description - Hauteur minimum pour stabiliser le flux visuel */}
         <div className="pt-2 min-h-[80px]">
           {full ? (
             <p className="text-base text-muted-foreground leading-relaxed whitespace-pre-line">{poi.description}</p>
