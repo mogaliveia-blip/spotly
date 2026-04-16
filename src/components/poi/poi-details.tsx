@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/use-auth-user';
 import Image from 'next/image';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { AuthDialog } from '@/components/auth/auth-dialog';
+import { AuthDialog } from '@/components/auth/dialog';
 import { ReviewForm } from './review-form';
 import { ReviewList } from './review-list';
 import { POIGallery } from './poi-gallery';
@@ -51,8 +51,8 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   const allImages = useMemo(() => {
     const imgs: string[] = [];
     if (poi.headerPhotoUrl) imgs.push(poi.headerPhotoUrl);
-    if (full && poi.galleryUrls) {
-      poi.galleryUrls.forEach(g => imgs.push(g.url));
+    if (full && (poi as POI).galleryUrls) {
+      (poi as POI).galleryUrls.forEach(g => imgs.push(g.url));
     }
     return imgs;
   }, [poi.headerPhotoUrl, full, (poi as any).galleryUrls]);
@@ -159,13 +159,11 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
 
       <div className="space-y-4 flex-1">
         {/* Titre et Badge Sponsor */}
-        <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
           {poi?.sponsor && isSponsorActive(poi) && (
-            <div className="flex">
-              <SponsorBadge sponsor={poi.sponsor} className="px-3 py-1 text-xs" />
-            </div>
+            <SponsorBadge sponsor={poi.sponsor} className="px-3 py-1 text-xs" />
           )}
-          <h3 className="font-bold text-2xl tracking-tight leading-tight">{poi.title}</h3>
+          <h3 className="font-bold text-2xl tracking-tight leading-tight w-full">{poi.title}</h3>
         </div>
 
         {/* Actions et Distance */}
@@ -263,29 +261,39 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
         >
           {/* Bouton Fermer */}
           <button
-            className="absolute top-6 right-6 z-[1000] bg-black/60 hover:bg-black/80 text-white rounded-full p-3 transition-all active:scale-95 shadow-2xl backdrop-blur-sm border border-white/20"
+            className="absolute z-[1001] bg-black/60 hover:bg-black/80 text-white rounded-full p-3 transition-all active:scale-95 shadow-2xl backdrop-blur-sm border border-white/20"
             onClick={() => setSelectedIndex(null)}
             aria-label="Fermer l'aperçu"
+            style={{ 
+                top: 'calc(1.5rem + env(safe-area-inset-top, 0px))', 
+                right: 'calc(1.5rem + env(safe-area-inset-right, 0px))' 
+            }}
           >
             <X className="h-6 w-6" />
           </button>
 
-          {/* Navigation Desktop */}
+          {/* Navigation Controls */}
           {allImages.length > 1 && (
             <>
               <button
-                className="absolute left-6 z-[1000] hidden md:flex bg-black/40 hover:bg-black/60 text-white rounded-full p-4 transition-all active:scale-90"
+                className="absolute z-[1001] flex bg-black/50 hover:bg-black/70 text-white rounded-full p-3 md:p-4 transition-all active:scale-90 shadow-2xl backdrop-blur-sm border border-white/10 top-1/2 -translate-y-1/2"
                 onClick={handlePrev}
                 aria-label="Précédent"
+                style={{ 
+                    left: 'calc(1rem + env(safe-area-inset-left, 0px))' 
+                }}
               >
-                <ChevronLeft className="h-8 w-8" />
+                <ChevronLeft className="h-6 w-6 md:h-8 md:w-8" />
               </button>
               <button
-                className="absolute right-6 z-[1000] hidden md:flex bg-black/40 hover:bg-black/60 text-white rounded-full p-4 transition-all active:scale-90"
+                className="absolute z-[1001] flex bg-black/50 hover:bg-black/70 text-white rounded-full p-3 md:p-4 transition-all active:scale-90 shadow-2xl backdrop-blur-sm border border-white/10 top-1/2 -translate-y-1/2"
                 onClick={handleNext}
                 aria-label="Suivant"
+                style={{ 
+                    right: 'calc(1rem + env(safe-area-inset-right, 0px))' 
+                }}
               >
-                <ChevronRight className="h-8 w-8" />
+                <ChevronRight className="h-6 w-6 md:h-8 md:w-8" />
               </button>
             </>
           )}
