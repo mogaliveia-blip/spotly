@@ -53,15 +53,15 @@ export function MobilePOIBottomSheet({
 
       <div
         className={cn(
-          "fixed bottom-4 left-1/2 -translate-x-1/2 z-[60]",
-          "w-[94%] md:w-[75%] lg:w-[60%] max-w-2xl",
+          "fixed bottom-4 left-0 right-0 mx-auto z-[60]",
+          "w-[94%] md:w-[75%] lg:w-[60%] max-w-2xl min-w-[300px]",
           "bg-background/95 backdrop-blur-md",
           "rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-white/10",
           "flex flex-col overflow-hidden transition-all duration-300 ease-out animate-in slide-in-from-bottom-10"
         )}
         style={{
           maxHeight: '85vh',
-          minHeight: '60vh', // Hauteur minimum pour stabiliser le layout
+          minHeight: '60vh',
         }}
       >
         <div className="relative flex items-center justify-center py-4 shrink-0 cursor-grab active:cursor-grabbing">
