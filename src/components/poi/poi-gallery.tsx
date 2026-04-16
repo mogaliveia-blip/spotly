@@ -7,7 +7,7 @@ type POIAny = POI | POILite;
 
 interface POIGalleryProps {
   poi: POIAny;
-  onImageClick?: (url: string) => void;
+  onImageClick?: (index: number) => void;
 }
 
 function hasGallery(poi: POIAny): poi is POI {
@@ -25,7 +25,7 @@ export function POIGallery({ poi, onImageClick }: POIGalleryProps) {
         <div
           key={index}
           className="relative aspect-square overflow-hidden rounded-lg border cursor-zoom-in"
-          onClick={() => onImageClick?.(photo.url)}
+          onClick={() => onImageClick?.(index)}
         >
           <Image
             src={photo.url}

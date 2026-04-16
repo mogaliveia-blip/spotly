@@ -1,7 +1,7 @@
 'use client'
 
 import type { POI, POILite, Review, AppConfig } from '@/lib/types';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { fetchReviewsByPoiId, fetchAppConfig } from '@/lib/data';
 import { useAuth } from '@/hooks/use-auth-user';
 import Image from 'next/image';
@@ -13,9 +13,10 @@ import { ReviewList } from './review-list';
 import { POIGallery } from './poi-gallery';
 import { getDistance } from '@/lib/utils';
 import { useGeolocation } from '@/providers/geolocation-provider';
-import { Navigation, X } from 'lucide-react';
+import { Navigation, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { SponsorBadge } from '../sponsor/sponsor-badge';
 import { isSponsorActive } from '@/lib/sponsor-utils';
+import { cn } from '@/lib/utils';
 
 type POIAny = POILite | POI;
 
@@ -35,10 +36,26 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewsEnabled, setReviewsEnabled] = useState<boolean | null>(null);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  
+  // Navigation Galerie
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const touchStartX = useRef<number | null>(null);
+
   const { user } = useAuth();
   const { userLocation } = useGeolocation();
   const lastPoiIdRef = useRef<string | null>(null);
+
+  const full = isFullPoi(poi);
+
+  // Agrégation de toutes les images pour la lightbox
+  const allImages = useMemo(() => {
+    const imgs: string[] = [];
+    if (poi.headerPhotoUrl) imgs.push(poi.headerPhotoUrl);
+    if (full && poi.galleryUrls) {
+      poi.galleryUrls.forEach(g => imgs.push(g.url));
+    }
+    return imgs;
+  }, [poi.headerPhotoUrl, full, (poi as any).galleryUrls]);
 
   useEffect(() => {
     fetchAppConfig()
@@ -79,9 +96,36 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
     setReviews(prev => [newReview, ...prev]);
   }, []);
 
-  const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${poi.location.lat},${poi.location.lng}&travelmode=walking`;
+  const handlePrev = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (selectedIndex === null) return;
+    setSelectedIndex((selectedIndex - 1 + allImages.length) % allImages.length);
+  };
 
-  const full = isFullPoi(poi);
+  const handleNext = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (selectedIndex === null) return;
+    setSelectedIndex((selectedIndex + 1) % allImages.length);
+  };
+
+  // Gestion du Swipe Mobile
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = touchStartX.current - touchEndX;
+
+    if (Math.abs(diff) > 50) { // Seuil de 50px pour déclencher le swipe
+      if (diff > 0) handleNext();
+      else handlePrev();
+    }
+    touchStartX.current = null;
+  };
+
+  const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${poi.location.lat},${poi.location.lng}&travelmode=walking`;
 
   if (reviewsEnabled === null) {
     return (
@@ -97,7 +141,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
 
   return (
     <div className="space-y-6 min-h-[40vh] flex flex-col">
-      {/* Photo d'en-tête - Taille stabilisée en 16:9 shrink-0 */}
+      {/* Photo d'en-tête */}
       <div className="relative aspect-video w-full bg-muted/30 rounded-3xl overflow-hidden shadow-sm shrink-0">
         {poi.headerPhotoUrl ? (
           <Image
@@ -105,7 +149,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
             alt={poi.title}
             fill
             className="object-cover cursor-zoom-in transition-transform hover:scale-105 duration-500"
-            onClick={() => setSelectedImage(poi.headerPhotoUrl!)}
+            onClick={() => setSelectedIndex(0)}
             priority
           />
         ) : (
@@ -148,7 +192,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
           </Button>
         </div>
 
-        {/* Description - Hauteur minimum pour stabiliser le flux visuel */}
+        {/* Description */}
         <div className="pt-2 min-h-[80px]">
           {full ? (
             <p className="text-base text-muted-foreground leading-relaxed whitespace-pre-line">{poi.description}</p>
@@ -167,7 +211,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
         <div className="pt-2">
           <POIGallery
             poi={poi}
-            onImageClick={(url) => setSelectedImage(url)}
+            onImageClick={(index) => setSelectedIndex(poi.headerPhotoUrl ? index + 1 : index)}
           />
         </div>
       )}
@@ -209,25 +253,57 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
         </div>
       )}
 
-      {/* Lightbox */}
-      {selectedImage && (
+      {/* Lightbox avec Navigation */}
+      {selectedIndex !== null && (
         <div
-          className="fixed inset-0 z-[999] bg-black/95 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300"
-          onClick={() => setSelectedImage(null)}
+          className="fixed inset-0 z-[999] bg-black/95 flex items-center justify-center backdrop-blur-md animate-in fade-in duration-300"
+          onClick={() => setSelectedIndex(null)}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
         >
-          <img
-            src={selectedImage}
-            alt="preview"
-            className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl animate-in zoom-in-95 duration-300"
-            onClick={(e) => e.stopPropagation()}
-          />
+          {/* Bouton Fermer */}
           <button
             className="absolute top-6 right-6 z-[1000] bg-black/60 hover:bg-black/80 text-white rounded-full p-3 transition-all active:scale-95 shadow-2xl backdrop-blur-sm border border-white/20"
-            onClick={() => setSelectedImage(null)}
+            onClick={() => setSelectedIndex(null)}
             aria-label="Fermer l'aperçu"
           >
             <X className="h-6 w-6" />
           </button>
+
+          {/* Navigation Desktop */}
+          {allImages.length > 1 && (
+            <>
+              <button
+                className="absolute left-6 z-[1000] hidden md:flex bg-black/40 hover:bg-black/60 text-white rounded-full p-4 transition-all active:scale-90"
+                onClick={handlePrev}
+                aria-label="Précédent"
+              >
+                <ChevronLeft className="h-8 w-8" />
+              </button>
+              <button
+                className="absolute right-6 z-[1000] hidden md:flex bg-black/40 hover:bg-black/60 text-white rounded-full p-4 transition-all active:scale-90"
+                onClick={handleNext}
+                aria-label="Suivant"
+              >
+                <ChevronRight className="h-8 w-8" />
+              </button>
+            </>
+          )}
+
+          {/* Image */}
+          <div className="relative w-full h-full flex items-center justify-center p-4">
+            <img
+              src={allImages[selectedIndex]}
+              alt={`Aperçu ${selectedIndex + 1}`}
+              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl animate-in zoom-in-95 duration-300 select-none"
+              onClick={(e) => e.stopPropagation()}
+            />
+            
+            {/* Indicateur de position */}
+            <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-black/50 text-white px-4 py-1.5 rounded-full text-sm font-medium backdrop-blur-sm">
+              {selectedIndex + 1} / {allImages.length}
+            </div>
+          </div>
         </div>
       )}
     </div>
