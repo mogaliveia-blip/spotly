@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -64,19 +63,21 @@ export function MobilePOIBottomSheet({
           minHeight: '60vh',
         }}
       >
-        <div className="relative flex items-center justify-center py-4 shrink-0 cursor-grab active:cursor-grabbing">
+        {/* Header avec poignée et bouton fermer centré */}
+        <div className="relative flex items-center justify-center py-5 shrink-0 cursor-grab active:cursor-grabbing">
           <div className="w-12 h-1.5 bg-muted rounded-full opacity-30" />
 
           <Button
             size="icon"
             variant="ghost"
-            className="absolute right-6 rounded-full h-10 w-10 hover:bg-muted/50 bg-muted/20"
+            className="absolute right-6 top-1/2 -translate-y-1/2 rounded-full h-10 w-10 hover:bg-muted/50 bg-muted/20"
             onClick={() => onOpenChange(false)}
           >
             <X className="h-5 w-5" />
           </Button>
         </div>
 
+        {/* Zone de contenu avec scroll et padding de sécurité en bas */}
         <div ref={containerRef} className="overflow-y-auto flex-1 px-6 sm:px-8 pb-12 scroll-smooth">
           <POIDetails poi={poi} />
         </div>
