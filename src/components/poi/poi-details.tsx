@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/use-auth-user';
 import Image from 'next/image';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { AuthDialog } from '@/components/auth/dialog';
+import { AuthDialog } from '@/components/auth/auth-dialog';
 import { ReviewForm } from './review-form';
 import { ReviewList } from './review-list';
 import { POIGallery } from './poi-gallery';
