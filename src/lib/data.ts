@@ -58,9 +58,18 @@ export const dbPaths = {
 export async function fetchAppConfig(eventId: string = getCurrentEventId()): Promise<AppConfig> {
   const configRef = doc(db, dbPaths.config(eventId), 'main')
   const configSnap = await getDoc(configRef)
+  
   if (configSnap.exists()) {
     return configSnap.data() as AppConfig
   }
+
+  // Fallback multi-événement : si non trouvé dans l'event, chercher dans la racine globale
+  if (eventId !== 'default-event') {
+    const oldRef = doc(db, 'config', 'main')
+    const oldSnap = await getDoc(oldRef)
+    if (oldSnap.exists()) return oldSnap.data() as AppConfig
+  }
+
   return {
     isLandingPageActive: true,
     festivalMode: false
@@ -88,9 +97,18 @@ export async function updateAppConfig(
 export async function fetchMarketingConfig(eventId: string = getCurrentEventId()): Promise<MarketingConfig> {
   const configRef = doc(db, dbPaths.config(eventId), 'marketing')
   const configSnap = await getDoc(configRef)
+  
   if (configSnap.exists()) {
     return configSnap.data() as MarketingConfig
   }
+
+  // Fallback multi-événement : si non trouvé dans l'event, chercher dans la racine globale
+  if (eventId !== 'default-event') {
+    const oldRef = doc(db, 'config', 'marketing')
+    const oldSnap = await getDoc(oldRef)
+    if (oldSnap.exists()) return oldSnap.data() as MarketingConfig
+  }
+
   return {
     heroEnabled: false,
     heroTitle: 'Découvrez le festival',
@@ -176,7 +194,14 @@ export async function createUserInFirestore(
 
 export async function fetchPois(eventId: string = getCurrentEventId()): Promise<POI[]> {
   const poiCollection = collection(db, dbPaths.pois(eventId))
-  const poiSnapshot = await getDocs(poiCollection)
+  let poiSnapshot = await getDocs(poiCollection)
+  
+  // Fallback multi-événement : si la collection de l'event est vide, chercher dans la racine globale
+  if (poiSnapshot.empty && eventId !== 'default-event') {
+    const oldCollection = collection(db, 'pois')
+    poiSnapshot = await getDocs(oldCollection)
+  }
+
   const poiList = poiSnapshot.docs.map(
     (doc) => ({ id: doc.id, ...doc.data() } as POI)
   )
@@ -203,6 +228,9 @@ export async function fetchPoisLite(eventId: string = getCurrentEventId()): Prom
     }
 
     const serverSnap = await getDocsFromServer(colRef)
+    
+    // Fallback POI Lite : si l'event n'a pas encore de projection lite, 
+    // on laisse le fallbackToFull gérer la cascade vers les anciens POIs.
     if (serverSnap.empty) {
       return await fallback()
     }
@@ -218,15 +246,33 @@ export async function fetchPoisLite(eventId: string = getCurrentEventId()): Prom
 export async function fetchPoiById(id: string, eventId: string = getCurrentEventId()): Promise<POI | undefined> {
   const poiRef = doc(db, dbPaths.pois(eventId), id)
   const poiSnap = await getDoc(poiRef)
+  
   if (poiSnap.exists()) {
     return { id: poiSnap.id, ...poiSnap.data() } as POI
   }
+
+  // Fallback multi-événement : chercher à la racine si non trouvé dans l'event
+  if (eventId !== 'default-event') {
+    const oldRef = doc(db, 'pois', id)
+    const oldSnap = await getDoc(oldRef)
+    if (oldSnap.exists()) {
+      return { id: oldSnap.id, ...oldSnap.data() } as POI
+    }
+  }
+
   return undefined
 }
 
 export async function fetchReviewsByPoiId(poiId: string, eventId: string = getCurrentEventId()): Promise<Review[]> {
   const reviewsCollection = collection(db, dbPaths.pois(eventId), poiId, 'reviews')
-  const reviewSnapshot = await getDocs(reviewsCollection)
+  let reviewSnapshot = await getDocs(reviewsCollection)
+  
+  // Fallback multi-événement : si l'event n'a pas de reviews, chercher dans l'ancien chemin global
+  if (reviewSnapshot.empty && eventId !== 'default-event') {
+    const oldReviewsCollection = collection(db, 'pois', poiId, 'reviews')
+    reviewSnapshot = await getDocs(oldReviewsCollection)
+  }
+
   const reviewList = reviewSnapshot.docs.map((doc) => {
     const data = doc.data()
     const createdAt = data.createdAt?.toDate
