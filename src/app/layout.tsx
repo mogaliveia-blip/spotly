@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { cn } from '@/lib/utils'
 import { MapsApiProvider } from '@/providers/maps-api-provider'
 import { GeolocationProvider } from '@/providers/geolocation-provider'
+import { EventProvider } from '@/providers/event-provider'
 
 export const metadata: Metadata = {
   title: 'Leu Tempo',
@@ -69,10 +70,12 @@ export default function RootLayout({
       >
         <MapsApiProvider>
           <AuthProvider>
-            <GeolocationProvider>
-              {children}
-              <Toaster />
-            </GeolocationProvider>
+            <EventProvider>
+              <GeolocationProvider>
+                {children}
+                <Toaster />
+              </GeolocationProvider>
+            </EventProvider>
           </AuthProvider>
         </MapsApiProvider>
       </body>

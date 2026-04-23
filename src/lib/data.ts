@@ -12,7 +12,10 @@ import {
   deleteDoc,
   addDoc,
   serverTimestamp,
-  runTransaction
+  runTransaction,
+  query,
+  where,
+  limit
 } from 'firebase/firestore'
 import type {
   POI,
@@ -21,7 +24,8 @@ import type {
   AppUser,
   UserRole,
   AppConfig,
-  MarketingConfig
+  MarketingConfig,
+  AppEvent
 } from './types'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
@@ -33,18 +37,46 @@ import {
   listAll
 } from 'firebase/storage'
 
-// --- MULTI-EVENT HELPERS ---
+// --- MULTI-EVENT ENGINE ---
+
+let globalCurrentEventId: string = 'default-event';
 
 /**
- * Temporairement fixé à "default-event" pour préserver la rétrocompatibilité.
+ * Retourne l'ID de l'événement courant (défini par le routing/provider).
  */
 export function getCurrentEventId(): string {
-  return 'default-event'
+  return globalCurrentEventId;
+}
+
+/**
+ * Définit l'ID de l'événement courant. Appelé par l'EventProvider.
+ */
+export function setCurrentEventId(id: string) {
+  globalCurrentEventId = id;
+}
+
+/**
+ * Résout un événement à partir de son slug URL.
+ */
+export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
+  if (!slug || slug === 'default') return null;
+  const eventsRef = collection(db, 'events');
+  const q = query(eventsRef, where('slug', '==', slug), limit(1));
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  const data = d.data();
+  return { 
+    id: d.id, 
+    ...data, 
+    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+    updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt)
+  } as AppEvent;
 }
 
 /**
  * Centralise les chemins Firestore pour gérer le multi-événement.
- * Si l'ID est "default-event", on utilise les anciennes collections globales.
+ * Si l'ID est "default-event", on utilise les anciennes collections globales pour la compatibilité.
  */
 export const dbPaths = {
   pois: (eventId: string) => eventId === 'default-event' ? 'pois' : `events/${eventId}/pois`,
@@ -229,8 +261,7 @@ export async function fetchPoisLite(eventId: string = getCurrentEventId()): Prom
 
     const serverSnap = await getDocsFromServer(colRef)
     
-    // Fallback POI Lite : si l'event n'a pas encore de projection lite, 
-    // on laisse le fallbackToFull gérer la cascade vers les anciens POIs.
+    // Fallback POI Lite : si l'event n'a pas encore de projection lite, on tente le fallback global
     if (serverSnap.empty) {
       return await fallback()
     }
@@ -387,7 +418,6 @@ export async function updatePoi(
 
 export async function deletePoi(poiId: string, eventId: string = getCurrentEventId()): Promise<void> {
   const poiRef = doc(db, dbPaths.pois(eventId), poiId)
-  // Note: On ne touche pas encore aux chemins Storage pour préserver l'existant
   const imagesFolderRef = ref(storage, `poi-images/${poiId}`)
 
   try {
