@@ -4,155 +4,128 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     /* =========================
-       UTILITAIRES
+       UTILITAIRES GLOBAUX
     ========================= */
 
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function getUserData(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId))
-        ? get(/databases/$(database)/documents/users/$(userId)).data
-        : {};
-    }
-
-    function isOneOfRoles(roles) {
-      return isSignedIn()
-        && getUserData(request.auth.uid).role in roles;
-    }
-
-    function isAdmin() {
-      return isOneOfRoles(['admin']);
-    }
-
-    function isEditorOrAdmin() {
-      return isOneOfRoles(['editor', 'admin']);
-    }
-
-    // Si le champ n'existe pas → activé par défaut
-    function reviewsEnabled() {
-      return get(/databases/$(database)/documents/config/main).data.reviewsEnabled != false;
-    }
-
-    function mainCategories() {
-      return [
-        'programmation', 'nourriture_boissons', 'services_essentiels',
-        'logistique_mobilite', 'merchandising_partenaires', 'espaces_specifiques'
-      ];
-    }
-
-    function subCategories() {
-      return [
-        'concert_headliner', 'concert_scene_secondaire', 'spectacle_rue', 'dj_set',
-        'food_truck', 'restaurant', 'bar', 'buvette',
-        'toilettes', 'poste_secours', 'securite', 'point_eau',
-        'entree_principale', 'parking', 'navette', 'info_point', 'acces_pmr',
-        'boutique_officielle', 'stand_partenaire', 'sponsor',
-        'espace_vip', 'espace_enfant', 'zone_detente', 'backstage'
-      ];
-    }
-
-    function isValidCategoryPair(mainCat, subCat) {
-      return (mainCat == 'programmation' && subCat in ['concert_headliner','concert_scene_secondaire','spectacle_rue','dj_set'])
-        || (mainCat == 'nourriture_boissons' && subCat in ['food_truck','restaurant','bar','buvette'])
-        || (mainCat == 'services_essentiels' && subCat in ['toilettes','poste_secours','securite','point_eau'])
-        || (mainCat == 'logistique_mobilite' && subCat in ['entree_principale','parking','navette','info_point','acces_pmr'])
-        || (mainCat == 'merchandising_partenaires' && subCat in ['boutique_officielle','stand_partenaire','sponsor'])
-        || (mainCat == 'espaces_specifiques' && subCat in ['espace_vip','espace_enfant','zone_detente','backstage']);
-    }
-
-    function isValidSponsor(s) {
-      return s is map
-        && s.enabled is bool
-        && s.level in ['standard','premium','official']
-        && s.priority is int
-        && s.priority >= 0
-        && (!('startDate' in s) || s.startDate is timestamp)
-        && (!('endDate' in s) || s.endDate is timestamp);
+    function isGlobalAdmin() {
+      return isSignedIn() 
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     /* =========================
-       USERS
+       UTILITAIRES ÉVÉNEMENTS
     ========================= */
+
+    function getEvent(eventId) {
+      return get(/databases/$(database)/documents/events/$(eventId)).data;
+    }
+
+    function isEventOwner(eventId) {
+      return isSignedIn() && getEvent(eventId).ownerId == request.auth.uid;
+    }
+
+    function getMemberRole(eventId) {
+      let path = /databases/$(database)/documents/events/$(eventId)/members/$(request.auth.uid);
+      return exists(path) ? get(path).data.role : 'none';
+    }
+
+    function hasEventRole(eventId, roles) {
+      return isSignedIn() && (getMemberRole(eventId) in roles || isEventOwner(eventId) || isGlobalAdmin());
+    }
+
+    function isEventAdmin(eventId) {
+      return hasEventRole(eventId, ['admin']);
+    }
+
+    function isEventEditor(eventId) {
+      return hasEventRole(eventId, ['admin', 'editor']);
+    }
+
+    function isEventPublic(eventId) {
+      return getEvent(eventId).status == 'published';
+    }
+
+    /* =========================
+       RACINE : EVENTS
+    ========================= */
+
+    match /events/{eventId} {
+      // Lecture publique si publié, sinon restreinte aux membres
+      allow read: if isEventPublic(eventId) || hasEventRole(eventId, ['admin', 'editor', 'viewer']);
+      
+      // Création : n'importe quel utilisateur connecté peut créer un event (il en devient owner)
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      
+      // Update/Delete : owner ou global admin uniquement
+      allow update, delete: if isEventOwner(eventId) || isGlobalAdmin();
+
+      /* ---- MEMBRES DE L'EVENT ---- */
+      match /members/{userId} {
+        allow read: if hasEventRole(eventId, ['admin', 'editor', 'viewer']);
+        allow write: if isEventAdmin(eventId);
+      }
+
+      /* ---- CONFIG DE L'EVENT ---- */
+      match /config/{configId} {
+        allow read: if isEventPublic(eventId) || hasEventRole(eventId, ['admin', 'editor', 'viewer']);
+        allow write: if isEventAdmin(eventId);
+      }
+
+      /* ---- POIS DE L'EVENT ---- */
+      match /pois/{poiId} {
+        allow read: if isEventPublic(eventId) || hasEventRole(eventId, ['admin', 'editor', 'viewer']);
+        allow write: if isEventEditor(eventId);
+
+        /* ---- REVIEWS DES POIS ---- */
+        match /reviews/{reviewId} {
+          allow read: if isEventPublic(eventId) || hasEventRole(eventId, ['admin', 'editor', 'viewer']);
+          allow create: if isSignedIn();
+          allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isEventAdmin(eventId));
+        }
+      }
+
+      /* ---- PROJECTION LITE DE L'EVENT ---- */
+      match /pois_public/{poiId} {
+        allow read: if true;
+        allow write: if isEventEditor(eventId);
+      }
+    }
+
+    /* ============================================================
+       COMPATIBILITÉ : ANCIEN SCHÉMA GLOBAL (À SUPPRIMER APRÈS MIGRATION)
+    ============================================================ */
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isSignedIn()
-        && request.auth.uid == userId
-        && request.resource.data.role == 'user';
-      allow update: if isOwner(userId) && !('role' in request.resource.data);
-      allow update: if isAdmin() && ('role' in request.resource.data);
-      allow delete: if isAdmin();
+      allow read: if isSignedIn() && (request.auth.uid == userId || isGlobalAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if (isSignedIn() && request.auth.uid == userId && !('role' in request.resource.data)) || isGlobalAdmin();
+      allow delete: if isGlobalAdmin();
     }
 
-    /* =========================
-       CONFIG
-    ========================= */
-
-    match /config/main {
+    match /config/{configId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isGlobalAdmin();
     }
-
-    match /config/marketing {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    /* =========================
-       POIS
-    ========================= */
 
     match /pois/{poiId} {
-
       allow read: if true;
-
-      /* ---- CREATE POI (admin/editor seulement) ---- */
-      allow create: if isEditorOrAdmin()
-        && request.resource.data.mainCategory in mainCategories()
-        && request.resource.data.subCategory in subCategories()
-        && isValidCategoryPair(
-            request.resource.data.mainCategory,
-            request.resource.data.subCategory
-          )
-        && (!('sponsor' in request.resource.data)
-            || isValidSponsor(request.resource.data.sponsor));
-
-      /* ---- UPDATE POI complet (admin/editor) ---- */
-      allow update: if isEditorOrAdmin();
-
-      /* ---- INCRÉMENT reviewCount par user ---- */
-      allow update: if
-        isSignedIn()
-        && reviewsEnabled()
-        && request.resource.data.reviewCount == resource.data.reviewCount + 1
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['reviewCount']);
-
-      allow delete: if isEditorOrAdmin();
-
-      /* =========================
-         REVIEWS
-      ========================= */
+      allow create, update, delete: if isGlobalAdmin() || (isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'editor']);
 
       match /reviews/{reviewId} {
-
         allow read: if true;
-
-        allow create: if isSignedIn()
-          && reviewsEnabled()
-          && request.resource.data.userId == request.auth.uid;
-
-        allow update: if isSignedIn()
-          && resource.data.userId == request.auth.uid;
-
-        allow delete: if isSignedIn()
-          && resource.data.userId == request.auth.uid;
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isGlobalAdmin());
       }
+    }
+
+    match /pois_public/{poiId} {
+      allow read: if true;
+      allow write: if isGlobalAdmin() || (isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'editor']);
     }
   }
 }
