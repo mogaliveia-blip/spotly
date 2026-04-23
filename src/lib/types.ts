@@ -164,10 +164,6 @@ export interface POI {
   sponsor?: POISponsor
 }
 
-/**
- * ✅ POI Lite (projection pour carte + liste)
- * headerPhotoUrl optionnel pour compatibilité.
- */
 export type POILite = Pick<
   POI,
   | 'id'
@@ -196,8 +192,6 @@ export interface AppConfig {
   festivalMode?: boolean
 }
 
-/* 🔥 NOUVEAU MODE CLOSE AJOUTÉ ICI */
-
 export type HeroCtaMode = 'auth' | 'external' | 'none' | 'close'
 
 export interface MarketingConfig {
@@ -208,4 +202,31 @@ export interface MarketingConfig {
   heroCtaText: string
   heroCtaMode: HeroCtaMode
   heroCtaLink?: string
+}
+
+// --- NEW MULTI-EVENT TYPES ---
+
+export type EventStatus = 'draft' | 'published' | 'archived'
+
+export interface AppEvent {
+  id: string
+  name: string
+  slug: string
+  ownerId: string
+  status: EventStatus
+  createdAt: Date
+  updatedAt: Date
+  defaultMapCenter?: { lat: number; lng: number }
+  branding?: {
+    primaryColor?: string
+    accentColor?: string
+  }
+}
+
+export type EventRole = 'owner' | 'admin' | 'editor' | 'viewer'
+
+export interface EventMember {
+  uid: string
+  role: EventRole
+  joinedAt: Date
 }

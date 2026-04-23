@@ -33,14 +33,30 @@ import {
   listAll
 } from 'firebase/storage'
 
-// --- CONFIG FUNCTIONS ---
+// --- MULTI-EVENT HELPERS ---
 
 /**
- * Fetches the global application configuration.
- * @returns A promise that resolves with the app configuration.
+ * Temporairement fixé à "default-event" pour préserver la rétrocompatibilité.
  */
-export async function fetchAppConfig(): Promise<AppConfig> {
-  const configRef = doc(db, 'config', 'main')
+export function getCurrentEventId(): string {
+  return 'default-event'
+}
+
+/**
+ * Centralise les chemins Firestore pour gérer le multi-événement.
+ * Si l'ID est "default-event", on utilise les anciennes collections globales.
+ */
+export const dbPaths = {
+  pois: (eventId: string) => eventId === 'default-event' ? 'pois' : `events/${eventId}/pois`,
+  poisPublic: (eventId: string) => eventId === 'default-event' ? 'pois_public' : `events/${eventId}/pois_public`,
+  config: (eventId: string) => eventId === 'default-event' ? 'config' : `events/${eventId}/config`,
+  members: (eventId: string) => `events/${eventId}/members`,
+}
+
+// --- CONFIG FUNCTIONS ---
+
+export async function fetchAppConfig(eventId: string = getCurrentEventId()): Promise<AppConfig> {
+  const configRef = doc(db, dbPaths.config(eventId), 'main')
   const configSnap = await getDoc(configRef)
   if (configSnap.exists()) {
     return configSnap.data() as AppConfig
@@ -51,12 +67,11 @@ export async function fetchAppConfig(): Promise<AppConfig> {
   }
 }
 
-/**
- * Updates the global application configuration.
- * @param config The partial config to update.
- */
-export async function updateAppConfig(config: Partial<AppConfig>): Promise<void> {
-  const configRef = doc(db, 'config', 'main')
+export async function updateAppConfig(
+  config: Partial<AppConfig>,
+  eventId: string = getCurrentEventId()
+): Promise<void> {
+  const configRef = doc(db, dbPaths.config(eventId), 'main')
   try {
     await setDoc(configRef, config, { merge: true })
   } catch (serverError: any) {
@@ -70,17 +85,12 @@ export async function updateAppConfig(config: Partial<AppConfig>): Promise<void>
   }
 }
 
-/**
- * Fetches the marketing configuration.
- * @returns A promise that resolves with the marketing configuration.
- */
-export async function fetchMarketingConfig(): Promise<MarketingConfig> {
-  const configRef = doc(db, 'config', 'marketing')
+export async function fetchMarketingConfig(eventId: string = getCurrentEventId()): Promise<MarketingConfig> {
+  const configRef = doc(db, dbPaths.config(eventId), 'marketing')
   const configSnap = await getDoc(configRef)
   if (configSnap.exists()) {
     return configSnap.data() as MarketingConfig
   }
-  // Default config if it doesn't exist
   return {
     heroEnabled: false,
     heroTitle: 'Découvrez le festival',
@@ -93,14 +103,11 @@ export async function fetchMarketingConfig(): Promise<MarketingConfig> {
   }
 }
 
-/**
- * Updates the marketing configuration.
- * @param config The partial marketing config to update.
- */
 export async function updateMarketingConfig(
-  config: Partial<MarketingConfig>
+  config: Partial<MarketingConfig>,
+  eventId: string = getCurrentEventId()
 ): Promise<void> {
-  const configRef = doc(db, 'config', 'marketing')
+  const configRef = doc(db, dbPaths.config(eventId), 'marketing')
   try {
     await setDoc(configRef, config, { merge: true })
   } catch (serverError: any) {
@@ -116,12 +123,6 @@ export async function updateMarketingConfig(
 
 // --- STORAGE FUNCTIONS ---
 
-/**
- * Uploads a file to Firebase Storage.
- * @param file The file to upload.
- * @param path The path in Storage where the file will be saved.
- * @returns A promise that resolves with the download URL and the full path of the uploaded file.
- */
 export async function uploadFile(
   file: File,
   path: string
@@ -134,10 +135,6 @@ export async function uploadFile(
   return { url, path: uploadResult.ref.fullPath }
 }
 
-/**
- * Deletes a file from Firebase Storage using its full path.
- * @param filePath The full path of the file to delete.
- */
 export async function deleteFileByPath(filePath: string): Promise<void> {
   const storageRef = ref(storage, filePath)
   try {
@@ -177,8 +174,8 @@ export async function createUserInFirestore(
   }
 }
 
-export async function fetchPois(): Promise<POI[]> {
-  const poiCollection = collection(db, 'pois')
+export async function fetchPois(eventId: string = getCurrentEventId()): Promise<POI[]> {
+  const poiCollection = collection(db, dbPaths.pois(eventId))
   const poiSnapshot = await getDocs(poiCollection)
   const poiList = poiSnapshot.docs.map(
     (doc) => ({ id: doc.id, ...doc.data() } as POI)
@@ -186,11 +183,11 @@ export async function fetchPois(): Promise<POI[]> {
   return poiList
 }
 
-export async function fetchPoisLite(): Promise<POILite[]> {
-  const colRef = collection(db, 'pois_public')
+export async function fetchPoisLite(eventId: string = getCurrentEventId()): Promise<POILite[]> {
+  const colRef = collection(db, dbPaths.poisPublic(eventId))
 
   const fallback = async () => {
-    const full = await fetchPois()
+    const full = await fetchPois(eventId)
     return full as unknown as POILite[]
   }
 
@@ -218,8 +215,8 @@ export async function fetchPoisLite(): Promise<POILite[]> {
   }
 }
 
-export async function fetchPoiById(id: string): Promise<POI | undefined> {
-  const poiRef = doc(db, 'pois', id)
+export async function fetchPoiById(id: string, eventId: string = getCurrentEventId()): Promise<POI | undefined> {
+  const poiRef = doc(db, dbPaths.pois(eventId), id)
   const poiSnap = await getDoc(poiRef)
   if (poiSnap.exists()) {
     return { id: poiSnap.id, ...poiSnap.data() } as POI
@@ -227,8 +224,8 @@ export async function fetchPoiById(id: string): Promise<POI | undefined> {
   return undefined
 }
 
-export async function fetchReviewsByPoiId(poiId: string): Promise<Review[]> {
-  const reviewsCollection = collection(db, 'pois', poiId, 'reviews')
+export async function fetchReviewsByPoiId(poiId: string, eventId: string = getCurrentEventId()): Promise<Review[]> {
+  const reviewsCollection = collection(db, dbPaths.pois(eventId), poiId, 'reviews')
   const reviewSnapshot = await getDocs(reviewsCollection)
   const reviewList = reviewSnapshot.docs.map((doc) => {
     const data = doc.data()
@@ -242,10 +239,11 @@ export async function fetchReviewsByPoiId(poiId: string): Promise<Review[]> {
 
 export async function addReview(
   poiId: string,
-  reviewData: Omit<Review, 'id' | 'poiId' | 'createdAt'>
+  reviewData: Omit<Review, 'id' | 'poiId' | 'createdAt'>,
+  eventId: string = getCurrentEventId()
 ): Promise<Review> {
-  const reviewsCollection = collection(db, 'pois', poiId, 'reviews');
-  const poiRef = doc(db, 'pois', poiId);
+  const reviewsCollection = collection(db, dbPaths.pois(eventId), poiId, 'reviews');
+  const poiRef = doc(db, dbPaths.pois(eventId), poiId);
 
   try {
     let newReviewId = '';
@@ -280,7 +278,7 @@ export async function addReview(
   } catch (e: any) {
     if (e.code && e.code.includes('permission-denied')) {
       const permissionError = new FirestorePermissionError({
-        path: `pois/${poiId}/reviews`,
+        path: `${dbPaths.pois(eventId)}/${poiId}/reviews`,
         operation: 'create',
         requestResourceData: reviewData
       });
@@ -309,9 +307,10 @@ export function updateUserRole(uid: string, role: UserRole): void {
 }
 
 export async function createPoi(
-  poiData: Omit<POI, 'id' | 'averageRating' | 'reviewCount'>
+  poiData: Omit<POI, 'id' | 'averageRating' | 'reviewCount'>,
+  eventId: string = getCurrentEventId()
 ): Promise<string> {
-  const poiCollection = collection(db, 'pois')
+  const poiCollection = collection(db, dbPaths.pois(eventId))
   const fullPoiData = {
     ...poiData,
     averageRating: 0,
@@ -323,9 +322,10 @@ export async function createPoi(
 
 export async function updatePoi(
   poiId: string,
-  poiData: Partial<Omit<POI, 'id' | 'averageRating' | 'reviewCount'>>
+  poiData: Partial<Omit<POI, 'id' | 'averageRating' | 'reviewCount'>>,
+  eventId: string = getCurrentEventId()
 ): Promise<void> {
-  const poiRef = doc(db, 'pois', poiId)
+  const poiRef = doc(db, dbPaths.pois(eventId), poiId)
   try {
     await updateDoc(poiRef, poiData)
   } catch (serverError: any) {
@@ -339,8 +339,9 @@ export async function updatePoi(
   }
 }
 
-export async function deletePoi(poiId: string): Promise<void> {
-  const poiRef = doc(db, 'pois', poiId)
+export async function deletePoi(poiId: string, eventId: string = getCurrentEventId()): Promise<void> {
+  const poiRef = doc(db, dbPaths.pois(eventId), poiId)
+  // Note: On ne touche pas encore aux chemins Storage pour préserver l'existant
   const imagesFolderRef = ref(storage, `poi-images/${poiId}`)
 
   try {
