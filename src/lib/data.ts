@@ -311,22 +311,38 @@ export async function createUserInFirestore(
   user: Omit<AppUser, 'role' | 'emailVerified' | 'isApproved'> & { role?: UserRole; isApproved?: boolean }
 ): Promise<void> {
   const userRef = doc(db, 'users', user.uid)
-  const userData = {
-    uid: user.uid,
-    email: user.email,
-    displayName: user.displayName,
-    role: user.role || 'user',
-    isApproved: user.isApproved ?? false, // ✅ Toujours false par défaut pour les nouveaux
-    photoURL: user.photoURL || null
-  }
-
+  
   try {
-    await setDoc(userRef, userData, { merge: true })
-  } catch (serverError) {
+    const userSnap = await getDoc(userRef)
+
+    if (!userSnap.exists()) {
+      // ✅ Création initiale : on définit les valeurs par défaut
+      const initialData = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL || null,
+        role: user.role || 'user',
+        isApproved: user.isApproved ?? false,
+        createdAt: serverTimestamp(),
+      }
+      await setDoc(userRef, initialData)
+    } else {
+      // ✅ Mise à jour (re-connexion) : on ne synchronise que les infos de profil
+      // On ne touche PAS au rôle ni au statut d'approbation existant
+      const syncData = {
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL || null,
+        lastLogin: serverTimestamp(),
+      }
+      await setDoc(userRef, syncData, { merge: true })
+    }
+  } catch (serverError: any) {
     const permissionError = new FirestorePermissionError({
       path: userRef.path,
       operation: 'create',
-      requestResourceData: userData
+      requestResourceData: user
     })
     errorEmitter.emit('permission-error', permissionError)
     throw serverError
