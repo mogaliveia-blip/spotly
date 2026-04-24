@@ -89,14 +89,25 @@ export async function fetchUserEvents(uid: string): Promise<AppEvent[]> {
   try {
     // Cette requête interroge toutes les sous-collections "members" dans Firestore
     const membersQuery = query(collectionGroup(db, 'members'), where('uid', '==', uid));
-    const membersSnap = await getDocs(membersQuery);
+    
+    // ⚡ On force la récupération serveur pour détecter si l'index est PRÊT
+    // Si l'index n'est pas prêt, Firebase renverra une erreur ici.
+    let membersSnap;
+    try {
+      membersSnap = await getDocsFromServer(membersQuery);
+    } catch (e: any) {
+       // Si erreur de type "index manquant"
+       if (e.code === 'failed-precondition' || e.message?.includes('index')) {
+         throw e;
+       }
+       // Fallback au cache si on est offline
+       membersSnap = await getDocs(membersQuery);
+    }
     
     // On extrait les IDs des événements parents
-    // d.ref est events/{eventId}/members/{uid} -> parent.parent est events/{eventId}
     const eventIds = Array.from(new Set(membersSnap.docs.map(d => d.ref.parent.parent?.id).filter(Boolean))) as string[];
     
     if (eventIds.length === 0) {
-      console.log(`Aucun événement trouvé pour l'utilisateur ${uid} via collectionGroup`);
       return [];
     }
 
@@ -112,23 +123,18 @@ export async function fetchUserEvents(uid: string): Promise<AppEvent[]> {
           updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate() : new Date(d.updatedAt)
         } as AppEvent;
       } catch (e) {
-        console.warn(`Erreur lors de la lecture de l'événement ${id}:`, e);
         return null;
       }
     });
 
     const events = await Promise.all(eventPromises);
-    const validEvents = events.filter((e): e is AppEvent => e !== null);
-    console.log(`${validEvents.length} événements récupérés avec succès.`);
-    return validEvents;
+    return events.filter((e): e is AppEvent => e !== null);
   } catch (error: any) {
-    if (error.code === 'failed-precondition') {
+    if (error.code === 'failed-precondition' || error.message?.includes('index')) {
       console.warn("Firestore Index Requis : L'index de groupe de collections est manquant ou en cours de construction.");
-      // On lève une erreur spécifique que l'UI peut intercepter si besoin
       throw new Error('INDEX_MISSING');
-    } else {
-      console.error("Error fetching user events:", error.message);
     }
+    console.error("Error fetching user events:", error.message);
     return [];
   }
 }

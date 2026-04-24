@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { fetchUserEvents } from '@/lib/data';
 import type { AppEvent } from '@/lib/types';
@@ -9,7 +9,7 @@ import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Calendar, ChevronRight, LayoutDashboard, Settings, AlertCircle, RefreshCw } from 'lucide-react';
+import { Calendar, LayoutDashboard, Settings, AlertCircle, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { CreateEventDialog } from '@/components/admin/create-event-dialog';
 import { cn } from '@/lib/utils';
@@ -21,9 +21,10 @@ export default function MyEventsPage() {
   const [loading, setLoading] = useState(true);
   const [errorType, setErrorType] = useState<'NONE' | 'INDEX_MISSING' | 'OTHER'>('NONE');
 
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async (isManual = false) => {
     if (!user) return;
-    setLoading(true);
+    if (!isManual) setLoading(true);
+    
     setErrorType('NONE');
     try {
       const data = await fetchUserEvents(user.uid);
@@ -37,7 +38,7 @@ export default function MyEventsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -45,9 +46,9 @@ export default function MyEventsPage() {
     } else if (!authLoading) {
       setLoading(false);
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, loadEvents]);
 
-  if (authLoading || loading) {
+  if (authLoading || (loading && events.length === 0)) {
     return (
       <AppLayout>
         <div className="p-6 space-y-6">
@@ -71,11 +72,17 @@ export default function MyEventsPage() {
             <p className="text-muted-foreground">Gérez vos différents festivals et rassemblements.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={loadEvents} className="rounded-xl h-10 px-4">
-                <RefreshCw className="h-4 w-4 mr-2" />
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => loadEvents(true)} 
+              disabled={loading}
+              className="rounded-xl h-10 px-4"
+            >
+                <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
                 Actualiser
             </Button>
-            <CreateEventDialog />
+            <CreateEventDialog onEventCreated={() => loadEvents(true)} />
           </div>
         </div>
 
@@ -84,8 +91,8 @@ export default function MyEventsPage() {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle className="font-bold">Index Firestore en cours de préparation</AlertTitle>
                 <AlertDescription className="mt-2 space-y-2">
-                    <p>Vos événements sont bien créés mais l'affichage nécessite un index Firestore qui est probablement encore en construction.</p>
-                    <p className="text-xs font-semibold underline decoration-dotted">Vérifiez vos emails ou la console Firebase. L'affichage sera opérationnel dans quelques minutes.</p>
+                    <p>Vos événements sont bien enregistrés mais l'affichage nécessite un index Firestore qui est encore en construction sur les serveurs Google.</p>
+                    <p className="text-xs font-semibold underline decoration-dotted">Cela prend généralement 3 à 5 minutes. Cliquez sur "Actualiser" régulièrement.</p>
                 </AlertDescription>
             </Alert>
         )}
@@ -98,11 +105,11 @@ export default function MyEventsPage() {
             <CardTitle className="text-2xl">Aucun événement trouvé</CardTitle>
             <CardDescription className="mt-2 max-w-sm">
               {errorType === 'INDEX_MISSING' 
-                ? "L'index de recherche est en cours de création. Votre événement apparaîtra d'ici 3 à 5 minutes." 
+                ? "L'index de recherche est en cours de création. Votre événement apparaîtra d'ici quelques instants." 
                 : "Vous n'avez pas encore créé d'événement. Commencez par en créer un pour organiser vos points d'intérêt."}
             </CardDescription>
             <div className="mt-8">
-              <CreateEventDialog />
+              <CreateEventDialog onEventCreated={() => loadEvents(true)} />
             </div>
           </Card>
         ) : (
@@ -111,9 +118,9 @@ export default function MyEventsPage() {
               <Card key={e.id} className="group hover:shadow-xl transition-all overflow-hidden border-muted rounded-[2rem]">
                 <CardHeader className="bg-muted/30 pb-6">
                   <div className="flex items-center justify-between">
-                     <CardTitle className="text-xl font-bold">{e.name}</CardTitle>
+                     <CardTitle className="text-xl font-bold line-clamp-1">{e.name}</CardTitle>
                      <span className={cn(
-                        "text-[10px] uppercase font-bold px-2 py-0.5 rounded-full",
+                        "text-[10px] uppercase font-bold px-2 py-0.5 rounded-full whitespace-nowrap",
                         e.status === 'published' ? "bg-green-500/10 text-green-600" : "bg-primary/10 text-primary"
                      )}>
                         {e.status === 'published' ? 'Publié' : 'Brouillon'}

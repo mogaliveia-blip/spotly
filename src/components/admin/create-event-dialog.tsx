@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -34,7 +35,11 @@ const formSchema = z.object({
   slug: z.string().min(3, 'Le slug doit faire au moins 3 caractères').regex(/^[a-z0-9-]+$/, 'Slug invalide (minuscules, chiffres et tirets uniquement)'),
 });
 
-export function CreateEventDialog() {
+interface CreateEventDialogProps {
+  onEventCreated?: () => void;
+}
+
+export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
@@ -67,8 +72,19 @@ export function CreateEventDialog() {
         ownerId: user.uid,
       });
       toast({ title: 'Événement créé !', description: `L'événement ${event.name} est prêt.` });
+      
+      // On ferme la modale
       setOpen(false);
-      router.push(`/${event.slug}/dashboard`);
+      
+      // On notifie le parent pour rafraîchir la liste
+      if (onEventCreated) {
+        onEventCreated();
+      }
+      
+      // On redirige vers la liste des événements pour voir le nouveau né
+      // (Optionnel : on pourrait aussi rediriger vers /[slug]/dashboard directement)
+      router.push(`/admin/events`);
+      
     } catch (error) {
       toast({ title: 'Erreur', description: 'Impossible de créer l\'événement.', variant: 'destructive' });
     } finally {
