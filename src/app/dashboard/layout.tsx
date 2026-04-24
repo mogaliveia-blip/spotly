@@ -14,7 +14,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { role, user, loading: authLoading } = useAuth();
+  const { role, user, loading: authLoading, isApproved } = useAuth();
   const router = useRouter();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
@@ -24,7 +24,6 @@ export default function DashboardLayout({
       setConfig(appConfig);
       setConfigLoading(false);
     }).catch(() => {
-      // En cas d'erreur, on suppose que la page d'accueil est désactivée pour ne pas bloquer l'accès.
       setConfig({ isLandingPageActive: false });
       setConfigLoading(false);
     });
@@ -33,18 +32,19 @@ export default function DashboardLayout({
   const isLoading = authLoading || configLoading;
 
   useEffect(() => {
-    if (isLoading) {
-      return; // Attendre que l'authentification et la configuration soient chargées
+    if (isLoading) return;
+
+    // ✅ Blocage si non approuvé
+    if (user && !isApproved) {
+        router.replace('/access-pending');
+        return;
     }
 
-    // Le seul cas de redirection est un utilisateur standard ('user') essayant d'accéder
-    // à l'application alors que la landing page est active.
-    // Les administrateurs, éditeurs et utilisateurs non authentifiés ne sont pas redirigés d'ici.
     if (role === 'user' && config?.isLandingPageActive) {
         router.replace('/');
     }
 
-  }, [role, config, isLoading, router]);
+  }, [role, config, isLoading, router, user, isApproved]);
 
 
   if (isLoading) {
@@ -55,17 +55,18 @@ export default function DashboardLayout({
     );
   }
 
-  // Le portail de vérification d'e-mail doit se situer après le chargement.
+  // ✅ Redirection si non approuvé
+  if (user && !isApproved) {
+     return null; 
+  }
+
   if (user && !user.emailVerified) {
     return <VerifyEmailPage />;
   }
 
-  // On détermine si l'utilisateur actuel doit être bloqué pour éviter un flash de contenu.
   const isBlocked = role === 'user' && config?.isLandingPageActive;
 
   if (isBlocked) {
-    // Le useEffect a déjà dû déclencher la redirection.
-    // Ceci affiche une icône de chargement pendant que la redirection s'effectue.
     return (
        <div className="flex h-screen w-full items-center justify-center bg-background">
         <Mountain className="h-12 w-12 animate-pulse text-primary" />

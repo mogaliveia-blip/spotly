@@ -13,6 +13,7 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   loading: boolean;
   role: UserRole | null;
+  isApproved: boolean;
 }
 
 export const AuthContext = createContext<AuthContextType>({
@@ -20,6 +21,7 @@ export const AuthContext = createContext<AuthContextType>({
   firebaseUser: null,
   loading: true,
   role: null,
+  isApproved: false,
 });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -27,6 +29,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<UserRole | null>(null);
+  const [isApproved, setIsApproved] = useState<boolean>(false);
 
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
@@ -34,10 +37,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (firebaseUser) {
         setFirebaseUser(firebaseUser);
         
-        // Fetch user role from Firestore
+        // Fetch user metadata from Firestore
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         const userDoc = await getDoc(userDocRef);
-        const userRole = userDoc.exists() ? (userDoc.data().role as UserRole) || 'user' : 'user';
+        const userData = userDoc.data();
+        
+        const userRole = (userData?.role as UserRole) || 'user';
+        const approved = userData?.isApproved ?? false;
 
         const appUser: AppUser = {
           uid: firebaseUser.uid,
@@ -45,14 +51,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           displayName: firebaseUser.displayName,
           photoURL: firebaseUser.photoURL,
           role: userRole,
+          isApproved: approved,
           emailVerified: firebaseUser.emailVerified,
         };
         setUser(appUser);
         setRole(userRole);
+        setIsApproved(approved);
       } else {
         setFirebaseUser(null);
         setUser(null);
         setRole(null);
+        setIsApproved(false);
       }
       setLoading(false);
     });
@@ -60,7 +69,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => unsubscribe();
   }, []);
 
-  const value = { user, firebaseUser, loading, role };
+  const value = { user, firebaseUser, loading, role, isApproved };
   
   return (
     <AuthContext.Provider value={value}>

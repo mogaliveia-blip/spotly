@@ -83,28 +83,21 @@ export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
 
 /**
  * Récupère tous les événements où l'utilisateur est membre.
- * 🔥 NOTE : Nécessite un index "COLLECTION_GROUP_ASC" sur la collection "members" pour le champ "uid".
  */
 export async function fetchUserEvents(uid: string): Promise<AppEvent[]> {
   try {
-    // Cette requête interroge toutes les sous-collections "members" dans Firestore
     const membersQuery = query(collectionGroup(db, 'members'), where('uid', '==', uid));
     
-    // ⚡ On force la récupération serveur pour détecter si l'index est PRÊT
-    // Si l'index n'est pas prêt, Firebase renverra une erreur ici.
     let membersSnap;
     try {
       membersSnap = await getDocsFromServer(membersQuery);
     } catch (e: any) {
-       // Si erreur de type "index manquant"
        if (e.code === 'failed-precondition' || e.message?.includes('index')) {
-         throw e;
+         throw new Error('INDEX_MISSING');
        }
-       // Fallback au cache si on est offline
        membersSnap = await getDocs(membersQuery);
     }
     
-    // On extrait les IDs des événements parents
     const eventIds = Array.from(new Set(membersSnap.docs.map(d => d.ref.parent.parent?.id).filter(Boolean))) as string[];
     
     if (eventIds.length === 0) {
@@ -130,10 +123,7 @@ export async function fetchUserEvents(uid: string): Promise<AppEvent[]> {
     const events = await Promise.all(eventPromises);
     return events.filter((e): e is AppEvent => e !== null);
   } catch (error: any) {
-    if (error.code === 'failed-precondition' || error.message?.includes('index')) {
-      console.warn("Firestore Index Requis : L'index de groupe de collections est manquant ou en cours de construction.");
-      throw new Error('INDEX_MISSING');
-    }
+    if (error.message === 'INDEX_MISSING') throw error;
     console.error("Error fetching user events:", error.message);
     return [];
   }
@@ -156,10 +146,8 @@ export async function createEvent(data: { name: string; slug: string; ownerId: s
   };
 
   await runTransaction(db, async (tx) => {
-    // 1. Création du document Event
     tx.set(eventRef, eventData);
     
-    // 2. Ajout du créateur comme membre admin
     const memberRef = doc(db, `events/${id}/members`, data.ownerId);
     tx.set(memberRef, {
       uid: data.ownerId,
@@ -167,13 +155,11 @@ export async function createEvent(data: { name: string; slug: string; ownerId: s
       joinedAt: serverTimestamp()
     });
 
-    // 3. Initialisation de la config
     tx.set(doc(db, `events/${id}/config`, 'main'), {
       isLandingPageActive: true,
       reviewsEnabled: true
     });
 
-    // 4. Initialisation du marketing
     tx.set(doc(db, `events/${id}/config`, 'marketing'), {
       heroEnabled: false,
       heroTitle: `Bienvenue à ${data.name}`,
@@ -322,7 +308,7 @@ export async function deleteFileByPath(filePath: string): Promise<void> {
 // --- FIRESTORE FUNCTIONS ---
 
 export async function createUserInFirestore(
-  user: Omit<AppUser, 'role' | 'emailVerified'> & { role?: UserRole }
+  user: Omit<AppUser, 'role' | 'emailVerified' | 'isApproved'> & { role?: UserRole; isApproved?: boolean }
 ): Promise<void> {
   const userRef = doc(db, 'users', user.uid)
   const userData = {
@@ -330,6 +316,7 @@ export async function createUserInFirestore(
     email: user.email,
     displayName: user.displayName,
     role: user.role || 'user',
+    isApproved: user.isApproved ?? false, // ✅ Toujours false par défaut pour les nouveaux
     photoURL: user.photoURL || null
   }
 
@@ -340,6 +327,24 @@ export async function createUserInFirestore(
       path: userRef.path,
       operation: 'create',
       requestResourceData: userData
+    })
+    errorEmitter.emit('permission-error', permissionError)
+    throw serverError
+  }
+}
+
+/**
+ * Met à jour l'état d'approbation d'un utilisateur.
+ */
+export async function updateUserApproval(uid: string, isApproved: boolean): Promise<void> {
+  const userRef = doc(db, 'users', uid)
+  try {
+    await updateDoc(userRef, { isApproved })
+  } catch (serverError: any) {
+     const permissionError = new FirestorePermissionError({
+      path: userRef.path,
+      operation: 'update',
+      requestResourceData: { isApproved }
     })
     errorEmitter.emit('permission-error', permissionError)
     throw serverError

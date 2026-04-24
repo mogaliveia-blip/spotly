@@ -17,6 +17,7 @@ export interface AppUser {
   email: string | null
   displayName: string | null
   role: UserRole
+  isApproved: boolean // ✅ Nouveau champ
   photoURL?: string | null
   emailVerified: boolean
 }
@@ -190,6 +191,7 @@ export interface Review {
 export interface AppConfig {
   isLandingPageActive: boolean
   festivalMode?: boolean
+  reviewsEnabled?: boolean
 }
 
 export type HeroCtaMode = 'auth' | 'external' | 'none' | 'close'

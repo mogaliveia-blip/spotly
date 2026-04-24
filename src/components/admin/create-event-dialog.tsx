@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -28,7 +27,7 @@ import { createEvent } from '@/lib/data';
 import { useAuth } from '@/hooks/use-auth-user';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, PlusCircle } from 'lucide-react';
+import { Loader2, PlusCircle, Lock } from 'lucide-react';
 
 const formSchema = z.object({
   name: z.string().min(3, 'Le nom doit faire au moins 3 caractères'),
@@ -42,7 +41,7 @@ interface CreateEventDialogProps {
 export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
+  const { user, isApproved } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -54,7 +53,6 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
   const onNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     form.setValue('name', val);
-    // Génération automatique du slug
     const slug = val
       .toLowerCase()
       .trim()
@@ -64,7 +62,7 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
   };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!user) return;
+    if (!user || !isApproved) return;
     setLoading(true);
     try {
       const event = await createEvent({
@@ -72,24 +70,24 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
         ownerId: user.uid,
       });
       toast({ title: 'Événement créé !', description: `L'événement ${event.name} est prêt.` });
-      
-      // On ferme la modale
       setOpen(false);
-      
-      // On notifie le parent pour rafraîchir la liste
-      if (onEventCreated) {
-        onEventCreated();
-      }
-      
-      // On redirige vers la liste des événements pour voir le nouveau né
-      // (Optionnel : on pourrait aussi rediriger vers /[slug]/dashboard directement)
+      if (onEventCreated) onEventCreated();
       router.push(`/admin/events`);
-      
     } catch (error) {
       toast({ title: 'Erreur', description: 'Impossible de créer l\'événement.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
+  }
+
+  // ✅ Blocage UI du trigger
+  if (!isApproved) {
+    return (
+        <Button disabled className="gap-2 rounded-2xl font-bold opacity-60">
+            <Lock className="h-4 w-4" />
+            Créer un événement (Compte non validé)
+        </Button>
+    );
   }
 
   return (
@@ -100,9 +98,9 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
           Créer un événement
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px] rounded-[2rem]">
         <DialogHeader>
-          <DialogTitle>Nouvel Événement</DialogTitle>
+          <DialogTitle className="text-2xl font-bold">Nouvel Événement</DialogTitle>
           <DialogDescription>
             Créez un espace dédié pour votre festival ou rassemblement.
           </DialogDescription>
@@ -116,7 +114,7 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
                 <FormItem>
                   <FormLabel>Nom de l'événement</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: Festival Leu Tempo 2025" {...field} onChange={onNameChange} />
+                    <Input placeholder="Ex: Festival Leu Tempo 2025" {...field} onChange={onNameChange} className="rounded-xl" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -129,18 +127,18 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
                 <FormItem>
                   <FormLabel>Slug (URL)</FormLabel>
                   <FormControl>
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground bg-muted/50 p-2 rounded-md border border-input">
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground bg-muted/50 p-2 rounded-xl border border-input">
                       <span className="shrink-0">/</span>
                       <Input className="h-7 border-none bg-transparent focus-visible:ring-0 p-0 font-mono" {...field} />
                     </div>
                   </FormControl>
-                  <FormDescription>L'identifiant unique utilisé dans l'adresse web.</FormDescription>
+                  <FormDescription>Identifiant unique dans l'adresse web.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <div className="flex justify-end pt-4">
-              <Button type="submit" disabled={loading} className="w-full sm:w-auto">
+              <Button type="submit" disabled={loading} className="w-full sm:w-auto font-bold rounded-xl h-11 px-8">
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Créer l'événement
               </Button>

@@ -15,7 +15,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { role, user, loading: authLoading } = useAuth();
+  const { role, user, loading: authLoading, isApproved } = useAuth();
   const { eventId, loading: eventLoading } = useEvent();
   const router = useRouter();
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -28,7 +28,6 @@ export default function DashboardLayout({
       setConfig(appConfig);
       setConfigLoading(false);
     }).catch(() => {
-      // En cas d'erreur, on suppose que la page d'accueil est désactivée pour ne pas bloquer l'accès.
       setConfig({ isLandingPageActive: false });
       setConfigLoading(false);
     });
@@ -37,16 +36,19 @@ export default function DashboardLayout({
   const isLoading = authLoading || configLoading || eventLoading;
 
   useEffect(() => {
-    if (isLoading) {
-      return; 
+    if (isLoading) return;
+
+    // ✅ Blocage si non approuvé
+    if (user && !isApproved) {
+        router.replace('/access-pending');
+        return;
     }
 
-    // Redirection si landing page active
     if (role === 'user' && config?.isLandingPageActive) {
         router.replace('/');
     }
 
-  }, [role, config, isLoading, router]);
+  }, [role, config, isLoading, router, user, isApproved]);
 
 
   if (isLoading) {
@@ -55,6 +57,11 @@ export default function DashboardLayout({
         <Mountain className="h-12 w-12 animate-pulse text-primary" />
       </div>
     );
+  }
+
+  // ✅ Redirection si non approuvé (double sécurité)
+  if (user && !isApproved) {
+     return null; 
   }
 
   if (user && !user.emailVerified) {

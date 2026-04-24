@@ -15,9 +15,15 @@ service cloud.firestore {
       return request.auth.uid;
     }
 
+    // ✅ Nouvel helper : vérifie si l'utilisateur est approuvé par l'admin
+    function isApproved() {
+      let userPath = /databases/$(database)/documents/users/$(getUserId());
+      return isAuthenticated() && exists(userPath) && get(userPath).data.isApproved == true;
+    }
+
     function isGlobalAdmin() {
-      return isAuthenticated() &&
-        get(/databases/$(database)/documents/users/$(getUserId())).data.role == "admin";
+      let userPath = /databases/$(database)/documents/users/$(getUserId());
+      return isAuthenticated() && exists(userPath) && get(userPath).data.role == "admin";
     }
 
     function getEvent(eventId) {
@@ -74,12 +80,13 @@ service cloud.firestore {
     ========================= */
 
     match /events/{eventId} {
-      // lecture autorisée si connecté + publié OU membre
+      // Lecture restreinte aux membres OU si publié (mais tjs isApproved pour interagir)
       allow read: if isAuthenticated() && (
         isEventPublished(eventId) || isEventMember(eventId)
       );
 
-      allow create: if isAuthenticated();
+      // ✅ Création restreinte aux utilisateurs APPROUVÉS uniquement
+      allow create: if isApproved();
 
       allow update, delete: if isOwner(eventId);
     }
@@ -94,9 +101,9 @@ service cloud.firestore {
       allow update, delete: if isAdminOnly(eventId);
     }
 
-    // 🔥 IMPORTANT : nécessaire pour collectionGroup
+    // IMPORTANT : nécessaire pour collectionGroup fetchUserEvents
     match /{path=**}/members/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && request.auth.uid == userId;
     }
 
     /* =========================
@@ -128,9 +135,7 @@ service cloud.firestore {
     ========================= */
 
     match /events/{eventId}/pois_public/{poiId} {
-      // 👇 lecture publique si event publié
       allow read: if isEventPublished(eventId) || isEventMember(eventId);
-
       allow write: if isAdminOrEditor(eventId);
     }
 
@@ -140,11 +145,8 @@ service cloud.firestore {
 
     match /events/{eventId}/pois/{poiId}/reviews/{reviewId} {
       allow read: if isEventPublished(eventId) || isEventMember(eventId);
-
-      allow create: if isAuthenticated();
-
-      allow update, delete: if isAdminOrEditor(eventId)
-        || request.auth.uid == resource.data.userId;
+      allow create: if isApproved(); // ✅ Seuls les approuvés peuvent commenter (optionnel, selon besoin)
+      allow update, delete: if isAdminOrEditor(eventId) || request.auth.uid == resource.data.userId;
     }
 
     /* =========================
@@ -152,30 +154,34 @@ service cloud.firestore {
     ========================= */
 
     match /users/{userId} {
-      allow read: if isAuthenticated() &&
-        (request.auth.uid == userId || isGlobalAdmin());
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isGlobalAdmin());
 
-      allow write: if isAuthenticated() &&
-        (request.auth.uid == userId || isGlobalAdmin());
+      // ✅ Sécurisation du champ isApproved et role
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      
+      allow update: if isGlobalAdmin() || (
+        request.auth.uid == userId && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isApproved', 'role'])
+      );
     }
 
     /* =========================
-       LEGACY (TEMPORAIRE)
+       LEGACY (BACKWARD COMPATIBILITY)
     ========================= */
 
     match /pois/{poiId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isApproved() && isGlobalAdmin();
     }
 
     match /pois_public/{poiId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isApproved() && isGlobalAdmin();
     }
 
     match /config/{docId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isApproved() && isGlobalAdmin();
     }
   }
 }
