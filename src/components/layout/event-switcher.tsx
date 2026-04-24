@@ -24,7 +24,13 @@ export function EventSwitcher() {
 
   useEffect(() => {
     if (user) {
-      fetchUserEvents(user.uid).then(setEvents);
+      fetchUserEvents(user.uid)
+        .then(setEvents)
+        .catch(() => {
+          // On ignore l'erreur ici (ex: index manquant)
+          // La page "Mes Événements" se chargera d'afficher l'alerte détaillée
+          setEvents([]);
+        });
     }
   }, [user]);
 
