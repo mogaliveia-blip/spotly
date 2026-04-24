@@ -103,7 +103,7 @@ service cloud.firestore {
 
     // IMPORTANT : nécessaire pour collectionGroup fetchUserEvents
     match /{path=**}/members/{userId} {
-      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow read: if isAuthenticated();
     }
 
     /* =========================
