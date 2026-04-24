@@ -76,7 +76,7 @@ export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
       updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt)
     } as AppEvent;
   } catch (error) {
-    console.error("Error fetching event by slug:", error);
+    console.warn("Could not resolve event by slug:", slug);
     return null;
   }
 }
@@ -115,11 +115,11 @@ export async function fetchUserEvents(uid: string): Promise<AppEvent[]> {
     const events = await Promise.all(eventPromises);
     return events.filter((e): e is AppEvent => e !== null);
   } catch (error: any) {
-    // On log l'erreur de manière explicite si l'index est manquant
+    // On utilise console.warn pour éviter le crash visuel Next.js tout en guidant l'utilisateur
     if (error.code === 'failed-precondition') {
-      console.error("Firestore Index Requis : Veuillez cliquer sur le lien dans la console pour créer l'index Collection Group.");
+      console.warn("Firestore Index Requis : Veuillez cliquer sur le lien dans la console Firebase pour créer l'index Collection Group.");
     } else {
-      console.error("Error fetching user events:", error);
+      console.warn("Error fetching user events:", error.message);
     }
     return [];
   }
@@ -305,8 +305,7 @@ export async function deleteFileByPath(filePath: string): Promise<void> {
     await deleteObject(storageRef)
   } catch (error: any) {
     if (error.code !== 'storage/object-not-found') {
-      console.error('Erreur lors de la suppression du fichier:', error)
-      throw error
+      console.warn('Could not delete file (not found):', filePath);
     }
   }
 }
@@ -518,7 +517,7 @@ export async function fetchUsers(): Promise<AppUser[]> {
     const userSnapshot = await getDocs(userCollection)
     return userSnapshot.docs.map((doc) => doc.data() as AppUser)
   } catch (error) {
-    console.error("Error fetching users:", error);
+    console.warn("Could not fetch users, possibly missing permissions.");
     return [];
   }
 }
@@ -593,7 +592,7 @@ export async function deletePoi(poiId: string, eventId: string = getCurrentEvent
       })
       errorEmitter.emit('permission-error', permissionError)
     } else {
-      console.error('Erreur lors de la suppression du POI et de ses images', serverError)
+      console.warn('Could not fully delete POI or its images:', serverError.message)
     }
     throw serverError
   }
