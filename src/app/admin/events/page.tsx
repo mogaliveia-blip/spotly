@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
@@ -34,10 +33,11 @@ export default function MyEventsPage() {
       const data = await fetchUserEvents(user.uid);
       setEvents(data);
     } catch (err: any) {
-      console.error("[MyEvents] Erreur chargement", err);
       if (err.message === 'INDEX_MISSING') {
+        console.warn("[MyEvents] Index Firestore en cours de préparation.");
         setErrorType('INDEX_MISSING');
       } else {
+        console.error("[MyEvents] Erreur chargement", err);
         setErrorType('OTHER');
       }
     } finally {
