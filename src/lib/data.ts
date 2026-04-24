@@ -61,45 +61,59 @@ export function setCurrentEventId(id: string) {
  */
 export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
   if (!slug || slug === 'default') return null;
-  const eventsRef = collection(db, 'events');
-  const q = query(eventsRef, where('slug', '==', slug), limit(1));
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  const d = snap.docs[0];
-  const data = d.data();
-  return { 
-    id: d.id, 
-    ...data, 
-    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
-    updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt)
-  } as AppEvent;
+  try {
+    const eventsRef = collection(db, 'events');
+    const q = query(eventsRef, where('slug', '==', slug), limit(1));
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    const d = snap.docs[0];
+    const data = d.data();
+    return { 
+      id: d.id, 
+      ...data, 
+      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+      updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt)
+    } as AppEvent;
+  } catch (error) {
+    console.error("Error fetching event by slug:", error);
+    return null;
+  }
 }
 
 /**
  * Récupère tous les événements où l'utilisateur est membre.
  */
 export async function fetchUserEvents(uid: string): Promise<AppEvent[]> {
-  const membersQuery = query(collectionGroup(db, 'members'), where('uid', '==', uid));
-  const membersSnap = await getDocs(membersQuery);
-  
-  const eventIds = Array.from(new Set(membersSnap.docs.map(d => d.ref.parent.parent?.id).filter(Boolean))) as string[];
-  
-  if (eventIds.length === 0) return [];
+  try {
+    const membersQuery = query(collectionGroup(db, 'members'), where('uid', '==', uid));
+    const membersSnap = await getDocs(membersQuery);
+    
+    const eventIds = Array.from(new Set(membersSnap.docs.map(d => d.ref.parent.parent?.id).filter(Boolean))) as string[];
+    
+    if (eventIds.length === 0) return [];
 
-  const eventPromises = eventIds.map(async (id) => {
-    const eventDoc = await getDoc(doc(db, 'events', id));
-    if (!eventDoc.exists()) return null;
-    const d = eventDoc.data();
-    return { 
-      id: eventDoc.id, 
-      ...d, 
-      createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt),
-      updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate() : new Date(d.updatedAt)
-    } as AppEvent;
-  });
+    const eventPromises = eventIds.map(async (id) => {
+      try {
+        const eventDoc = await getDoc(doc(db, 'events', id));
+        if (!eventDoc.exists()) return null;
+        const d = eventDoc.data();
+        return { 
+          id: eventDoc.id, 
+          ...d, 
+          createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt),
+          updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate() : new Date(d.updatedAt)
+        } as AppEvent;
+      } catch {
+        return null;
+      }
+    });
 
-  const events = await Promise.all(eventPromises);
-  return events.filter((e): e is AppEvent => e !== null);
+    const events = await Promise.all(eventPromises);
+    return events.filter((e): e is AppEvent => e !== null);
+  } catch (error) {
+    console.error("Error fetching user events:", error);
+    return [];
+  }
 }
 
 /**
@@ -164,22 +178,31 @@ export const dbPaths = {
 // --- CONFIG FUNCTIONS ---
 
 export async function fetchAppConfig(eventId: string = getCurrentEventId()): Promise<AppConfig> {
-  const configRef = doc(db, dbPaths.config(eventId), 'main')
-  const configSnap = await getDoc(configRef)
-  
-  if (configSnap.exists()) {
-    return configSnap.data() as AppConfig
+  try {
+    const configRef = doc(db, dbPaths.config(eventId), 'main')
+    const configSnap = await getDoc(configRef)
+    
+    if (configSnap.exists()) {
+      return configSnap.data() as AppConfig
+    }
+  } catch (e) {
+    // Fallback if event config doesn't exist or no permission
   }
 
   if (eventId !== 'default-event') {
-    const oldRef = doc(db, 'config', 'main')
-    const oldSnap = await getDoc(oldRef)
-    if (oldSnap.exists()) return oldSnap.data() as AppConfig
+    try {
+      const oldRef = doc(db, 'config', 'main')
+      const oldSnap = await getDoc(oldRef)
+      if (oldSnap.exists()) return oldSnap.data() as AppConfig
+    } catch {
+      // Continue to default
+    }
   }
 
   return {
     isLandingPageActive: true,
-    festivalMode: false
+    festivalMode: false,
+    reviewsEnabled: true
   }
 }
 
@@ -202,17 +225,25 @@ export async function updateAppConfig(
 }
 
 export async function fetchMarketingConfig(eventId: string = getCurrentEventId()): Promise<MarketingConfig> {
-  const configRef = doc(db, dbPaths.config(eventId), 'marketing')
-  const configSnap = await getDoc(configRef)
-  
-  if (configSnap.exists()) {
-    return configSnap.data() as MarketingConfig
+  try {
+    const configRef = doc(db, dbPaths.config(eventId), 'marketing')
+    const configSnap = await getDoc(configRef)
+    
+    if (configSnap.exists()) {
+      return configSnap.data() as MarketingConfig
+    }
+  } catch {
+    // Fallback
   }
 
   if (eventId !== 'default-event') {
-    const oldRef = doc(db, 'config', 'marketing')
-    const oldSnap = await getDoc(oldRef)
-    if (oldSnap.exists()) return oldSnap.data() as MarketingConfig
+    try {
+      const oldRef = doc(db, 'config', 'marketing')
+      const oldSnap = await getDoc(oldRef)
+      if (oldSnap.exists()) return oldSnap.data() as MarketingConfig
+    } catch {
+      // Continue to default
+    }
   }
 
   return {
@@ -274,7 +305,7 @@ export async function deleteFileByPath(filePath: string): Promise<void> {
 // --- FIRESTORE FUNCTIONS ---
 
 export async function createUserInFirestore(
-  user: Omit<AppUser, 'role'> & { role?: UserRole }
+  user: Omit<AppUser, 'role' | 'emailVerified'> & { role?: UserRole }
 ): Promise<void> {
   const userRef = doc(db, 'users', user.uid)
   const userData = {
@@ -299,18 +330,30 @@ export async function createUserInFirestore(
 }
 
 export async function fetchPois(eventId: string = getCurrentEventId()): Promise<POI[]> {
-  const poiCollection = collection(db, dbPaths.pois(eventId))
-  let poiSnapshot = await getDocs(poiCollection)
-  
-  if (poiSnapshot.empty && eventId !== 'default-event') {
-    const oldCollection = collection(db, 'pois')
-    poiSnapshot = await getDocs(oldCollection)
-  }
+  try {
+    const poiCollection = collection(db, dbPaths.pois(eventId))
+    let poiSnapshot = await getDocs(poiCollection)
+    
+    if (poiSnapshot.empty && eventId !== 'default-event') {
+      const oldCollection = collection(db, 'pois')
+      poiSnapshot = await getDocs(oldCollection)
+    }
 
-  const poiList = poiSnapshot.docs.map(
-    (doc) => ({ id: doc.id, ...doc.data() } as POI)
-  )
-  return poiList
+    return poiSnapshot.docs.map(
+      (doc) => ({ id: doc.id, ...doc.data() } as POI)
+    )
+  } catch {
+    if (eventId !== 'default-event') {
+      try {
+        const oldCollection = collection(db, 'pois')
+        const poiSnapshot = await getDocs(oldCollection)
+        return poiSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as POI))
+      } catch {
+        return []
+      }
+    }
+    return []
+  }
 }
 
 export async function fetchPoisLite(eventId: string = getCurrentEventId()): Promise<POILite[]> {
@@ -347,18 +390,26 @@ export async function fetchPoisLite(eventId: string = getCurrentEventId()): Prom
 }
 
 export async function fetchPoiById(id: string, eventId: string = getCurrentEventId()): Promise<POI | undefined> {
-  const poiRef = doc(db, dbPaths.pois(eventId), id)
-  const poiSnap = await getDoc(poiRef)
-  
-  if (poiSnap.exists()) {
-    return { id: poiSnap.id, ...poiSnap.data() } as POI
+  try {
+    const poiRef = doc(db, dbPaths.pois(eventId), id)
+    const poiSnap = await getDoc(poiRef)
+    
+    if (poiSnap.exists()) {
+      return { id: poiSnap.id, ...poiSnap.data() } as POI
+    }
+  } catch {
+    // Fallback
   }
 
   if (eventId !== 'default-event') {
-    const oldRef = doc(db, 'pois', id)
-    const oldSnap = await getDoc(oldRef)
-    if (oldSnap.exists()) {
-      return { id: oldSnap.id, ...oldSnap.data() } as POI
+    try {
+      const oldRef = doc(db, 'pois', id)
+      const oldSnap = await getDoc(oldRef)
+      if (oldSnap.exists()) {
+        return { id: oldSnap.id, ...oldSnap.data() } as POI
+      }
+    } catch {
+      // Skip
     }
   }
 
@@ -366,22 +417,39 @@ export async function fetchPoiById(id: string, eventId: string = getCurrentEvent
 }
 
 export async function fetchReviewsByPoiId(poiId: string, eventId: string = getCurrentEventId()): Promise<Review[]> {
-  const reviewsCollection = collection(db, dbPaths.pois(eventId), poiId, 'reviews')
-  let reviewSnapshot = await getDocs(reviewsCollection)
-  
-  if (reviewSnapshot.empty && eventId !== 'default-event') {
-    const oldReviewsCollection = collection(db, 'pois', poiId, 'reviews')
-    reviewSnapshot = await getDocs(oldReviewsCollection)
-  }
+  try {
+    const reviewsCollection = collection(db, dbPaths.pois(eventId), poiId, 'reviews')
+    let reviewSnapshot = await getDocs(reviewsCollection)
+    
+    if (reviewSnapshot.empty && eventId !== 'default-event') {
+      const oldReviewsCollection = collection(db, 'pois', poiId, 'reviews')
+      reviewSnapshot = await getDocs(oldReviewsCollection)
+    }
 
-  const reviewList = reviewSnapshot.docs.map((doc) => {
-    const data = doc.data()
-    const createdAt = data.createdAt?.toDate
-      ? data.createdAt.toDate()
-      : new Date(data.createdAt)
-    return { id: doc.id, ...data, createdAt } as Review
-  })
-  return reviewList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    const reviewList = reviewSnapshot.docs.map((doc) => {
+      const data = doc.data()
+      const createdAt = data.createdAt?.toDate
+        ? data.createdAt.toDate()
+        : new Date(data.createdAt)
+      return { id: doc.id, ...data, createdAt } as Review
+    })
+    return reviewList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+  } catch {
+    if (eventId !== 'default-event') {
+       try {
+         const oldReviewsCollection = collection(db, 'pois', poiId, 'reviews')
+         const reviewSnapshot = await getDocs(oldReviewsCollection)
+         return reviewSnapshot.docs.map((doc) => {
+           const data = doc.data()
+           const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt)
+           return { id: doc.id, ...data, createdAt } as Review
+         }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+       } catch {
+         return []
+       }
+    }
+    return []
+  }
 }
 
 export async function addReview(
@@ -423,7 +491,7 @@ export async function addReview(
     };
 
   } catch (e: any) {
-    if (e.code && e.code.includes('permission-denied')) {
+    if (e.code && (e.code.includes('permission-denied') || e.code === 'permission-denied')) {
       const permissionError = new FirestorePermissionError({
         path: `${dbPaths.pois(eventId)}/${poiId}/reviews`,
         operation: 'create',
@@ -436,9 +504,14 @@ export async function addReview(
 }
 
 export async function fetchUsers(): Promise<AppUser[]> {
-  const userCollection = collection(db, 'users')
-  const userSnapshot = await getDocs(userCollection)
-  return userSnapshot.docs.map((doc) => doc.data() as AppUser)
+  try {
+    const userCollection = collection(db, 'users')
+    const userSnapshot = await getDocs(userCollection)
+    return userSnapshot.docs.map((doc) => doc.data() as AppUser)
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    return [];
+  }
 }
 
 export function updateUserRole(uid: string, role: UserRole): void {

@@ -15,12 +15,18 @@ service cloud.firestore {
       return request.auth.uid;
     }
 
+    function isGlobalAdmin() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(getUserId())).data.role == "admin";
+    }
+
     function getEvent(eventId) {
       return get(/databases/$(database)/documents/events/$(eventId));
     }
 
     function isEventPublished(eventId) {
-      return getEvent(eventId).data.status == "published";
+      let eventPath = /databases/$(database)/documents/events/$(eventId);
+      return exists(eventPath) && get(eventPath).data.status == "published";
     }
 
     function getMember(eventId) {
@@ -28,25 +34,28 @@ service cloud.firestore {
     }
 
     function isEventMember(eventId) {
-      return isAuthenticated() && exists(/databases/$(database)/documents/events/$(eventId)/members/$(getUserId()));
+      return isAuthenticated() && (
+        exists(/databases/$(database)/documents/events/$(eventId)/members/$(getUserId())) ||
+        isGlobalAdmin()
+      );
     }
 
     function getRole(eventId) {
       return isEventMember(eventId)
-        ? getMember(eventId).data.role
+        ? (isGlobalAdmin() ? "admin" : getMember(eventId).data.role)
         : null;
     }
 
     function isOwner(eventId) {
-      return isAuthenticated() && getEvent(eventId).data.ownerId == getUserId();
+      return isAuthenticated() && (getEvent(eventId).data.ownerId == getUserId() || isGlobalAdmin());
     }
 
     function isAdmin(eventId) {
-      return isEventMember(eventId) && getRole(eventId) == "admin";
+      return isEventMember(eventId) && (getRole(eventId) == "admin" || isGlobalAdmin());
     }
 
     function isEditor(eventId) {
-      return isEventMember(eventId) && getRole(eventId) == "editor";
+      return isEventMember(eventId) && (getRole(eventId) == "editor" || isGlobalAdmin());
     }
 
     function isAdminOrEditor(eventId) {
@@ -62,26 +71,23 @@ service cloud.firestore {
     ========================= */
 
     match /events/{eventId} {
-      // lecture publique si publié
       allow read: if isEventPublished(eventId) || isEventMember(eventId);
-
-      // création d’un event
       allow create: if isAuthenticated();
-
-      // modification
       allow update, delete: if isOwner(eventId);
     }
 
     /* =========================
-       MEMBERS
+       MEMBERS (Group & Local)
     ========================= */
 
     match /events/{eventId}/members/{userId} {
       allow read: if isEventMember(eventId);
-
       allow create: if isOwner(eventId);
-
       allow update, delete: if isAdminOnly(eventId);
+    }
+
+    match /{path=**}/members/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isGlobalAdmin());
     }
 
     /* =========================
@@ -90,28 +96,20 @@ service cloud.firestore {
 
     match /events/{eventId}/config/{docId} {
       allow read: if isEventPublished(eventId) || isEventMember(eventId);
-
       allow write: if isAdminOnly(eventId);
     }
 
     /* =========================
-       POIS FULL
+       POIS
     ========================= */
 
     match /events/{eventId}/pois/{poiId} {
-      allow read: if isEventMember(eventId);
-
+      allow read: if isEventPublished(eventId) || isEventMember(eventId);
       allow create, update, delete: if isAdminOrEditor(eventId);
     }
 
-    /* =========================
-       POIS LITE (CARTE)
-    ========================= */
-
     match /events/{eventId}/pois_public/{poiId} {
-      // 👇 CRUCIAL : lecture publique
       allow read: if isEventPublished(eventId) || isEventMember(eventId);
-
       allow write: if isAdminOrEditor(eventId);
     }
 
@@ -121,15 +119,22 @@ service cloud.firestore {
 
     match /events/{eventId}/pois/{poiId}/reviews/{reviewId} {
       allow read: if isEventPublished(eventId) || isEventMember(eventId);
-
       allow create: if isAuthenticated();
-
       allow update, delete: if isAdminOrEditor(eventId)
         || request.auth.uid == resource.data.userId;
     }
 
     /* =========================
-       LEGACY MODE (TEMPORAIRE)
+       GLOBAL USERS
+    ========================= */
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isGlobalAdmin());
+      allow write: if isAuthenticated() && (request.auth.uid == userId || isGlobalAdmin());
+    }
+
+    /* =========================
+       LEGACY MODE (COMPATIBILITY)
     ========================= */
 
     match /pois/{poiId} {
@@ -145,10 +150,6 @@ service cloud.firestore {
     match /config/{docId} {
       allow read: if true;
       allow write: if isAuthenticated();
-    }
-
-    match /users/{userId} {
-      allow read, write: if request.auth.uid == userId;
     }
   }
 }

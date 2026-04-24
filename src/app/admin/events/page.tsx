@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Calendar, ChevronRight, LayoutDashboard, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { CreateEventDialog } from '@/components/admin/create-event-dialog';
+import { cn } from '@/lib/utils';
 
 export default function MyEventsPage() {
   const { user, loading: authLoading } = useAuth();
