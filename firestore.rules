@@ -4,128 +4,151 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     /* =========================
-       UTILITAIRES GLOBAUX
+       HELPERS
     ========================= */
 
-    function isSignedIn() {
+    function isAuthenticated() {
       return request.auth != null;
     }
 
-    function isGlobalAdmin() {
-      return isSignedIn() 
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    function getUserId() {
+      return request.auth.uid;
     }
-
-    /* =========================
-       UTILITAIRES ÉVÉNEMENTS
-    ========================= */
 
     function getEvent(eventId) {
-      return get(/databases/$(database)/documents/events/$(eventId)).data;
+      return get(/databases/$(database)/documents/events/$(eventId));
     }
 
-    function isEventOwner(eventId) {
-      return isSignedIn() && getEvent(eventId).ownerId == request.auth.uid;
+    function isEventPublished(eventId) {
+      return getEvent(eventId).data.status == "published";
     }
 
-    function getMemberRole(eventId) {
-      let path = /databases/$(database)/documents/events/$(eventId)/members/$(request.auth.uid);
-      return exists(path) ? get(path).data.role : 'none';
+    function getMember(eventId) {
+      return get(/databases/$(database)/documents/events/$(eventId)/members/$(getUserId()));
     }
 
-    function hasEventRole(eventId, roles) {
-      return isSignedIn() && (getMemberRole(eventId) in roles || isEventOwner(eventId) || isGlobalAdmin());
+    function isEventMember(eventId) {
+      return isAuthenticated() && exists(/databases/$(database)/documents/events/$(eventId)/members/$(getUserId()));
     }
 
-    function isEventAdmin(eventId) {
-      return hasEventRole(eventId, ['admin']);
+    function getRole(eventId) {
+      return isEventMember(eventId)
+        ? getMember(eventId).data.role
+        : null;
     }
 
-    function isEventEditor(eventId) {
-      return hasEventRole(eventId, ['admin', 'editor']);
+    function isOwner(eventId) {
+      return isAuthenticated() && getEvent(eventId).data.ownerId == getUserId();
     }
 
-    function isEventPublic(eventId) {
-      return getEvent(eventId).status == 'published';
+    function isAdmin(eventId) {
+      return isEventMember(eventId) && getRole(eventId) == "admin";
+    }
+
+    function isEditor(eventId) {
+      return isEventMember(eventId) && getRole(eventId) == "editor";
+    }
+
+    function isAdminOrEditor(eventId) {
+      return isOwner(eventId) || isAdmin(eventId) || isEditor(eventId);
+    }
+
+    function isAdminOnly(eventId) {
+      return isOwner(eventId) || isAdmin(eventId);
     }
 
     /* =========================
-       RACINE : EVENTS
+       EVENTS ROOT
     ========================= */
 
     match /events/{eventId} {
-      // Lecture publique si publié, sinon restreinte aux membres
-      allow read: if isEventPublic(eventId) || hasEventRole(eventId, ['admin', 'editor', 'viewer']);
-      
-      // Création : n'importe quel utilisateur connecté peut créer un event (il en devient owner)
-      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      
-      // Update/Delete : owner ou global admin uniquement
-      allow update, delete: if isEventOwner(eventId) || isGlobalAdmin();
+      // lecture publique si publié
+      allow read: if isEventPublished(eventId) || isEventMember(eventId);
 
-      /* ---- MEMBRES DE L'EVENT ---- */
-      match /members/{userId} {
-        allow read: if hasEventRole(eventId, ['admin', 'editor', 'viewer']);
-        allow write: if isEventAdmin(eventId);
-      }
+      // création d’un event
+      allow create: if isAuthenticated();
 
-      /* ---- CONFIG DE L'EVENT ---- */
-      match /config/{configId} {
-        allow read: if isEventPublic(eventId) || hasEventRole(eventId, ['admin', 'editor', 'viewer']);
-        allow write: if isEventAdmin(eventId);
-      }
-
-      /* ---- POIS DE L'EVENT ---- */
-      match /pois/{poiId} {
-        allow read: if isEventPublic(eventId) || hasEventRole(eventId, ['admin', 'editor', 'viewer']);
-        allow write: if isEventEditor(eventId);
-
-        /* ---- REVIEWS DES POIS ---- */
-        match /reviews/{reviewId} {
-          allow read: if isEventPublic(eventId) || hasEventRole(eventId, ['admin', 'editor', 'viewer']);
-          allow create: if isSignedIn();
-          allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isEventAdmin(eventId));
-        }
-      }
-
-      /* ---- PROJECTION LITE DE L'EVENT ---- */
-      match /pois_public/{poiId} {
-        allow read: if true;
-        allow write: if isEventEditor(eventId);
-      }
+      // modification
+      allow update, delete: if isOwner(eventId);
     }
 
-    /* ============================================================
-       COMPATIBILITÉ : ANCIEN SCHÉMA GLOBAL (À SUPPRIMER APRÈS MIGRATION)
-    ============================================================ */
+    /* =========================
+       MEMBERS
+    ========================= */
 
-    match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isGlobalAdmin());
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if (isSignedIn() && request.auth.uid == userId && !('role' in request.resource.data)) || isGlobalAdmin();
-      allow delete: if isGlobalAdmin();
+    match /events/{eventId}/members/{userId} {
+      allow read: if isEventMember(eventId);
+
+      allow create: if isOwner(eventId);
+
+      allow update, delete: if isAdminOnly(eventId);
     }
 
-    match /config/{configId} {
-      allow read: if true;
-      allow write: if isGlobalAdmin();
+    /* =========================
+       CONFIG
+    ========================= */
+
+    match /events/{eventId}/config/{docId} {
+      allow read: if isEventPublished(eventId) || isEventMember(eventId);
+
+      allow write: if isAdminOnly(eventId);
     }
+
+    /* =========================
+       POIS FULL
+    ========================= */
+
+    match /events/{eventId}/pois/{poiId} {
+      allow read: if isEventMember(eventId);
+
+      allow create, update, delete: if isAdminOrEditor(eventId);
+    }
+
+    /* =========================
+       POIS LITE (CARTE)
+    ========================= */
+
+    match /events/{eventId}/pois_public/{poiId} {
+      // 👇 CRUCIAL : lecture publique
+      allow read: if isEventPublished(eventId) || isEventMember(eventId);
+
+      allow write: if isAdminOrEditor(eventId);
+    }
+
+    /* =========================
+       REVIEWS
+    ========================= */
+
+    match /events/{eventId}/pois/{poiId}/reviews/{reviewId} {
+      allow read: if isEventPublished(eventId) || isEventMember(eventId);
+
+      allow create: if isAuthenticated();
+
+      allow update, delete: if isAdminOrEditor(eventId)
+        || request.auth.uid == resource.data.userId;
+    }
+
+    /* =========================
+       LEGACY MODE (TEMPORAIRE)
+    ========================= */
 
     match /pois/{poiId} {
       allow read: if true;
-      allow create, update, delete: if isGlobalAdmin() || (isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'editor']);
-
-      match /reviews/{reviewId} {
-        allow read: if true;
-        allow create: if isSignedIn();
-        allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isGlobalAdmin());
-      }
+      allow write: if isAuthenticated();
     }
 
     match /pois_public/{poiId} {
       allow read: if true;
-      allow write: if isGlobalAdmin() || (isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'editor']);
+      allow write: if isAuthenticated();
+    }
+
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    match /users/{userId} {
+      allow read, write: if request.auth.uid == userId;
     }
   }
 }

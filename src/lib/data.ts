@@ -15,7 +15,8 @@ import {
   runTransaction,
   query,
   where,
-  limit
+  limit,
+  collectionGroup
 } from 'firebase/firestore'
 import type {
   POI,
@@ -75,6 +76,81 @@ export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
 }
 
 /**
+ * Récupère tous les événements où l'utilisateur est membre.
+ */
+export async function fetchUserEvents(uid: string): Promise<AppEvent[]> {
+  const membersQuery = query(collectionGroup(db, 'members'), where('uid', '==', uid));
+  const membersSnap = await getDocs(membersQuery);
+  
+  const eventIds = Array.from(new Set(membersSnap.docs.map(d => d.ref.parent.parent?.id).filter(Boolean))) as string[];
+  
+  if (eventIds.length === 0) return [];
+
+  const eventPromises = eventIds.map(async (id) => {
+    const eventDoc = await getDoc(doc(db, 'events', id));
+    if (!eventDoc.exists()) return null;
+    const d = eventDoc.data();
+    return { 
+      id: eventDoc.id, 
+      ...d, 
+      createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt),
+      updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate() : new Date(d.updatedAt)
+    } as AppEvent;
+  });
+
+  const events = await Promise.all(eventPromises);
+  return events.filter((e): e is AppEvent => e !== null);
+}
+
+/**
+ * Crée un nouvel événement et initialise sa structure de données.
+ */
+export async function createEvent(data: { name: string; slug: string; ownerId: string }): Promise<AppEvent> {
+  const eventRef = doc(collection(db, 'events'));
+  const id = eventRef.id;
+
+  const eventData = {
+    name: data.name,
+    slug: data.slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+    ownerId: data.ownerId,
+    status: 'draft' as const,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  };
+
+  await runTransaction(db, async (tx) => {
+    // 1. Création du document Event
+    tx.set(eventRef, eventData);
+    
+    // 2. Ajout du créateur comme membre admin
+    const memberRef = doc(db, `events/${id}/members`, data.ownerId);
+    tx.set(memberRef, {
+      uid: data.ownerId,
+      role: 'admin',
+      joinedAt: serverTimestamp()
+    });
+
+    // 3. Initialisation de la config
+    tx.set(doc(db, `events/${id}/config`, 'main'), {
+      isLandingPageActive: true,
+      reviewsEnabled: true
+    });
+
+    // 4. Initialisation du marketing
+    tx.set(doc(db, `events/${id}/config`, 'marketing'), {
+      heroEnabled: false,
+      heroTitle: `Bienvenue à ${data.name}`,
+      heroSubtitle: "Découvrez l'application officielle du festival.",
+      heroImageUrl: 'https://picsum.photos/seed/festival/1200/800',
+      heroCtaText: 'Commencer',
+      heroCtaMode: 'auth'
+    });
+  });
+
+  return { id, ...eventData, createdAt: new Date(), updatedAt: new Date() } as AppEvent;
+}
+
+/**
  * Centralise les chemins Firestore pour gérer le multi-événement.
  * Si l'ID est "default-event", on utilise les anciennes collections globales pour la compatibilité.
  */
@@ -95,7 +171,6 @@ export async function fetchAppConfig(eventId: string = getCurrentEventId()): Pro
     return configSnap.data() as AppConfig
   }
 
-  // Fallback multi-événement : si non trouvé dans l'event, chercher dans la racine globale
   if (eventId !== 'default-event') {
     const oldRef = doc(db, 'config', 'main')
     const oldSnap = await getDoc(oldRef)
@@ -134,7 +209,6 @@ export async function fetchMarketingConfig(eventId: string = getCurrentEventId()
     return configSnap.data() as MarketingConfig
   }
 
-  // Fallback multi-événement : si non trouvé dans l'event, chercher dans la racine globale
   if (eventId !== 'default-event') {
     const oldRef = doc(db, 'config', 'marketing')
     const oldSnap = await getDoc(oldRef)
@@ -228,7 +302,6 @@ export async function fetchPois(eventId: string = getCurrentEventId()): Promise<
   const poiCollection = collection(db, dbPaths.pois(eventId))
   let poiSnapshot = await getDocs(poiCollection)
   
-  // Fallback multi-événement : si la collection de l'event est vide, chercher dans la racine globale
   if (poiSnapshot.empty && eventId !== 'default-event') {
     const oldCollection = collection(db, 'pois')
     poiSnapshot = await getDocs(oldCollection)
@@ -261,7 +334,6 @@ export async function fetchPoisLite(eventId: string = getCurrentEventId()): Prom
 
     const serverSnap = await getDocsFromServer(colRef)
     
-    // Fallback POI Lite : si l'event n'a pas encore de projection lite, on tente le fallback global
     if (serverSnap.empty) {
       return await fallback()
     }
@@ -282,7 +354,6 @@ export async function fetchPoiById(id: string, eventId: string = getCurrentEvent
     return { id: poiSnap.id, ...poiSnap.data() } as POI
   }
 
-  // Fallback multi-événement : chercher à la racine si non trouvé dans l'event
   if (eventId !== 'default-event') {
     const oldRef = doc(db, 'pois', id)
     const oldSnap = await getDoc(oldRef)
@@ -298,7 +369,6 @@ export async function fetchReviewsByPoiId(poiId: string, eventId: string = getCu
   const reviewsCollection = collection(db, dbPaths.pois(eventId), poiId, 'reviews')
   let reviewSnapshot = await getDocs(reviewsCollection)
   
-  // Fallback multi-événement : si l'event n'a pas de reviews, chercher dans l'ancien chemin global
   if (reviewSnapshot.empty && eventId !== 'default-event') {
     const oldReviewsCollection = collection(db, 'pois', poiId, 'reviews')
     reviewSnapshot = await getDocs(oldReviewsCollection)
