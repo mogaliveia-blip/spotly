@@ -1,3 +1,4 @@
+
 // src/lib/data.ts
 import { db, storage } from './firebase'
 import {
@@ -82,12 +83,15 @@ export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
 
 /**
  * Récupère tous les événements où l'utilisateur est membre.
+ * 🔥 NOTE : Nécessite un index "COLLECTION_GROUP_ASC" sur la collection "members" pour le champ "uid".
  */
 export async function fetchUserEvents(uid: string): Promise<AppEvent[]> {
   try {
+    // Cette requête interroge toutes les sous-collections "members" dans Firestore
     const membersQuery = query(collectionGroup(db, 'members'), where('uid', '==', uid));
     const membersSnap = await getDocs(membersQuery);
     
+    // On extrait les IDs des événements parents
     const eventIds = Array.from(new Set(membersSnap.docs.map(d => d.ref.parent.parent?.id).filter(Boolean))) as string[];
     
     if (eventIds.length === 0) return [];
@@ -110,8 +114,13 @@ export async function fetchUserEvents(uid: string): Promise<AppEvent[]> {
 
     const events = await Promise.all(eventPromises);
     return events.filter((e): e is AppEvent => e !== null);
-  } catch (error) {
-    console.error("Error fetching user events:", error);
+  } catch (error: any) {
+    // On log l'erreur de manière explicite si l'index est manquant
+    if (error.code === 'failed-precondition') {
+      console.error("Firestore Index Requis : Veuillez cliquer sur le lien dans la console pour créer l'index Collection Group.");
+    } else {
+      console.error("Error fetching user events:", error);
+    }
     return [];
   }
 }
