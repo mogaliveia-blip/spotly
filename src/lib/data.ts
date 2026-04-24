@@ -83,48 +83,75 @@ export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
 
 /**
  * Récupère tous les événements où l'utilisateur est membre.
+ * Retourne les événements avec le rôle spécifique de l'utilisateur.
  */
-export async function fetchUserEvents(uid: string): Promise<AppEvent[]> {
+export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRole?: string })[]> {
+  console.log("[Data] fetchUserEvents: Démarrage pour UID", uid);
   try {
+    // 1. On récupère les documents de membres via Collection Group
     const membersQuery = query(collectionGroup(db, 'members'), where('uid', '==', uid));
     
     let membersSnap;
     try {
+      // On force le serveur pour être sûr d'avoir l'état réel et valider l'index
       membersSnap = await getDocsFromServer(membersQuery);
+      console.log("[Data] fetchUserEvents: Documents de membres trouvés (Serveur)", membersSnap.size);
     } catch (e: any) {
        if (e.code === 'failed-precondition' || e.message?.includes('index')) {
+         console.warn("[Data] fetchUserEvents: Index manquant ou en cours.");
          throw new Error('INDEX_MISSING');
        }
        membersSnap = await getDocs(membersQuery);
+       console.log("[Data] fetchUserEvents: Documents de membres trouvés (Cache)", membersSnap.size);
     }
     
-    const eventIds = Array.from(new Set(membersSnap.docs.map(d => d.ref.parent.parent?.id).filter(Boolean))) as string[];
+    // 2. On extrait les IDs d'événements et les rôles associés
+    const memberships = membersSnap.docs.map(d => {
+        const eventId = d.ref.parent.parent?.id;
+        const role = d.data().role;
+        return eventId ? { eventId, role } : null;
+    }).filter(Boolean) as { eventId: string; role: string }[];
+
+    const eventIds = Array.from(new Set(memberships.map(m => m.eventId)));
+    console.log("[Data] fetchUserEvents: IDs d'événements extraits", eventIds);
     
     if (eventIds.length === 0) {
       return [];
     }
 
+    // 3. On récupère les détails de chaque événement
     const eventPromises = eventIds.map(async (id) => {
       try {
         const eventDoc = await getDoc(doc(db, 'events', id));
-        if (!eventDoc.exists()) return null;
+        if (!eventDoc.exists()) {
+            console.warn(`[Data] fetchUserEvents: L'événement ${id} n'existe plus.`);
+            return null;
+        }
         const d = eventDoc.data();
+        const membership = memberships.find(m => m.eventId === id);
+
         return { 
           id: eventDoc.id, 
           ...d, 
+          userRole: membership?.role,
           createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt),
           updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate() : new Date(d.updatedAt)
-        } as AppEvent;
+        } as (AppEvent & { userRole?: string });
       } catch (e) {
+        console.error(`[Data] fetchUserEvents: Erreur lors du fetch de l'event ${id}`, e);
         return null;
       }
     });
 
     const events = await Promise.all(eventPromises);
-    return events.filter((e): e is AppEvent => e !== null);
+    const finalEvents = events.filter((e): e is (AppEvent & { userRole: string }) => e !== null);
+    
+    console.log("[Data] fetchUserEvents: Nombre final d'événements retournés", finalEvents.length);
+    return finalEvents;
+
   } catch (error: any) {
     if (error.message === 'INDEX_MISSING') throw error;
-    console.error("Error fetching user events:", error.message);
+    console.error("[Data] fetchUserEvents: Erreur critique", error.message);
     return [];
   }
 }
