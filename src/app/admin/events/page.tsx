@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -8,21 +9,39 @@ import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Calendar, ChevronRight, LayoutDashboard, Settings } from 'lucide-react';
+import { Calendar, ChevronRight, LayoutDashboard, Settings, AlertCircle, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { CreateEventDialog } from '@/components/admin/create-event-dialog';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export default function MyEventsPage() {
   const { user, loading: authLoading } = useAuth();
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorType, setErrorType] = useState<'NONE' | 'INDEX_MISSING' | 'OTHER'>('NONE');
+
+  const loadEvents = async () => {
+    if (!user) return;
+    setLoading(true);
+    setErrorType('NONE');
+    try {
+      const data = await fetchUserEvents(user.uid);
+      setEvents(data);
+    } catch (err: any) {
+      if (err.message === 'INDEX_MISSING') {
+        setErrorType('INDEX_MISSING');
+      } else {
+        setErrorType('OTHER');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (user) {
-      fetchUserEvents(user.uid)
-        .then(setEvents)
-        .finally(() => setLoading(false));
+      loadEvents();
     } else if (!authLoading) {
       setLoading(false);
     }
@@ -51,8 +70,25 @@ export default function MyEventsPage() {
             <h1 className="text-3xl font-bold tracking-tight">Mes Événements</h1>
             <p className="text-muted-foreground">Gérez vos différents festivals et rassemblements.</p>
           </div>
-          <CreateEventDialog />
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={loadEvents} className="rounded-xl h-10 px-4">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Actualiser
+            </Button>
+            <CreateEventDialog />
+          </div>
         </div>
+
+        {errorType === 'INDEX_MISSING' && (
+            <Alert variant="destructive" className="mb-8 rounded-2xl border-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle className="font-bold">Index Firestore en cours de préparation</AlertTitle>
+                <AlertDescription className="mt-2 space-y-2">
+                    <p>Vos événements sont bien créés mais l'affichage nécessite un index Firestore qui est probablement encore en construction.</p>
+                    <p className="text-xs font-semibold underline decoration-dotted">Vérifiez vos emails ou la console Firebase. L'affichage sera opérationnel dans quelques minutes.</p>
+                </AlertDescription>
+            </Alert>
+        )}
 
         {events.length === 0 ? (
           <Card className="flex flex-col items-center justify-center p-12 text-center border-dashed rounded-[2rem] bg-muted/10">
@@ -61,7 +97,9 @@ export default function MyEventsPage() {
             </div>
             <CardTitle className="text-2xl">Aucun événement trouvé</CardTitle>
             <CardDescription className="mt-2 max-w-sm">
-              Vous n'avez pas encore créé d'événement. Commencez par en créer un pour organiser vos points d'intérêt.
+              {errorType === 'INDEX_MISSING' 
+                ? "L'index de recherche est en cours de création. Votre événement apparaîtra d'ici 3 à 5 minutes." 
+                : "Vous n'avez pas encore créé d'événement. Commencez par en créer un pour organiser vos points d'intérêt."}
             </CardDescription>
             <div className="mt-8">
               <CreateEventDialog />

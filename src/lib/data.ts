@@ -92,9 +92,13 @@ export async function fetchUserEvents(uid: string): Promise<AppEvent[]> {
     const membersSnap = await getDocs(membersQuery);
     
     // On extrait les IDs des événements parents
+    // d.ref est events/{eventId}/members/{uid} -> parent.parent est events/{eventId}
     const eventIds = Array.from(new Set(membersSnap.docs.map(d => d.ref.parent.parent?.id).filter(Boolean))) as string[];
     
-    if (eventIds.length === 0) return [];
+    if (eventIds.length === 0) {
+      console.log(`Aucun événement trouvé pour l'utilisateur ${uid} via collectionGroup`);
+      return [];
+    }
 
     const eventPromises = eventIds.map(async (id) => {
       try {
@@ -107,19 +111,23 @@ export async function fetchUserEvents(uid: string): Promise<AppEvent[]> {
           createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt),
           updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate() : new Date(d.updatedAt)
         } as AppEvent;
-      } catch {
+      } catch (e) {
+        console.warn(`Erreur lors de la lecture de l'événement ${id}:`, e);
         return null;
       }
     });
 
     const events = await Promise.all(eventPromises);
-    return events.filter((e): e is AppEvent => e !== null);
+    const validEvents = events.filter((e): e is AppEvent => e !== null);
+    console.log(`${validEvents.length} événements récupérés avec succès.`);
+    return validEvents;
   } catch (error: any) {
-    // On utilise console.warn pour éviter le crash visuel Next.js tout en guidant l'utilisateur
     if (error.code === 'failed-precondition') {
-      console.warn("Firestore Index Requis : Veuillez cliquer sur le lien dans la console Firebase pour créer l'index Collection Group.");
+      console.warn("Firestore Index Requis : L'index de groupe de collections est manquant ou en cours de construction.");
+      // On lève une erreur spécifique que l'UI peut intercepter si besoin
+      throw new Error('INDEX_MISSING');
     } else {
-      console.warn("Error fetching user events:", error.message);
+      console.error("Error fetching user events:", error.message);
     }
     return [];
   }
@@ -175,7 +183,6 @@ export async function createEvent(data: { name: string; slug: string; ownerId: s
 
 /**
  * Centralise les chemins Firestore pour gérer le multi-événement.
- * Si l'ID est "default-event", on utilise les anciennes collections globales pour la compatibilité.
  */
 export const dbPaths = {
   pois: (eventId: string) => eventId === 'default-event' ? 'pois' : `events/${eventId}/pois`,
@@ -195,7 +202,6 @@ export async function fetchAppConfig(eventId: string = getCurrentEventId()): Pro
       return configSnap.data() as AppConfig
     }
   } catch (e) {
-    // Fallback if event config doesn't exist or no permission
   }
 
   if (eventId !== 'default-event') {
@@ -204,7 +210,6 @@ export async function fetchAppConfig(eventId: string = getCurrentEventId()): Pro
       const oldSnap = await getDoc(oldRef)
       if (oldSnap.exists()) return oldSnap.data() as AppConfig
     } catch {
-      // Continue to default
     }
   }
 
@@ -242,7 +247,6 @@ export async function fetchMarketingConfig(eventId: string = getCurrentEventId()
       return configSnap.data() as MarketingConfig
     }
   } catch {
-    // Fallback
   }
 
   if (eventId !== 'default-event') {
@@ -251,7 +255,6 @@ export async function fetchMarketingConfig(eventId: string = getCurrentEventId()
       const oldSnap = await getDoc(oldRef)
       if (oldSnap.exists()) return oldSnap.data() as MarketingConfig
     } catch {
-      // Continue to default
     }
   }
 
@@ -406,7 +409,6 @@ export async function fetchPoiById(id: string, eventId: string = getCurrentEvent
       return { id: poiSnap.id, ...poiSnap.data() } as POI
     }
   } catch {
-    // Fallback
   }
 
   if (eventId !== 'default-event') {
@@ -417,7 +419,6 @@ export async function fetchPoiById(id: string, eventId: string = getCurrentEvent
         return { id: oldSnap.id, ...oldSnap.data() } as POI
       }
     } catch {
-      // Skip
     }
   }
 
