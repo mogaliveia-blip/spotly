@@ -97,13 +97,13 @@ service cloud.firestore {
 
     match /events/{eventId}/members/{userId} {
       allow read: if isAuthenticated();
-      
-      // ✅ CORRECTION CRITIQUE : Utilisation de getAfter pour autoriser la création dans la transaction de création de l'event.
-      // Le get() standard échouerait car l'event n'existe pas encore au début de la transaction.
-      allow create: if isAuthenticated() && 
-        request.auth.uid == userId && 
-        getAfter(/databases/$(database)/documents/events/$(eventId)).data.ownerId == request.auth.uid;
-      
+
+      allow create: if isApproved()
+        && request.auth.uid == userId
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.role == "admin"
+        && getAfter(/databases/$(database)/documents/events/$(eventId)).data.ownerId == request.auth.uid;
+
       allow update, delete: if isAdminOnly(eventId);
     }
 

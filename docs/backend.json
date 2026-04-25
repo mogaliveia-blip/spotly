@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "AppEvent": {
+      "title": "AppEvent",
+      "description": "Représente un événement ou festival unique.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "slug", "ownerId", "status"]
+    },
+    "EventMember": {
+      "title": "EventMember",
+      "description": "Lien entre un utilisateur et un événement avec un rôle spécifique.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "editor", "viewer"] },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "role"]
+    },
+    "POI": {
+      "title": "POI",
+      "description": "Point d'intérêt rattaché à un événement.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "mainCategory": { "type": "string" },
+        "subCategory": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        }
+      }
+    }
+  },
+  "auth": {
+    "providers": ["password"]
+  },
+  "firestore": {
+    "/events/{eventId}": {
+      "schema": "#/backend/entities/AppEvent",
+      "description": "Documents racine des événements."
+    },
+    "/events/{eventId}/members/{userId}": {
+      "schema": "#/backend/entities/EventMember",
+      "description": "Membres et permissions par événement."
+    },
+    "/events/{eventId}/pois/{poiId}": {
+      "schema": "#/backend/entities/POI",
+      "description": "Points d'intérêt spécifiques à l'événement."
+    }
+  }
+}

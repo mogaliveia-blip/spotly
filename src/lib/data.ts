@@ -93,16 +93,46 @@ export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRo
     
     let membersSnap;
     try {
-      // On force le serveur pour être sûr d'avoir l'état réel et valider l'index
+      // On force le serveur pour valider l'état réel de Firestore
       membersSnap = await getDocsFromServer(membersQuery);
-      console.log("[Data] fetchUserEvents: Documents de membres trouvés (Serveur)", membersSnap.size);
+    
+      console.log(
+        "[Data] fetchUserEvents: Documents de membres trouvés (Serveur)",
+        membersSnap.size
+      );
+    
     } catch (e: any) {
-       if (e.code === 'failed-precondition' || e.message?.includes('index')) {
-         console.warn("[Data] fetchUserEvents: Index manquant ou en cours.");
-         throw new Error('INDEX_MISSING');
-       }
-       membersSnap = await getDocs(membersQuery);
-       console.log("[Data] fetchUserEvents: Documents de membres trouvés (Cache)", membersSnap.size);
+      console.error(
+        "[Data] fetchUserEvents: erreur Firestore brute",
+        {
+          code: e.code,
+          message: e.message
+        }
+      );
+    
+      // Détection stricte du vrai cas "index manquant"
+      const isRealIndexError =
+        e.code === "failed-precondition" &&
+        e.message?.toLowerCase().includes("index");
+    
+      if (isRealIndexError) {
+        console.warn(
+          "[Data] fetchUserEvents: Index réellement manquant ou en cours de construction."
+        );
+        throw new Error("INDEX_MISSING");
+      }
+    
+      // Fallback normal (cache/local)
+      console.warn(
+        "[Data] fetchUserEvents: fallback vers cache/local"
+      );
+    
+      membersSnap = await getDocs(membersQuery);
+    
+      console.log(
+        "[Data] fetchUserEvents: Documents de membres trouvés (Cache)",
+        membersSnap.size
+      );
     }
     
     // 2. On extrait les IDs d'événements et les rôles associés
