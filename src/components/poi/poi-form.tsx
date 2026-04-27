@@ -1,4 +1,4 @@
-// src/components/poi/poi-form.tsx
+
 'use client';
 
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -40,41 +40,29 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
-/**
- * Compresse une image côté client via l'API Canvas.
- * Redimensionne à 1600px max et exporte en JPEG 0.75.
- */
 async function compressImage(file: File): Promise<File> {
   const img = new window.Image();
   const url = URL.createObjectURL(file);
-
   try {
     await new Promise((resolve, reject) => {
       img.onload = resolve;
       img.onerror = reject;
       img.src = url;
     });
-
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-
     const MAX_WIDTH = 1600;
     let { width, height } = img;
-
     if (width > MAX_WIDTH) {
       height = height * (MAX_WIDTH / width);
       width = MAX_WIDTH;
     }
-
     canvas.width = width;
     canvas.height = height;
-
     ctx?.drawImage(img, 0, 0, width, height);
-
     const blob = await new Promise<Blob>((resolve) =>
       canvas.toBlob((b) => resolve(b as Blob), 'image/jpeg', 0.75)
     );
-
     return new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
       type: 'image/jpeg',
       lastModified: Date.now(),
@@ -85,99 +73,51 @@ async function compressImage(file: File): Promise<File> {
 }
 
 const mainCategories = Object.keys(categoriesMap) as MainCategory[];
+const allSubCategories = Object.values(categoriesMap).flatMap((main) => Object.keys(main.subCategories)) as SubCategory[];
 
-const allSubCategories = Object.values(categoriesMap).flatMap(
-  (main) => Object.keys(main.subCategories)
-) as SubCategory[];
-
-const formSchema = z
-  .object({
-    title: z.string().min(3, { message: 'Le titre doit comporter au moins 3 caractères.' }),
-    description: z.string().min(10, { message: 'La description doit comporter au moins 10 caractères.' }),
-    mainCategory: z.enum(mainCategories, { required_error: 'Veuillez sélectionner une catégorie principale.' }),
-    subCategory: z.enum(allSubCategories, { required_error: 'Veuillez sélectionner une sous-catégorie.' }),
-    location: z.object({
-      lat: z.number(),
-      lng: z.number(),
-    }),
+const formSchema = z.object({
+    title: z.string().min(3, 'Titre trop court'),
+    description: z.string().min(10, 'Description trop courte'),
+    mainCategory: z.enum(mainCategories),
+    subCategory: z.enum(allSubCategories),
+    location: z.object({ lat: z.number(), lng: z.number() }),
     headerPhotoUrl: z.string().optional(),
-    galleryUrls: z
-      .array(
-        z.object({
-          url: z.string(),
-          path: z.string(),
-        })
-      )
-      .optional(),
-    sponsor: z
-      .object({
+    galleryUrls: z.array(z.object({ url: z.string(), path: z.string() })).optional(),
+    sponsor: z.object({
         enabled: z.boolean().default(false),
         level: z.enum(['standard', 'premium', 'official']).default('standard'),
-        priority: z.coerce.number().min(0, 'La priorité doit être positive.').default(0),
+        priority: z.coerce.number().min(0).default(0),
         startDate: z.date().optional(),
         endDate: z.date().optional(),
-      })
-      .optional()
-      .default({ enabled: false, level: 'standard', priority: 0 }),
-  })
-  .refine(
-    (data) => {
-      if (data.mainCategory && data.subCategory) {
-        const validSubCategories = categoriesMap[data.mainCategory]?.subCategories;
-        return validSubCategories && Object.keys(validSubCategories).includes(data.subCategory);
-      }
-      return true;
-    },
-    {
-      message: 'La sous-catégorie ne correspond pas à la catégorie principale.',
-      path: ['subCategory'],
+    }).optional().default({ enabled: false, level: 'standard', priority: 0 }),
+}).refine(data => {
+    if (data.mainCategory && data.subCategory) {
+        const valid = categoriesMap[data.mainCategory]?.subCategories;
+        return valid && Object.keys(valid).includes(data.subCategory);
     }
-  )
-  .refine(
-    (data) => {
-      if (data.sponsor?.startDate && data.sponsor?.endDate) {
-        return data.sponsor.endDate >= data.sponsor.startDate;
-      }
-      return true;
-    },
-    {
-      message: 'La date de fin doit être après la date de début.',
-      path: ['sponsor', 'endDate'],
-    }
-  );
+    return true;
+}, { message: 'Sous-catégorie invalide', path: ['subCategory'] });
 
 type POIFormValues = z.infer<typeof formSchema>;
 
 interface POIFormProps {
   poiId?: string;
+  eventId?: string;
+  eventSlug?: string;
 }
 
 function MapController() {
   const { userLocation } = useGeolocation();
   const mapRef = useMap();
-
-  const handleRecenter = () => {
-    if (mapRef && userLocation) {
-      mapRef.panTo(userLocation);
-      mapRef.setZoom(14);
-    }
-  };
-
-  return (
-    <>
-    { userLocation && (
-      <div className= "absolute bottom-4 left-4 z-10" >
-    <Button size="icon" onClick = { handleRecenter } type = "button" title = "Recentrer sur ma position" >
-      <Crosshair className="h-5 w-5" />
-        </Button>
-        </div>
-      )
-}
-</>
-  );
+  const handleRecenter = () => { if (mapRef && userLocation) mapRef.panTo(userLocation); };
+  return userLocation ? (
+    <div className="absolute bottom-4 left-4 z-10">
+      <Button size="icon" onClick={handleRecenter} type="button"><Crosshair className="h-5 w-5" /></Button>
+    </div>
+  ) : null;
 }
 
-export function POIForm({ poiId }: POIFormProps) {
+export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [formIsLoading, setFormIsLoading] = useState(false);
@@ -187,7 +127,7 @@ export function POIForm({ poiId }: POIFormProps) {
 
   const isEditMode = !!poiId;
   const canManageSponsor = role === 'admin' || role === 'editor';
-  const fallbackCenter = { lat: 48.8566, lng: 2.3522 }; // Paris
+  const prefix = eventSlug ? `/${eventSlug}` : '';
 
   const form = useForm<POIFormValues>({
     resolver: zodResolver(formSchema),
@@ -196,24 +136,14 @@ export function POIForm({ poiId }: POIFormProps) {
       description: '',
       mainCategory: 'programmation',
       subCategory: 'concert_headliner',
-      location: userLocation || fallbackCenter,
+      location: userLocation || { lat: -21.3393, lng: 55.4781 },
       headerPhotoUrl: '',
       galleryUrls: [],
-      sponsor: {
-        enabled: false,
-        level: 'standard',
-        priority: 0,
-        startDate: undefined,
-        endDate: undefined,
-      },
+      sponsor: { enabled: false, level: 'standard', priority: 0 }
     },
   });
 
-  const { fields: galleryFields, append, remove } = useFieldArray({
-    control: form.control,
-    name: 'galleryUrls',
-  });
-
+  const { fields: galleryFields, append, remove } = useFieldArray({ control: form.control, name: 'galleryUrls' });
   const selectedMainCategory = form.watch('mainCategory');
   const selectedLocation = form.watch('location');
   const headerPhotoUrl = form.watch('headerPhotoUrl');
@@ -225,573 +155,211 @@ export function POIForm({ poiId }: POIFormProps) {
   const [galleryPreviewUrls, setGalleryPreviewUrls] = useState<string[]>([]);
 
   useEffect(() => {
-    if (isEditMode) return;
-
-    const availableSubCategories = categoriesMap[selectedMainCategory]?.subCategories;
-
-    if (availableSubCategories) {
-      const firstSubCategory = Object.keys(availableSubCategories)[0] as SubCategory;
-
-      form.setValue('subCategory', firstSubCategory, {
-        shouldValidate: true,
-        shouldDirty: true,
-      });
+    if (!isEditMode) {
+      const valid = categoriesMap[selectedMainCategory]?.subCategories;
+      if (valid) form.setValue('subCategory', Object.keys(valid)[0] as SubCategory);
     }
   }, [selectedMainCategory, isEditMode, form]);
 
   useEffect(() => {
     async function getPoi() {
       if (poiId) {
-        setPageIsLoading(true);
         try {
-          const poiData = await fetchPoiById(poiId);
-          if (poiData) {
-            const sponsorSafe = {
-              enabled: poiData.sponsor?.enabled ?? false,
-              level: poiData.sponsor?.level ?? 'standard',
-              priority: poiData.sponsor?.priority ?? 0,
-              startDate: poiData.sponsor?.startDate
-                ? (poiData.sponsor.startDate as any).toDate()
-                : undefined,
-              endDate: poiData.sponsor?.endDate
-                ? (poiData.sponsor.endDate as any).toDate()
-                : undefined,
+          const data = await fetchPoiById(poiId, eventId);
+          if (data) {
+             const sponsorSafe = {
+              enabled: data.sponsor?.enabled ?? false,
+              level: data.sponsor?.level ?? 'standard',
+              priority: data.sponsor?.priority ?? 0,
+              startDate: data.sponsor?.startDate ? (data.sponsor.startDate as any).toDate?.() || new Date(data.sponsor.startDate) : undefined,
+              endDate: data.sponsor?.endDate ? (data.sponsor.endDate as any).toDate?.() || new Date(data.sponsor.endDate) : undefined,
             };
-
-            const formData = {
-              ...poiData,
-              sponsor: sponsorSafe,
-            };
-
-            form.reset(formData as POIFormValues);
+            form.reset({ ...data, sponsor: sponsorSafe } as POIFormValues);
           } else {
-            toast({ title: 'Erreur', description: 'POI non trouvé.', variant: 'destructive' });
-            router.push('/pois');
+            router.push(`${prefix}/pois`);
           }
-        } catch (error) {
-          console.error('Impossible de récupérer le POI', error);
-          toast({
-            title: 'Erreur',
-            description: 'Impossible de charger les données du POI.',
-            variant: 'destructive',
-          });
-        } finally {
-          setPageIsLoading(false);
-        }
+        } catch {
+          toast({ title: 'Erreur', variant: 'destructive' });
+        } finally { setPageIsLoading(false); }
       } else {
         if (userLocation) form.setValue('location', userLocation);
         setPageIsLoading(false);
       }
     }
-
     if (!geoLoading) getPoi();
-  }, [poiId, form, router, toast, geoLoading, userLocation]);
+  }, [poiId, eventId, geoLoading, userLocation]);
 
   useEffect(() => {
-    if (!headerImageFile) {
-      setHeaderPreviewUrl(null);
-      return;
-    }
-    const previewUrl = URL.createObjectURL(headerImageFile);
-    setHeaderPreviewUrl(previewUrl);
-
-    return () => URL.revokeObjectURL(previewUrl);
+    if (!headerImageFile) return setHeaderPreviewUrl(null);
+    const url = URL.createObjectURL(headerImageFile);
+    setHeaderPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
   }, [headerImageFile]);
 
   useEffect(() => {
-    if (galleryImageFiles.length === 0) {
-      setGalleryPreviewUrls([]);
-      return;
-    }
-    const urls = galleryImageFiles.map((file) => URL.createObjectURL(file));
+    const urls = galleryImageFiles.map(f => URL.createObjectURL(f));
     setGalleryPreviewUrls(urls);
-
-    return () => {
-      urls.forEach((url) => URL.revokeObjectURL(url));
-    };
+    return () => urls.forEach(u => URL.revokeObjectURL(u));
   }, [galleryImageFiles]);
 
   async function onSubmit(values: POIFormValues) {
     setFormIsLoading(true);
-    let poiIdToUpdate = poiId;
+    let targetId = poiId;
+    const storagePrefix = eventId && eventId !== 'default-event' ? `events/${eventId}/` : '';
 
     try {
       const { sponsor, ...rest } = values;
 
       if (!isEditMode) {
-        const createPayload = {
-          title: rest.title!,
-          description: rest.description!,
-          mainCategory: rest.mainCategory!,
-          subCategory: rest.subCategory!,
-          location: rest.location!,
+        targetId = await createPoi({
+          title: rest.title,
+          description: rest.description,
+          mainCategory: rest.mainCategory,
+          subCategory: rest.subCategory,
+          location: rest.location,
           headerPhotoUrl: '',
           galleryUrls: [],
-          ...(sponsor?.enabled ? { sponsor } : {}),
-        };
-
-        poiIdToUpdate = await createPoi(createPayload);
+          sponsor: sponsor?.enabled ? sponsor : undefined
+        }, eventId);
       }
 
-      if (!poiIdToUpdate) {
-        throw new Error('ID du POI manquant.');
-      }
-
-      // --- HEADER IMAGE WITH COMPRESSION ---
-      let finalHeaderUrl = values.headerPhotoUrl || '';
-
+      let finalHeader = values.headerPhotoUrl || '';
       if (headerImageFile) {
-        const compressedHeader = await compressImage(headerImageFile);
-        const headerPath = `poi-images/${poiIdToUpdate}/header.jpg`;
-        const { url } = await uploadFile(compressedHeader, headerPath);
-        finalHeaderUrl = url;
+        const comp = await compressImage(headerImageFile);
+        const { url } = await uploadFile(comp, `${storagePrefix}poi-images/${targetId}/header.jpg`);
+        finalHeader = url;
       }
 
-      // --- GALLERY WITH COMPRESSION ---
       const existingGallery = values.galleryUrls || [];
-      let newGalleryUploads: { url: string; path: string }[] = [];
-
+      let newUploads: { url: string; path: string }[] = [];
       if (galleryImageFiles.length > 0) {
-        newGalleryUploads = await Promise.all(
-          galleryImageFiles.map(async (file) => {
-            const compressed = await compressImage(file);
-            const uniquePath = `poi-images/${poiIdToUpdate}/gallery/${crypto.randomUUID()}.jpg`;
-            return uploadFile(compressed, uniquePath);
-          })
-        );
+        newUploads = await Promise.all(galleryImageFiles.map(async f => {
+          const comp = await compressImage(f);
+          return uploadFile(comp, `${storagePrefix}poi-images/${targetId}/gallery/${crypto.randomUUID()}.jpg`);
+        }));
       }
 
-      const finalGalleryUrls = [...existingGallery, ...newGalleryUploads];
-
-      const updatePayload: Partial<POI> = {
+      await updatePoi(targetId!, {
         ...rest,
-        headerPhotoUrl: finalHeaderUrl,
-        galleryUrls: finalGalleryUrls,
-        sponsor: sponsor?.enabled ? sponsor : deleteField() as any,
-      };
+        headerPhotoUrl: finalHeader,
+        galleryUrls: [...existingGallery, ...newUploads],
+        sponsor: sponsor?.enabled ? sponsor : deleteField() as any
+      }, eventId);
 
-      await updatePoi(poiIdToUpdate, updatePayload);
-
-      toast({
-        title: isEditMode ? 'POI mis à jour !' : 'POI créé !',
-        description: `${values.title} a été sauvegardé.`,
-      });
-
-      router.refresh();
-      router.push('/pois');
-    } catch (error) {
-      console.error('Erreur lors de la sauvegarde du POI', error);
-      toast({
-        title: 'Erreur',
-        description: `Impossible de ${isEditMode ? 'mettre à jour' : 'créer'} le POI.`,
-        variant: 'destructive',
-      });
-    } finally {
-      setFormIsLoading(false);
-    }
+      toast({ title: 'Succès !' });
+      router.push(`${prefix}/pois`);
+    } catch {
+      toast({ title: 'Erreur lors de la sauvegarde', variant: 'destructive' });
+    } finally { setFormIsLoading(false); }
   }
 
-  const handleGalleryFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      const files = Array.from(event.target.files);
-      setGalleryImageFiles((prev) => [...prev, ...files]);
-      event.target.value = '';
-    }
-  };
-
-  const handleRemoveExistingGalleryImage = async (index: number, path: string) => {
-    if (!confirm("Voulez-vous vraiment supprimer cette image de la galerie ? Cette action est irréversible.")) return;
-    try {
-      await deleteFileByPath(path);
-      remove(index);
-      toast({ title: 'Image supprimée', description: 'Image retirée de la galerie et du stockage.' });
-    } catch (error) {
-      toast({ title: 'Erreur', description: "Impossible de supprimer l'image.", variant: 'destructive' });
-    }
-  };
-
-  const handleRemoveNewGalleryImage = (index: number) => {
-    setGalleryImageFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  if (pageIsLoading || geoLoading) {
-    return (
-      <div className= "space-y-8" >
-      <Skeleton className="h-10 w-32 ml-auto" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8" >
-          <Skeleton className="h-96 w-full" />
-            <Skeleton className="h-96 w-full" />
-              </div>
-              </div>
-    );
-  }
+  if (pageIsLoading) return <div className="p-12 text-center animate-pulse">Chargement de l'éditeur...</div>;
 
   return (
-    <APIProvider apiKey= { mapsConfig.apiKey } >
-    <Form { ...form } >
-    <form onSubmit={ form.handleSubmit(onSubmit) } className = "space-y-8" >
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8" >
-        {/* Colonne 1: Détails & Galerie */ }
-        < div className = "lg:col-span-2 space-y-6" >
-          <Card>
-          <CardHeader>
-          <CardTitle>Détails du POI </CardTitle>
-            </CardHeader>
-            < CardContent className = "space-y-4" >
-              <FormField
-                    control={ form.control }
-  name = "title"
-  render = {({ field }) => (
-    <FormItem>
-    <FormLabel>Titre </FormLabel>
-    < FormControl >
-    <Input placeholder= "Ex : Scène principale" {...field } />
-      </FormControl>
-      < FormMessage />
-      </FormItem>
-                    )
-}
-                  />
-  < FormField
-control = { form.control }
-name = "description"
-render = {({ field }) => (
-  <FormItem>
-  <FormLabel>Description </FormLabel>
-  < FormControl >
-  <Textarea placeholder= "Une brève description du point d'intérêt." {...field } rows = { 5} />
-    </FormControl>
-    < FormMessage />
-    </FormItem>
+    <APIProvider apiKey={mapsConfig.apiKey}>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-6">
+              <Card className="rounded-[2rem] border-muted/60">
+                <CardHeader><CardTitle>Détails</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <FormField control={form.control} name="title" render={({ field }) => (
+                    <FormItem><FormLabel>Titre</FormLabel><FormControl><Input placeholder="Nom du lieu" {...field} className="rounded-xl" /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="description" render={({ field }) => (
+                    <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea placeholder="Description détaillée" {...field} rows={5} className="rounded-2xl" /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="mainCategory" render={({ field }) => (
+                      <FormItem><FormLabel>Catégorie</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger></FormControl><SelectContent>{mainCategories.map(c => <SelectItem key={c} value={c}>{categoriesMap[c].label}</SelectItem>)}</SelectContent></Select></FormItem>
+                    )} />
+                    <FormField control={form.control} name="subCategory" render={({ field }) => (
+                      <FormItem><FormLabel>Type</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger></FormControl><SelectContent>{categoriesMap[selectedMainCategory]?.subCategories && Object.entries(categoriesMap[selectedMainCategory].subCategories).map(([v, l]) => <SelectItem key={v} value={v}>{l as string}</SelectItem>)}</SelectContent></Select></FormItem>
+                    )} />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {canManageSponsor && (
+                <Card className="rounded-[2rem] border-muted/60">
+                  <CardHeader><CardTitle>Partenariat</CardTitle></CardHeader>
+                  <CardContent className="space-y-6">
+                    <FormField control={form.control} name="sponsor.enabled" render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-2xl border p-4 bg-muted/10"><div className="space-y-0.5"><FormLabel>Mettre en avant</FormLabel><FormDescription>Le POI apparaîtra en priorité avec un badge.</FormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>
+                    )} />
+                    {sponsorEnabled && (
+                      <div className="space-y-4 pt-4 border-t grid grid-cols-2 gap-4">
+                        <FormField control={form.control} name="sponsor.level" render={({ field }) => (
+                          <FormItem><FormLabel>Niveau</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="standard">Standard</SelectItem><SelectItem value="premium">Premium</SelectItem><SelectItem value="official">Officiel</SelectItem></SelectContent></Select></FormItem>
+                        )} />
+                        <FormField control={form.control} name="sponsor.priority" render={({ field }) => (
+                          <FormItem><FormLabel>Priorité (0-100)</FormLabel><FormControl><Input type="number" {...field} className="rounded-xl" /></FormControl></FormItem>
+                        )} />
+                      </div>
                     )}
-                  />
-  < div className = "grid grid-cols-1 sm:grid-cols-2 gap-4" >
-    <FormField
-                      control={ form.control }
-name = "mainCategory"
-render = {({ field }) => (
-  <FormItem>
-  <FormLabel>Catégorie principale </FormLabel>
-    < Select onValueChange = { field.onChange } value = { field.value } >
-      <FormControl>
-      <SelectTrigger>
-      <SelectValue placeholder="Sélectionner une catégorie" />
-        </SelectTrigger>
-        </FormControl>
-        <SelectContent>
-{
-  mainCategories.map((cat) => (
-    <SelectItem key= { cat } value = { cat } >
-    { categoriesMap[cat].label }
-    </SelectItem>
-  ))
-}
-</SelectContent>
-  </Select>
-  < FormMessage />
-  </FormItem>
-                      )}
-                    />
-  < FormField
-control = { form.control }
-name = "subCategory"
-render = {({ field }) => (
-  <FormItem>
-  <FormLabel>Sous - catégorie </FormLabel>
-  < Select onValueChange = { field.onChange } value = { field.value } >
-    <FormControl>
-    <SelectTrigger>
-    <SelectValue placeholder="Sélectionner une sous-catégorie" />
-      </SelectTrigger>
-      </FormControl>
-      <SelectContent>
-{
-  selectedMainCategory &&
-  categoriesMap[selectedMainCategory] &&
-  Object.entries(categoriesMap[selectedMainCategory].subCategories).map(([value, label]) => (
-    <SelectItem key= { value } value = { value } >
-    { label as string }
-    </SelectItem>
-  ))
-}
-</SelectContent>
-  </Select>
-  < FormMessage />
-  </FormItem>
-                      )}
-                    />
-  </div>
-  </CardContent>
-  </Card>
-
-{
-  canManageSponsor && (
-    <Card>
-    <CardHeader>
-    <CardTitle>Partenariat(optionnel) </CardTitle>
-    < CardDescription > Gérez la mise en avant de ce POI.</CardDescription>
-      </CardHeader>
-      < CardContent className = "space-y-6" >
-        <FormField
-                      control={ form.control }
-  name = "sponsor.enabled"
-  render = {({ field }) => (
-    <FormItem className= "flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm" >
-    <div className="space-y-0.5" >
-      <FormLabel>Activer le partenariat </FormLabel>
-        < FormDescription > Mettre ce POI en avant.</FormDescription>
-          </div>
-          < FormControl >
-          <Switch checked={ field.value } onCheckedChange = { field.onChange } />
-            </FormControl>
-            </FormItem>
-                      )
-}
-                    />
-
-{
-  sponsorEnabled && (
-    <div className="space-y-4 pt-4 border-t" >
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" >
-        <FormField
-                            control={ form.control }
-  name = "sponsor.level"
-  render = {({ field }) => (
-    <FormItem>
-    <FormLabel>Niveau de partenariat </FormLabel>
-  <Select onValueChange={ field.onChange } value = { field.value } >
-    <FormControl>
-    <SelectTrigger>
-    <SelectValue />
-    </SelectTrigger>
-    </FormControl>
-    < SelectContent >
-    <SelectItem value="standard" > Standard </SelectItem>
-      < SelectItem value = "premium" > Premium </SelectItem>
-        < SelectItem value = "official" > Officiel </SelectItem>
-          </SelectContent>
-          </Select>
-          < FormMessage />
-          </FormItem>
-                            )
-}
-                          />
-
-  < FormField
-control = { form.control }
-name = "sponsor.priority"
-render = {({ field }) => (
-  <FormItem>
-  <FormLabel>Priorité </FormLabel>
-  <FormControl>
-<Input
-                                    type="number"
-min = "0"
-value = { field.value ?? 0 }
-onChange = {(e) => field.onChange(Number(e.target.value))}
-                                  />
-  </FormControl>
-  < FormMessage />
-  </FormItem>
-                            )}
-                          />
-  </div>
-
-  < div className = "grid grid-cols-1 sm:grid-cols-2 gap-4" >
-    <FormField
-                            control={ form.control }
-name = "sponsor.startDate"
-render = {({ field }) => (
-  <FormItem className= "flex flex-col" >
-  <FormLabel>Date de début(optionnel) </FormLabel>
-    < Popover >
-    <PopoverTrigger asChild >
-    <FormControl>
-    <Button
-                                        variant={ 'outline' }
-className = { cn('pl-3 text-left font-normal', !field.value && 'text-muted-foreground') }
-  >
-  { field.value ? format(field.value, 'PPP', { locale: fr }) : <span>Choisir une date</ span >}
-<CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-  </Button>
-  </FormControl>
-  </PopoverTrigger>
-  < PopoverContent className = "w-auto p-0" align = "start" >
-    <Calendar mode="single" selected = { field.value } onSelect = { field.onChange } initialFocus />
-      </PopoverContent>
-      </Popover>
-      < FormMessage />
-      </FormItem>
-                            )}
-                          />
-
-  < FormField
-control = { form.control }
-name = "sponsor.endDate"
-render = {({ field }) => (
-  <FormItem className= "flex flex-col" >
-  <FormLabel>Date de fin(optionnel) </FormLabel>
-    < Popover >
-    <PopoverTrigger asChild >
-    <FormControl>
-    <Button
-                                        variant={ 'outline' }
-className = { cn('pl-3 text-left font-normal', !field.value && 'text-muted-foreground') }
-  >
-  { field.value ? format(field.value, 'PPP', { locale: fr }) : <span>Choisir une date</ span >}
-<CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-  </Button>
-  </FormControl>
-  </PopoverTrigger>
-  < PopoverContent className = "w-auto p-0" align = "start" >
-    <Calendar mode="single" selected = { field.value } onSelect = { field.onChange } initialFocus />
-      </PopoverContent>
-      </Popover>
-      < FormMessage />
-      </FormItem>
-                            )}
-                          />
-  </div>
-  </div>
-                    )}
-</CardContent>
-  </Card>
+                  </CardContent>
+                </Card>
               )}
 
-<Card>
-  <CardHeader>
-  <CardTitle>Image d'en-tête</CardTitle>
-    < CardDescription > Cette image sera affichée en grand sur la page du POI.</CardDescription>
-      </CardHeader>
-      < CardContent >
-      <FormField
-                    control={ form.control }
-name = "headerPhotoUrl"
-render = {() => (
-  <FormItem>
-  <FormControl>
-  <Input
-                            type= "file"
-accept = "image/*"
-onChange = {(e) => setHeaderImageFile(e.target.files?.[0] || null)}
-className = "hidden"
-id = "header-upload"
-  />
-  </FormControl>
-  < div className = "relative aspect-video w-full border-2 border-dashed rounded-lg flex items-center justify-center bg-muted/30" >
-    {(headerPreviewUrl || headerPhotoUrl) ? (
-      <Image
-                              src= { headerPreviewUrl || headerPhotoUrl!}
-alt = "Aperçu de l'en-tête"
-fill
-className = "object-contain rounded-lg"
-  />
-                          ) : (
-  <label htmlFor= "header-upload" className = "cursor-pointer text-center text-muted-foreground p-4" >
-    <ImagePlus className="mx-auto h-12 w-12" />
-      <p>Cliquez pour ajouter une image </p>
-        </label>
-                          )}
-</div>
-  </FormItem>
-                    )}
-                  />
-  </CardContent>
-  </Card>
+              <Card className="rounded-[2rem] border-muted/60">
+                <CardHeader><CardTitle>Images</CardTitle></CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label>Image principale</Label>
+                    <Input type="file" accept="image/*" className="hidden" id="h-up" onChange={e => setHeaderImageFile(e.target.files?.[0] || null)} />
+                    <label htmlFor="h-up" className="relative aspect-video w-full border-2 border-dashed rounded-3xl flex items-center justify-center cursor-pointer overflow-hidden bg-muted/20">
+                      {headerPreviewUrl || headerPhotoUrl ? <Image src={headerPreviewUrl || headerPhotoUrl!} alt="Preview" fill className="object-cover" /> : <ImagePlus className="h-10 w-10 text-muted-foreground" />}
+                    </label>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Galerie</Label>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                      {galleryFields.map((f, i) => (
+                        <div key={f.id} className="relative aspect-square rounded-2xl overflow-hidden border group">
+                          <Image src={f.url} alt="Gallery" fill className="object-cover" />
+                          <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => handleRemoveExistingGalleryImage(i, f.path)}><X className="h-3 w-3" /></Button>
+                        </div>
+                      ))}
+                      {galleryPreviewUrls.map((u, i) => (
+                        <div key={u} className="relative aspect-square rounded-2xl overflow-hidden border bg-primary/5">
+                          <Image src={u} alt="New" fill className="object-cover" />
+                          <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => setGalleryImageFiles(prev => prev.filter((_, idx) => idx !== i))}><X className="h-3 w-3" /></Button>
+                        </div>
+                      ))}
+                      <label htmlFor="g-up" className="aspect-square border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-muted/30 transition-colors"><ImagePlus className="h-6 w-6 mb-1" /><span className="text-[10px] font-bold">AJOUTER</span></label>
+                      <Input type="file" multiple accept="image/*" className="hidden" id="g-up" onChange={e => setGalleryImageFiles(p => [...p, ...Array.from(e.target.files || [])])} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
-  < Card >
-  <CardHeader>
-  <CardTitle>Galerie d'images</CardTitle>
-    < CardDescription > Ajoutez des images supplémentaires pour illustrer le POI.</CardDescription>
-      </CardHeader>
-      < CardContent >
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4" >
-      {
-        galleryFields.map((field, index) => (
-          <div key= { field.id } className = "relative aspect-square group" >
-          <Image src={ field.url } alt = {`Galerie ${index + 1}`} fill className = "object-cover rounded-md border" />
-            <Button
-                          type="button"
-variant = "destructive"
-size = "icon"
-className = "absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-onClick = {() => handleRemoveExistingGalleryImage(index, field.path)}
-                        >
-  <X className="h-4 w-4" />
-    </Button>
-    </div>
-                    ))}
-
-{
-  galleryPreviewUrls.map((url, index) => (
-    <div key= { url } className = "relative aspect-square group" >
-    <Image src={ url } alt = {`Nouvelle image ${index + 1}`} fill className = "object-cover rounded-md border" />
-      <Button
-                          type="button"
-variant = "destructive"
-size = "icon"
-className = "absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-onClick = {() => handleRemoveNewGalleryImage(index)}
-                        >
-  <X className="h-4 w-4" />
-    </Button>
-    </div>
-                    ))}
-
-<label
-                      htmlFor="gallery-upload"
-className = "cursor-pointer aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-muted-foreground hover:bg-accent/50"
-  >
-  <ImagePlus className="h-8 w-8" />
-    <span className="text-xs text-center mt-1" > Ajouter </span>
-      </label>
-      < Input id = "gallery-upload" type = "file" multiple accept = "image/*" className = "hidden" onChange = { handleGalleryFileChange } />
-        </div>
-        </CardContent>
-        </Card>
-        </div>
-
-{/* Colonne 2: Emplacement */ }
-<div className="lg:col-span-1 space-y-6" >
-  <Card>
-  <CardHeader>
-  <CardTitle>Emplacement </CardTitle>
-  </CardHeader>
-  < CardContent className = "relative" >
-    <FormLabel>Cliquez sur la carte pour définir l'emplacement</FormLabel>
-      < div className = "h-[400px] w-full overflow-hidden rounded-lg border mt-2" >
-        <Map
-                      defaultCenter={ form.getValues('location') }
-defaultZoom = { 13}
-gestureHandling = { 'greedy'}
-disableDefaultUI = { false}
-mapId = { process.env.NEXT_PUBLIC_GOOGLE_MAP_ID }
-onClick = {(e) => {
-  if (e.detail.latLng) {
-    form.setValue('location', e.detail.latLng, { shouldValidate: true });
-  }
-}}
-                    >
-  <AdvancedMarker position={ selectedLocation }>
-    <div className="text-primary" >
-      <MapPin size={ 36 } />
-        </div>
-        </AdvancedMarker>
-        < MapController />
-        </Map>
-        </div>
-        < FormMessage > { form.formState.errors.location?.message } </FormMessage>
-        </CardContent>
-        </Card>
-        </div>
-        </div>
-
-        < Button type = "submit" disabled = { formIsLoading } size = "lg" >
-          { formIsLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-{ isEditMode ? 'Mettre à jour le POI' : 'Créer le POI' }
-</Button>
-  </form>
-  </Form>
-  </APIProvider>
+            <div className="space-y-6">
+              <Card className="rounded-[2rem] border-muted/60 overflow-hidden">
+                <CardHeader><CardTitle>Emplacement</CardTitle><CardDescription>Cliquez sur la carte pour placer le marqueur.</CardDescription></CardHeader>
+                <CardContent className="p-0">
+                  <div className="h-[400px] w-full relative">
+                    <Map defaultCenter={selectedLocation} defaultZoom={15} mapId={mapsConfig.mapId} onClick={e => e.detail.latLng && form.setValue('location', e.detail.latLng)}>
+                      <AdvancedMarker position={selectedLocation}><MapPin className="text-primary h-8 w-8" /></AdvancedMarker>
+                      <MapController />
+                    </Map>
+                  </div>
+                </CardContent>
+              </Card>
+              <Button type="submit" disabled={formIsLoading} className="w-full h-14 rounded-2xl font-bold text-lg shadow-xl">
+                {formIsLoading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+                {isEditMode ? 'Mettre à jour' : 'Créer le lieu'}
+              </Button>
+            </div>
+          </div>
+        </form>
+      </Form>
+    </APIProvider>
   );
+
+  async function handleRemoveExistingGalleryImage(index: number, path: string) {
+    if (!confirm("Supprimer cette image ?")) return;
+    try { await deleteFileByPath(path); remove(index); } catch { toast({ title: 'Erreur', variant: 'destructive' }); }
+  }
 }
