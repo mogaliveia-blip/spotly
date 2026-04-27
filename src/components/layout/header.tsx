@@ -42,7 +42,7 @@ export function Header() {
           <div className="p-1.5 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
             <Mountain className="h-5 w-5 text-primary" />
           </div>
-          <h1 className="text-lg font-bold tracking-tight hidden sm:block text-primary">Leu Tempo</h1>
+          <h1 className="text-lg font-bold tracking-tight hidden sm:block text-primary">Spotly</h1>
         </a>
       </div>
 

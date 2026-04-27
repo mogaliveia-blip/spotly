@@ -57,7 +57,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">
         <div className="flex items-center gap-2">
           <Mountain className="h-6 w-6 text-primary" />
-          <span className="text-lg font-semibold">Leu Tempo</span>
+          <span className="text-lg font-semibold">Spotly</span>
         </div>
          {user && (
             <div className="flex items-center gap-2">
@@ -87,7 +87,7 @@ export default function LandingPage() {
           <div className="relative z-10 flex h-full flex-col items-center justify-center text-center p-4">
              <div className="bg-black/50 p-6 rounded-lg backdrop-blur-sm shadow-xl">
                 <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl text-primary-foreground">
-                    Leu Tempo Festival
+                    Spotly
                 </h1>
                 <p className="mt-4 max-w-2xl text-lg text-primary-foreground/90">
                     Bientôt disponible. L'application officielle pour ne rien manquer de l'événement.
@@ -108,7 +108,7 @@ export default function LandingPage() {
 
        <footer className="py-6 border-t">
           <div className="container mx-auto text-center text-sm text-muted-foreground">
-            <p>© {new Date().getFullYear()} Leu Tempo Festival. Tous droits réservés.</p>
+            <p>© {new Date().getFullYear()} Spotly. Tous droits réservés.</p>
             {!user && (
                  <div className="mt-2">
                     <AuthDialog 

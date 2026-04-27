@@ -285,7 +285,7 @@ export function SidebarNav() {
             <Mountain className="h-8 w-8 text-primary" />
           </div>
           <div className="flex flex-col">
-            <h2 className="text-xl font-black tracking-tight text-foreground">Leu Tempo</h2>
+            <h2 className="text-xl font-black tracking-tight text-foreground">Spotly</h2>
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
               {user ? `Salut, ${user.displayName?.split(' ')[0]} !` : 'Bienvenue !'}
             </p>

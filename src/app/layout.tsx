@@ -10,7 +10,7 @@ import { GeolocationProvider } from '@/providers/geolocation-provider'
 import { EventProvider } from '@/providers/event-provider'
 
 export const metadata: Metadata = {
-  title: 'Leu Tempo',
+  title: 'Spotly',
   description: "Votre guide pour les points d'intérêt de l'événement.",
   manifest: '/manifest.json',
 }

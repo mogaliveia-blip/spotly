@@ -1,4 +1,3 @@
-// src/components/auth/auth-dialog.tsx
 'use client';
 
 import { useState } from 'react';
@@ -54,12 +53,12 @@ export function AuthDialog({ trigger, initialView = 'login' }: AuthDialogProps) 
   const getDescription = () => {
     switch (view) {
       case 'signup':
-        return 'Rejoignez Leu Tempo pour explorer des événements';
+        return 'Rejoignez Spotly pour explorer des événements';
       case 'passwordReset':
         return 'Entrez votre e-mail pour recevoir un lien de réinitialisation.';
       case 'login':
       default:
-        return 'Connectez-vous à votre compte Leu Tempo';
+        return 'Connectez-vous à votre compte Spotly';
     }
   };
 
