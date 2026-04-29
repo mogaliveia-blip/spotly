@@ -212,7 +212,7 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
       const { sponsor, ...rest } = values;
 
       if (!isEditMode) {
-        targetId = await createPoi({
+        const createPayload: any = {
           title: rest.title,
           description: rest.description,
           mainCategory: rest.mainCategory,
@@ -220,8 +220,13 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
           location: rest.location,
           headerPhotoUrl: '',
           galleryUrls: [],
-          sponsor: sponsor?.enabled ? sponsor : undefined
-        }, eventId);
+        };
+      
+        if (sponsor?.enabled) {
+          createPayload.sponsor = sponsor;
+        }
+      
+        targetId = await createPoi(createPayload, eventId);
       }
 
       let finalHeader = values.headerPhotoUrl || '';
@@ -361,6 +366,20 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
 
   async function handleRemoveExistingGalleryImage(index: number, path: string) {
     if (!confirm("Supprimer cette image ?")) return;
-    try { await deleteFileByPath(path); remove(index); } catch { toast({ title: 'Erreur', variant: 'destructive' }); }
+    try { await deleteFileByPath(path); remove(index); } catch (error: any) {
+      console.error('[POIForm] Save error', {
+        message: error?.message,
+        code: error?.code,
+        stack: error?.stack,
+        eventId,
+        targetId,
+      });
+    
+      toast({
+        title: 'Erreur lors de la sauvegarde',
+        description: error?.message || 'Erreur inconnue',
+        variant: 'destructive',
+      });
+    }
   }
 }

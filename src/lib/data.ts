@@ -41,7 +41,9 @@ import {
 
 // --- MULTI-EVENT ENGINE ---
 
-let globalCurrentEventId: string = 'default-event';
+// Utilisation d'une constante pour l'ID par défaut pour éviter les fautes de frappe
+const DEFAULT_EVENT_ID = 'default-event';
+let globalCurrentEventId: string = DEFAULT_EVENT_ID;
 
 /**
  * Retourne l'ID de l'événement courant (défini par le routing/provider).
@@ -54,14 +56,15 @@ export function getCurrentEventId(): string {
  * Définit l'ID de l'événement courant. Appelé par l'EventProvider.
  */
 export function setCurrentEventId(id: string) {
-  globalCurrentEventId = id;
+  console.log(`[Data] Context Switch: ${globalCurrentEventId} -> ${id}`);
+  globalCurrentEventId = id || DEFAULT_EVENT_ID;
 }
 
 /**
  * Résout un événement à partir de son slug URL.
  */
 export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
-  if (!slug || slug === 'default') return null;
+  if (!slug || slug === 'default' || slug === 'dashboard' || slug === 'admin') return null;
   try {
     const eventsRef = collection(db, 'events');
     const q = query(eventsRef, where('slug', '==', slug), limit(1));
@@ -185,9 +188,9 @@ export async function createEvent(data: { name: string; slug: string; ownerId: s
  * Centralise les chemins Firestore pour gérer le multi-événement.
  */
 export const dbPaths = {
-  pois: (eventId: string) => eventId === 'default-event' ? 'pois' : `events/${eventId}/pois`,
-  poisPublic: (eventId: string) => eventId === 'default-event' ? 'pois_public' : `events/${eventId}/pois_public`,
-  config: (eventId: string) => eventId === 'default-event' ? 'config' : `events/${eventId}/config`,
+  pois: (eventId: string) => eventId === DEFAULT_EVENT_ID ? 'pois' : `events/${eventId}/pois`,
+  poisPublic: (eventId: string) => eventId === DEFAULT_EVENT_ID ? 'pois_public' : `events/${eventId}/pois_public`,
+  config: (eventId: string) => eventId === DEFAULT_EVENT_ID ? 'config' : `events/${eventId}/config`,
   members: (eventId: string) => `events/${eventId}/members`,
 }
 
@@ -403,7 +406,7 @@ export async function createPoi(
 
   await runTransaction(db, async (tx) => {
     tx.set(doc(poiCollection, id), fullPoiData);
-    tx.set(doc(poiPublicCollection, id), {
+    const liteData: any = {
       id,
       title: fullPoiData.title,
       location: fullPoiData.location,
@@ -411,9 +414,14 @@ export async function createPoi(
       subCategory: fullPoiData.subCategory,
       averageRating: 0,
       reviewCount: 0,
-      sponsor: fullPoiData.sponsor,
       headerPhotoUrl: fullPoiData.headerPhotoUrl
-    });
+    };
+    
+    if (fullPoiData.sponsor) {
+      liteData.sponsor = fullPoiData.sponsor;
+    }
+    
+    tx.set(doc(poiPublicCollection, id), liteData);
   });
 
   return id;
@@ -461,7 +469,7 @@ export async function updatePoi(
 export async function deletePoi(poiId: string, eventId: string = getCurrentEventId()): Promise<void> {
   const poiRef = doc(db, dbPaths.pois(eventId), poiId)
   const poiPublicRef = doc(db, dbPaths.poisPublic(eventId), poiId)
-  const storagePrefix = eventId === 'default-event' ? '' : `events/${eventId}/`;
+  const storagePrefix = eventId === DEFAULT_EVENT_ID ? '' : `events/${eventId}/`;
   const imagesFolderRef = ref(storage, `${storagePrefix}poi-images/${poiId}`)
 
   try {
