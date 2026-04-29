@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { AppLayout } from '@/components/layout/app-layout';
+import { DEFAULT_EVENT_ID } from '@/lib/data';
 
 export default function NewPOIPage() {
   return (
@@ -18,7 +19,8 @@ export default function NewPOIPage() {
             </Link>
           </Button>
         </div>
-        <POIForm />
+        {/* ✅ Explicitly set to global scope */}
+        <POIForm eventId={DEFAULT_EVENT_ID} />
       </div>
     </AppLayout>
   );

@@ -1,4 +1,3 @@
-
 // src/lib/data.ts
 import { db, storage } from './firebase'
 import {
@@ -42,7 +41,7 @@ import {
 // --- MULTI-EVENT ENGINE ---
 
 // Utilisation d'une constante pour l'ID par défaut pour éviter les fautes de frappe
-const DEFAULT_EVENT_ID = 'default-event';
+export const DEFAULT_EVENT_ID = 'default-event';
 let globalCurrentEventId: string = DEFAULT_EVENT_ID;
 
 /**

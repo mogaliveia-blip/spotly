@@ -16,7 +16,7 @@ import { Suspense, useEffect, useState, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AppLayout } from '@/components/layout/app-layout';
 import { useAuth } from '@/hooks/use-auth-user';
-import { fetchPois, deletePoi } from '@/lib/data';
+import { fetchPois, deletePoi, DEFAULT_EVENT_ID } from '@/lib/data';
 import type { POI, MainCategory } from '@/lib/types';
 import { categoriesMap } from '@/lib/types';
 import { isSponsorActive } from '@/lib/sponsor-utils';
@@ -50,7 +50,8 @@ function POIsTable() {
   useEffect(() => {
     async function getPois() {
       try {
-        const poiData = await fetchPois();
+        // ✅ Explicitly fetch from global scope
+        const poiData = await fetchPois(DEFAULT_EVENT_ID);
         setPois(poiData);
       } catch (error) {
         console.error("Impossible de récupérer les POIs", error);
@@ -76,7 +77,8 @@ function POIsTable() {
 
   const handleDelete = (poiId: string) => {
     try {
-      deletePoi(poiId);
+      // ✅ Explicitly delete from global scope
+      deletePoi(poiId, DEFAULT_EVENT_ID);
       setPois(pois.filter(p => p.id !== poiId));
       toast({
         title: "POI supprimé",

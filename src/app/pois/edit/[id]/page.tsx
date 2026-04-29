@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { AppLayout } from '@/components/layout/app-layout';
+import { DEFAULT_EVENT_ID } from '@/lib/data';
 
 /**
  * Page d'édition d'un point d'intérêt.
@@ -34,7 +35,8 @@ export default function EditPOIPage({
         </div>
         
         {id ? (
-          <POIForm poiId={id} />
+          /* ✅ Explicitly set to global scope */
+          <POIForm poiId={id} eventId={DEFAULT_EVENT_ID} />
         ) : (
           <div className="flex items-center justify-center p-12">
             <p className="text-muted-foreground">Préparation de l'éditeur...</p>
