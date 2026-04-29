@@ -22,46 +22,76 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
   const [event, setEvent] = useState<AppEvent | null>(null);
   const [currentEventId, setInternalEventId] = useState<string>('default-event');
   const [loading, setLoading] = useState(true);
+  const [resolvedSlug, setResolvedSlug] = useState<string | null>(null);
 
   // Le slug vient du paramètre de route dynamique [eventSlug]
   const eventSlug = params?.eventSlug as string;
 
+  // Détection immédiate du changement de slug pour forcer l'état de chargement
+  // même avant que le useEffect ne se déclenche (évite le "leak" de données anciennes)
+  const isTransitioning = eventSlug && eventSlug !== resolvedSlug;
+
   useEffect(() => {
+    let isMounted = true;
+
     async function resolveEvent() {
       setLoading(true);
-      if (eventSlug && eventSlug !== 'dashboard' && eventSlug !== 'admin') {
-        try {
-          const resolved = await fetchEventBySlug(eventSlug);
+      
+      // On traite le cas où on est sur une route globale (sans slug d'événement)
+      if (!eventSlug || eventSlug === 'dashboard' || eventSlug === 'admin') {
+        if (isMounted) {
+          setInternalEventId('default-event');
+          setCurrentEventId('default-event');
+          setEvent(null);
+          setResolvedSlug(eventSlug || 'global');
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        console.log(`[EventProvider] Resolving slug: ${eventSlug}`);
+        const resolved = await fetchEventBySlug(eventSlug);
+        
+        if (isMounted) {
           if (resolved) {
             setEvent(resolved);
             setInternalEventId(resolved.id);
             setCurrentEventId(resolved.id);
           } else {
-            // Fallback si slug invalide ou non trouvé
+            console.warn(`[EventProvider] Event not found for slug: ${eventSlug}`);
             setInternalEventId('default-event');
             setCurrentEventId('default-event');
             setEvent(null);
           }
-        } catch (error) {
-          console.error("Erreur lors de la résolution de l'événement:", error);
+          setResolvedSlug(eventSlug);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("[EventProvider] Error resolving event:", error);
+        if (isMounted) {
           setInternalEventId('default-event');
           setCurrentEventId('default-event');
           setEvent(null);
+          setResolvedSlug(eventSlug);
+          setLoading(false);
         }
-      } else {
-        // Mode par défaut (rétrocompatibilité ou URL racine)
-        setInternalEventId('default-event');
-        setCurrentEventId('default-event');
-        setEvent(null);
       }
-      setLoading(false);
     }
 
     resolveEvent();
+
+    return () => {
+      isMounted = false;
+    };
   }, [eventSlug]);
 
   return (
-    <EventContext.Provider value={{ event, eventId: currentEventId, loading }}>
+    <EventContext.Provider value={{ 
+      event, 
+      eventId: currentEventId, 
+      loading: loading || isTransitioning 
+    }}>
       {children}
     </EventContext.Provider>
   );

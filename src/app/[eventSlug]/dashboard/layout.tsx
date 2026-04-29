@@ -22,7 +22,11 @@ export default function DashboardLayout({
   const [configLoading, setConfigLoading] = useState(true);
 
   useEffect(() => {
-    if (eventLoading) return;
+    if (eventLoading) {
+        // Reset and show loading when event changes
+        setConfigLoading(true);
+        return;
+    }
 
     fetchAppConfig(eventId).then(appConfig => {
       setConfig(appConfig);

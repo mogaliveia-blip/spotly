@@ -79,39 +79,60 @@ export default function DashboardPage() {
     [loadFullPoi, searchParams, updateUrl]
   )
 
+  // Initialization logic - runs when eventId or loading state changes
   useEffect(() => {
-    if (eventLoading) return;
+    if (eventLoading) {
+      // CLEAR OLD DATA immediately when transition starts
+      console.log("[Dashboard] Transition detected, clearing state...");
+      setPois([]);
+      setActivePoi(null);
+      return;
+    }
+
+    let isMounted = true;
 
     async function init() {
       try {
+        console.log(`[Dashboard] Initializing data for eventId: ${eventId}`);
         const [poiData, marketing, app] = await Promise.all([
           fetchPoisLite(eventId),
           fetchMarketingConfig(eventId),
           fetchAppConfig(eventId)
         ])
-        setPois(poiData)
-        setMarketingConfig(marketing)
-        setAppConfig(app)
+        
+        if (isMounted) {
+          setPois(poiData)
+          setMarketingConfig(marketing)
+          setAppConfig(app)
+        }
       } catch (error) {
-        setAppMode('static-fallback')
-        toast({
-          title: 'Erreur',
-          description: 'Impossible de charger les données de l\'événement.',
-          variant: 'destructive'
-        })
+        if (isMounted) {
+          setAppMode('static-fallback')
+          toast({
+            title: 'Erreur',
+            description: 'Impossible de charger les données de l\'événement.',
+            variant: 'destructive'
+          })
+        }
       }
     }
     init()
+
+    return () => {
+      isMounted = false;
+    };
   }, [eventId, eventLoading, toast])
 
+  // Marketing Hero visibility logic
   useEffect(() => {
-    if (!marketingConfig?.heroEnabled) return
+    if (!marketingConfig?.heroEnabled || eventLoading) return
     const dismissed = sessionStorage.getItem(`heroDismissed_${eventId}`)
     if (!dismissed) setHeroVisible(true)
-  }, [marketingConfig, eventId])
+  }, [marketingConfig, eventId, eventLoading])
 
+  // Selection logic - select POI from URL if available
   useEffect(() => {
-    if (!pois.length) return
+    if (!pois.length || eventLoading) return
   
     const poiFromUrl = selectedPoiId
       ? pois.find((p) => p.id === selectedPoiId)
@@ -129,7 +150,7 @@ export default function DashboardPage() {
       void loadFullPoi(poiFromUrl.id)
       setIsListVisible(true)
     }
-  }, [selectedPoiId, pois, loadFullPoi])
+  }, [selectedPoiId, pois, loadFullPoi, eventLoading])
 
   const handleCategorySelect = (category: MainCategory | 'all') => {
     const params = new URLSearchParams(searchParams.toString())
