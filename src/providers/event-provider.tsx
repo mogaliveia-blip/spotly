@@ -35,14 +35,17 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
 
     async function resolveEvent() {
+      // Passage immédiat en mode loading
       setLoading(true);
-      
-      // On traite le cas où on est sur une route globale (sans slug d'événement)
+    
+      // Reset immédiat pour éviter toute fuite de l'ancien event
+      setInternalEventId('default-event');
+      setCurrentEventId('default-event');
+      setEvent(null);
+    
+      // Cas route globale (sans événement)
       if (!eventSlug || eventSlug === 'dashboard' || eventSlug === 'admin') {
         if (isMounted) {
-          setInternalEventId('default-event');
-          setCurrentEventId('default-event');
-          setEvent(null);
           setResolvedSlug(eventSlug || 'global');
           setLoading(false);
         }
@@ -50,16 +53,21 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        console.log(`[EventProvider] Resolving slug: ${eventSlug}`);
+        console.log(`[EventProvider] Tentative de résolution du slug: ${eventSlug}`);
         const resolved = await fetchEventBySlug(eventSlug);
         
         if (isMounted) {
           if (resolved) {
+            console.log(`[EventProvider] Événement résolu avec succès:`, {
+              id: resolved.id,
+              slug: resolved.slug,
+              name: resolved.name
+            });
             setEvent(resolved);
             setInternalEventId(resolved.id);
             setCurrentEventId(resolved.id);
           } else {
-            console.warn(`[EventProvider] Event not found for slug: ${eventSlug}`);
+            console.warn(`[EventProvider] Aucun événement trouvé pour le slug: ${eventSlug}`);
             setInternalEventId('default-event');
             setCurrentEventId('default-event');
             setEvent(null);
@@ -68,7 +76,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
         }
       } catch (error) {
-        console.error("[EventProvider] Error resolving event:", error);
+        console.error("[EventProvider] Erreur lors de la résolution de l'événement:", error);
         if (isMounted) {
           setInternalEventId('default-event');
           setCurrentEventId('default-event');

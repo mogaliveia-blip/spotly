@@ -82,10 +82,15 @@ export default function DashboardPage() {
   // Initialization logic - runs when eventId or loading state changes
   useEffect(() => {
     if (eventLoading) {
-      // CLEAR OLD DATA immediately when transition starts
-      console.log("[Dashboard] Transition detected, clearing state...");
+      // CLEAR OLD EVENT DATA immediately when transition starts
+      console.log("[Dashboard] Transition détectée, réinitialisation de l'état...");
+    
       setPois([]);
       setActivePoi(null);
+      setMarketingConfig(null);
+      setAppConfig(null);
+      setHeroVisible(false);
+    
       return;
     }
 
@@ -93,7 +98,7 @@ export default function DashboardPage() {
 
     async function init() {
       try {
-        console.log(`[Dashboard] Initializing data for eventId: ${eventId}`);
+        console.log(`[Dashboard] Initialisation des données pour eventId: ${eventId}`);
         const [poiData, marketing, app] = await Promise.all([
           fetchPoisLite(eventId),
           fetchMarketingConfig(eventId),
@@ -101,6 +106,10 @@ export default function DashboardPage() {
         ])
         
         if (isMounted) {
+          console.log(`[Dashboard] Données reçues pour eventId: ${eventId}`, {
+            count: poiData.length,
+            poiTitles: poiData.map(p => p.title)
+          });
           setPois(poiData)
           setMarketingConfig(marketing)
           setAppConfig(app)
