@@ -62,7 +62,12 @@ function POISidebarList() {
   const categoryFilter = (searchParams.get('category') as MainCategory) || 'all';
 
   useEffect(() => {
-    if (eventLoading) return;
+    // ✅ En mode global, on ne charge rien dans la liste latérale
+    if (eventLoading || eventId === 'default-event') {
+        setLoading(false);
+        setPois([]);
+        return;
+    }
     
     async function init() {
       try {
@@ -127,7 +132,7 @@ function POISidebarList() {
     return [...activeSponsors, ...otherPois];
   }, [pois, categoryFilter, userLocation]);
 
-  if (loading || eventLoading) {
+  if (eventLoading) {
     return (
       <div className="px-3 space-y-3">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -136,6 +141,9 @@ function POISidebarList() {
       </div>
     );
   }
+
+  // ✅ Rien à afficher en mode global
+  if (eventId === 'default-event') return null;
 
   return (
     <div className="flex flex-col">
@@ -266,7 +274,8 @@ export function SidebarNav() {
     },
   ];
 
-  const canAddPoi = role === 'admin' || role === 'editor';
+  // ✅ Un POI doit TOUJOURS être rattaché à un événement
+  const canAddPoi = (role === 'admin' || role === 'editor') && !!eventSlug;
 
   const filteredNavItems = navItems.filter((item) => {
     if (!item.auth) return true;
@@ -313,7 +322,8 @@ export function SidebarNav() {
             </SidebarMenu>
           </SidebarGroup>
 
-          {isDashboard && (
+          {/* ✅ N'afficher l'exploration que si un événement est actif */}
+          {isDashboard && !!eventSlug && (
             <SidebarGroup className="py-4">
               <SidebarSeparator className="mx-6 mb-6" />
               <div className="flex items-center justify-between px-6 mb-4">

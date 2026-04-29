@@ -19,9 +19,12 @@ export function Header() {
 
   const navItems = [
     { href: `${prefix}/dashboard`, icon: LayoutDashboard, label: 'Carte' },
-    { href: `${prefix}/pois`, icon: MapPin, label: 'Gérer les POIs', roles: ['editor', 'admin'] },
-    { href: `${prefix}/admin`, icon: Users, label: 'Admin', roles: ['admin'] },
-    { href: `${prefix}/admin/monitor`, icon: Monitor, label: 'Supervision', roles: ['admin'] },
+    // ✅ Masquer les outils de gestion en Mode Global
+    ...(eventSlug ? [
+        { href: `${prefix}/pois`, icon: MapPin, label: 'Gérer les POIs', roles: ['editor', 'admin'] },
+        { href: `${prefix}/admin`, icon: Users, label: 'Admin', roles: ['admin'] },
+        { href: `${prefix}/admin/monitor`, icon: Monitor, label: 'Supervision', roles: ['admin'] },
+    ] : [])
   ];
   
   // On ajoute "Mes Événements" si l'utilisateur est connecté

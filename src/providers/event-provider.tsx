@@ -24,18 +24,17 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [resolvedSlug, setResolvedSlug] = useState<string | null>(null);
 
-  // Le slug vient du paramètre de route dynamique [eventSlug]
   const eventSlug = params?.eventSlug as string;
 
-  // Détection immédiate du changement de slug pour forcer l'état de chargement
-  // même avant que le useEffect ne se déclenche (évite le "leak" de données anciennes)
-  const isTransitioning = eventSlug && eventSlug !== resolvedSlug;
+  // ✅ Correction de la détection de transition :
+  // On est en transition si le slug de l'URL ne correspond pas au slug actuellement résolu dans le state.
+  // Cela couvre l'entrée dans un event, le changement d'event, et le retour au mode global (undefined).
+  const isTransitioning = eventSlug !== (resolvedSlug === 'global' ? undefined : resolvedSlug);
 
   useEffect(() => {
     let isMounted = true;
 
     async function resolveEvent() {
-      // Passage immédiat en mode loading
       setLoading(true);
     
       // Reset immédiat pour éviter toute fuite de l'ancien event
@@ -46,7 +45,8 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       // Cas route globale (sans événement)
       if (!eventSlug || eventSlug === 'dashboard' || eventSlug === 'admin') {
         if (isMounted) {
-          setResolvedSlug(eventSlug || 'global');
+          console.log("[EventProvider] Mode Global détecté (pas de slug)");
+          setResolvedSlug('global');
           setLoading(false);
         }
         return;
@@ -58,16 +58,12 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         
         if (isMounted) {
           if (resolved) {
-            console.log(`[EventProvider] Événement résolu avec succès:`, {
-              id: resolved.id,
-              slug: resolved.slug,
-              name: resolved.name
-            });
+            console.log(`[EventProvider] Événement résolu: ${resolved.id} (${resolved.name})`);
             setEvent(resolved);
             setInternalEventId(resolved.id);
             setCurrentEventId(resolved.id);
           } else {
-            console.warn(`[EventProvider] Aucun événement trouvé pour le slug: ${eventSlug}`);
+            console.warn(`[EventProvider] Aucun événement pour le slug: ${eventSlug}`);
             setInternalEventId('default-event');
             setCurrentEventId('default-event');
             setEvent(null);
@@ -76,7 +72,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
         }
       } catch (error) {
-        console.error("[EventProvider] Erreur lors de la résolution de l'événement:", error);
+        console.error("[EventProvider] Erreur résolution:", error);
         if (isMounted) {
           setInternalEventId('default-event');
           setCurrentEventId('default-event');

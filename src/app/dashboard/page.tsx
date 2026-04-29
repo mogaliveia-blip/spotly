@@ -1,4 +1,3 @@
-
 'use client'
 
 import { POIMapAdapter } from '@/components/poi/poi-map-adapter'
@@ -13,13 +12,17 @@ import { HeroOverlay } from '@/components/marketing/hero-overlay'
 import { PoiListBottomSheet } from '@/components/poi/poi-list-bottom-sheet'
 import { useGeolocation } from '@/providers/geolocation-provider'
 import { Button } from '@/components/ui/button'
-import { List, Loader2 } from 'lucide-react'
+import { List, Loader2, Map as MapIcon } from 'lucide-react'
 import { MobilePOIBottomSheet } from '@/components/poi/mobile-poi-bottom-sheet'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useEvent } from '@/providers/event-provider'
 
 type AppMode = 'normal' | 'map-fallback' | 'static-fallback'
 
+/**
+ * Dashboard Racine (/dashboard)
+ * Ce dashboard est le "Mode Global". Il ne doit pas afficher de POIs rattachés à des événements.
+ */
 export default function DashboardPage() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -36,7 +39,7 @@ export default function DashboardPage() {
   const [activePoi, setActivePoi] = useState<POILite | POI | null>(null)
   const [heroVisible, setHeroVisible] = useState(false)
   const [appMode, setAppMode] = useState<AppMode>('normal')
-  const [isListVisible, setIsListVisible] = useState(true)
+  const [isListVisible, setIsListVisible] = useState(false) // Par défaut masqué en global
 
   const selectedPoiId = searchParams.get('poi')
   const categoryFilter = searchParams.get('category') || 'all'
@@ -81,12 +84,18 @@ export default function DashboardPage() {
   )
 
   useEffect(() => {
-    // 🔥 On attend que le provider d'événement ait fini de résoudre le contexte
-    // Cela garantit qu'on ne charge pas les données de l'événement précédent
-    // lors d'une navigation ou d'un logout.
     if (eventLoading) return;
 
     async function init() {
+      // ✅ Sécurité : Si on est en Mode Global (default-event), on n'affiche rien.
+      if (eventId === 'default-event') {
+        console.log("[Dashboard] Mode Global : Aucune donnée à charger.");
+        setPois([]);
+        setMarketingConfig(null);
+        setAppConfig(null);
+        return;
+      }
+
       try {
         console.log(`[Dashboard] Initializing data for eventId: ${eventId}`);
         const [poiData, marketing, app] = await Promise.all([
@@ -110,7 +119,7 @@ export default function DashboardPage() {
   }, [eventId, eventLoading, toast])
 
   useEffect(() => {
-    if (!marketingConfig?.heroEnabled) return
+    if (!marketingConfig?.heroEnabled || eventId === 'default-event') return
     const dismissed = sessionStorage.getItem(`heroDismissed_${eventId}`)
     if (!dismissed) setHeroVisible(true)
   }, [marketingConfig, eventId])
@@ -124,12 +133,9 @@ export default function DashboardPage() {
   
     setActivePoi(prev => {
       if (!poiFromUrl) return null
-  
-      // Si on a déjà ce POI et qu'il est complet, on garde la version complète
       if (prev && prev.id === poiFromUrl.id && 'description' in prev) {
         return prev
       }
-  
       return poiFromUrl
     })
   
@@ -193,13 +199,26 @@ export default function DashboardPage() {
           />
         )}
 
+        {/* Message informatif si aucun événement sélectionné */}
+        {eventId === 'default-event' && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-6">
+                <div className="bg-background/80 backdrop-blur-md p-8 rounded-[2rem] border shadow-2xl text-center max-w-sm pointer-events-auto">
+                    <div className="mx-auto h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                        <MapIcon className="h-6 w-6 text-primary" />
+                    </div>
+                    <h2 className="text-xl font-bold mb-2">Bienvenue sur Spotly</h2>
+                    <p className="text-sm text-muted-foreground mb-6">Sélectionnez un événement dans le menu pour explorer ses points d'intérêt.</p>
+                </div>
+            </div>
+        )}
+
         {appMode === 'map-fallback' && (
           <div className="flex items-center justify-center h-full bg-muted text-muted-foreground p-8 text-center">
             La carte est momentanément indisponible. Utilisez la liste ci-dessous.
           </div>
         )}
 
-        {!isListVisible && !activePoi && (
+        {!isListVisible && !activePoi && pois.length > 0 && (
           <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-bottom-4 duration-500 pointer-events-auto">
             <Button 
               onClick={() => setIsListVisible(true)}
@@ -226,7 +245,7 @@ export default function DashboardPage() {
         selectedPoiId={activePoi?.id || null}
         userLocation={userLocation}
         categoryFilter={categoryFilter as MainCategory | 'all'}
-        isVisible={isListVisible}
+        isVisible={isListVisible && pois.length > 0}
       />
     </div>
   )
