@@ -44,8 +44,11 @@ export function EventSwitcher() {
       <Select 
         value={currentSlug} 
         onValueChange={(slug) => {
-          if (slug === 'default') router.push('/dashboard');
-          else router.push(`/${slug}/dashboard`);
+          if (slug === 'default') {
+            router.push('/dashboard');
+          } else {
+            router.push(`/${slug}/dashboard`);
+          }
         }}
       >
         <SelectTrigger className="w-[140px] sm:w-[200px] h-9 text-xs font-bold rounded-2xl bg-muted/50 border-none hover:bg-muted transition-colors">

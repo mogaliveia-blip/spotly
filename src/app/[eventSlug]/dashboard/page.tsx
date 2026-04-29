@@ -81,16 +81,21 @@ export default function DashboardPage() {
 
   // Initialization logic - runs when eventId or loading state changes
   useEffect(() => {
-    if (eventLoading) {
-      // CLEAR OLD EVENT DATA immediately when transition starts
-      console.log("[Dashboard] Transition détectée, réinitialisation de l'état...");
-    
+    const isEventRoute = pathname.split('/').length > 2;
+
+    if (
+      eventLoading ||
+      (isEventRoute && eventId === 'default-event')
+    ) {
+      // CLEAR OLD EVENT DATA while waiting for the real event resolution
+      console.log("[Dashboard] En attente de résolution de l'événement, reset de l'état...");
+
       setPois([]);
       setActivePoi(null);
       setMarketingConfig(null);
       setAppConfig(null);
       setHeroVisible(false);
-    
+
       return;
     }
 
