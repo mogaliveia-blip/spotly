@@ -130,7 +130,7 @@ function AppConfigCard() {
             Avis et Commentaires
           </Label>
           <p className="text-sm text-muted-foreground">
-            Activer ou désactiver la possibilité de commenter les lieux.
+            Modifier globalement la possibilité de commenter les lieux.
           </p>
         </div>
         <div className="flex items-center gap-2">

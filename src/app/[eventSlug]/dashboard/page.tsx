@@ -79,23 +79,13 @@ export default function DashboardPage() {
     [loadFullPoi, searchParams, updateUrl]
   )
 
-  // Initialization logic - runs when eventId or loading state changes
   useEffect(() => {
-    const isEventRoute = pathname.split('/').length > 2;
-
-    if (
-      eventLoading ||
-      (isEventRoute && eventId === 'default-event')
-    ) {
-      // CLEAR OLD EVENT DATA while waiting for the real event resolution
-      console.log("[Dashboard] En attente de résolution de l'événement, reset de l'état...");
-
+    if (eventLoading) {
       setPois([]);
       setActivePoi(null);
       setMarketingConfig(null);
       setAppConfig(null);
       setHeroVisible(false);
-
       return;
     }
 
@@ -103,7 +93,7 @@ export default function DashboardPage() {
 
     async function init() {
       try {
-        console.log(`[Dashboard] Initialisation des données pour eventId: ${eventId}`);
+        console.log(`[Dashboard] Chargement des données pour eventId: ${eventId}`);
         const [poiData, marketing, app] = await Promise.all([
           fetchPoisLite(eventId),
           fetchMarketingConfig(eventId),
@@ -111,10 +101,7 @@ export default function DashboardPage() {
         ])
         
         if (isMounted) {
-          console.log(`[Dashboard] Données reçues pour eventId: ${eventId}`, {
-            count: poiData.length,
-            poiTitles: poiData.map(p => p.title)
-          });
+          console.log(`[Dashboard] Données reçues pour eventId: ${eventId}`, { count: poiData.length });
           setPois(poiData)
           setMarketingConfig(marketing)
           setAppConfig(app)
@@ -137,14 +124,12 @@ export default function DashboardPage() {
     };
   }, [eventId, eventLoading, toast])
 
-  // Marketing Hero visibility logic
   useEffect(() => {
     if (!marketingConfig?.heroEnabled || eventLoading) return
     const dismissed = sessionStorage.getItem(`heroDismissed_${eventId}`)
     if (!dismissed) setHeroVisible(true)
   }, [marketingConfig, eventId, eventLoading])
 
-  // Selection logic - select POI from URL if available
   useEffect(() => {
     if (!pois.length || eventLoading) return
   

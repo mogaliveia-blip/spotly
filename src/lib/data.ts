@@ -40,24 +40,7 @@ import {
 
 // --- MULTI-EVENT ENGINE ---
 
-// Utilisation d'une constante pour l'ID par défaut pour éviter les fautes de frappe
 export const DEFAULT_EVENT_ID = 'default-event';
-let globalCurrentEventId: string = DEFAULT_EVENT_ID;
-
-/**
- * Retourne l'ID de l'événement courant (défini par le routing/provider).
- */
-export function getCurrentEventId(): string {
-  return globalCurrentEventId;
-}
-
-/**
- * Définit l'ID de l'événement courant. Appelé par l'EventProvider.
- */
-export function setCurrentEventId(id: string) {
-  console.log(`[Data] Context Switch: ${globalCurrentEventId} -> ${id}`);
-  globalCurrentEventId = id || DEFAULT_EVENT_ID;
-}
 
 /**
  * Résout un événement à partir de son slug URL.
@@ -65,7 +48,6 @@ export function setCurrentEventId(id: string) {
 export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
   if (!slug || slug === 'default' || slug === 'dashboard' || slug === 'admin') return null;
   
-  // ✅ Normalisation : Firestore est sensible à la casse
   const normalizedSlug = slug.toLowerCase().trim();
   
   try {
@@ -73,10 +55,7 @@ export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
     const q = query(eventsRef, where('slug', '==', normalizedSlug), limit(1));
     const snap = await getDocs(q);
     
-    if (snap.empty) {
-      console.warn(`[Data] Aucun événement trouvé pour le slug normalisé: ${normalizedSlug}`);
-      return null;
-    }
+    if (snap.empty) return null;
     
     const d = snap.docs[0];
     const data = d.data();
@@ -94,7 +73,6 @@ export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
 
 /**
  * Récupère tous les événements où l'utilisateur est membre.
- * Retourne les événements avec le rôle spécifique de l'utilisateur.
  */
 export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRole?: string })[]> {
   try {
@@ -192,9 +170,6 @@ export async function createEvent(data: { name: string; slug: string; ownerId: s
   return { id, ...eventData, createdAt: new Date(), updatedAt: new Date() } as AppEvent;
 }
 
-/**
- * Centralise les chemins Firestore pour gérer le multi-événement.
- */
 export const dbPaths = {
   pois: (eventId: string) => eventId === DEFAULT_EVENT_ID ? 'pois' : `events/${eventId}/pois`,
   poisPublic: (eventId: string) => eventId === DEFAULT_EVENT_ID ? 'pois_public' : `events/${eventId}/pois_public`,
@@ -204,7 +179,7 @@ export const dbPaths = {
 
 // --- CONFIG FUNCTIONS ---
 
-export async function fetchAppConfig(eventId: string = getCurrentEventId()): Promise<AppConfig> {
+export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
   try {
     const configRef = doc(db, dbPaths.config(eventId), 'main')
     const configSnap = await getDoc(configRef)
@@ -213,7 +188,7 @@ export async function fetchAppConfig(eventId: string = getCurrentEventId()): Pro
   return { isLandingPageActive: true, festivalMode: false, reviewsEnabled: true }
 }
 
-export async function updateAppConfig(config: Partial<AppConfig>, eventId: string = getCurrentEventId()): Promise<void> {
+export async function updateAppConfig(config: Partial<AppConfig>, eventId: string): Promise<void> {
   const configRef = doc(db, dbPaths.config(eventId), 'main')
   try {
     await setDoc(configRef, config, { merge: true })
@@ -224,7 +199,7 @@ export async function updateAppConfig(config: Partial<AppConfig>, eventId: strin
   }
 }
 
-export async function fetchMarketingConfig(eventId: string = getCurrentEventId()): Promise<MarketingConfig> {
+export async function fetchMarketingConfig(eventId: string): Promise<MarketingConfig> {
   try {
     const configRef = doc(db, dbPaths.config(eventId), 'marketing')
     const configSnap = await getDoc(configRef)
@@ -240,7 +215,7 @@ export async function fetchMarketingConfig(eventId: string = getCurrentEventId()
   }
 }
 
-export async function updateMarketingConfig(config: Partial<MarketingConfig>, eventId: string = getCurrentEventId()): Promise<void> {
+export async function updateMarketingConfig(config: Partial<MarketingConfig>, eventId: string): Promise<void> {
   const configRef = doc(db, dbPaths.config(eventId), 'marketing')
   try {
     await setDoc(configRef, config, { merge: true })
@@ -302,7 +277,7 @@ export async function updateUserApproval(uid: string, isApproved: boolean): Prom
   }
 }
 
-export async function fetchPois(eventId: string = getCurrentEventId()): Promise<POI[]> {
+export async function fetchPois(eventId: string): Promise<POI[]> {
   try {
     const poiCollection = collection(db, dbPaths.pois(eventId))
     const poiSnapshot = await getDocs(poiCollection)
@@ -312,7 +287,7 @@ export async function fetchPois(eventId: string = getCurrentEventId()): Promise<
   }
 }
 
-export async function fetchPoisLite(eventId: string = getCurrentEventId()): Promise<POILite[]> {
+export async function fetchPoisLite(eventId: string): Promise<POILite[]> {
   const colRef = collection(db, dbPaths.poisPublic(eventId))
   try {
     const cacheSnap = await getDocsFromCache(colRef)
@@ -330,7 +305,7 @@ export async function fetchPoisLite(eventId: string = getCurrentEventId()): Prom
   }
 }
 
-export async function fetchPoiById(id: string, eventId: string = getCurrentEventId()): Promise<POI | undefined> {
+export async function fetchPoiById(id: string, eventId: string): Promise<POI | undefined> {
   try {
     const poiRef = doc(db, dbPaths.pois(eventId), id)
     const poiSnap = await getDoc(poiRef)
@@ -339,7 +314,7 @@ export async function fetchPoiById(id: string, eventId: string = getCurrentEvent
   return undefined
 }
 
-export async function fetchReviewsByPoiId(poiId: string, eventId: string = getCurrentEventId()): Promise<Review[]> {
+export async function fetchReviewsByPoiId(poiId: string, eventId: string): Promise<Review[]> {
   try {
     const reviewsCollection = collection(db, dbPaths.pois(eventId), poiId, 'reviews')
     const reviewSnapshot = await getDocs(reviewsCollection)
@@ -354,7 +329,7 @@ export async function fetchReviewsByPoiId(poiId: string, eventId: string = getCu
   }
 }
 
-export async function addReview(poiId: string, reviewData: Omit<Review, 'id' | 'poiId' | 'createdAt'>, eventId: string = getCurrentEventId()): Promise<Review> {
+export async function addReview(poiId: string, reviewData: Omit<Review, 'id' | 'poiId' | 'createdAt'>, eventId: string): Promise<Review> {
   const reviewsCollection = collection(db, dbPaths.pois(eventId), poiId, 'reviews');
   const poiRef = doc(db, dbPaths.pois(eventId), poiId);
   try {
@@ -400,7 +375,7 @@ export function updateUserRole(uid: string, role: UserRole): void {
  */
 export async function createPoi(
   poiData: Omit<POI, 'id' | 'averageRating' | 'reviewCount'>,
-  eventId: string = getCurrentEventId()
+  eventId: string
 ): Promise<string> {
   const poiCollection = collection(db, dbPaths.pois(eventId))
   const poiPublicCollection = collection(db, dbPaths.poisPublic(eventId))
@@ -441,7 +416,7 @@ export async function createPoi(
 export async function updatePoi(
   poiId: string,
   poiData: Partial<Omit<POI, 'id' | 'averageRating' | 'reviewCount'>>,
-  eventId: string = getCurrentEventId()
+  eventId: string
 ): Promise<void> {
   const poiRef = doc(db, dbPaths.pois(eventId), poiId)
   const poiPublicRef = doc(db, dbPaths.poisPublic(eventId), poiId)
@@ -474,7 +449,7 @@ export async function updatePoi(
   }
 }
 
-export async function deletePoi(poiId: string, eventId: string = getCurrentEventId()): Promise<void> {
+export async function deletePoi(poiId: string, eventId: string): Promise<void> {
   const poiRef = doc(db, dbPaths.pois(eventId), poiId)
   const poiPublicRef = doc(db, dbPaths.poisPublic(eventId), poiId)
   const storagePrefix = eventId === DEFAULT_EVENT_ID ? '' : `events/${eventId}/`;

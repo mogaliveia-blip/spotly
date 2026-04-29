@@ -16,7 +16,7 @@ import { useGeolocation } from '@/providers/geolocation-provider';
 import { Navigation, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { SponsorBadge } from '../sponsor/sponsor-badge';
 import { isSponsorActive } from '@/lib/sponsor-utils';
-import { cn } from '@/lib/utils';
+import { useEvent } from '@/providers/event-provider';
 
 type POIAny = POILite | POI;
 
@@ -37,17 +37,16 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewsEnabled, setReviewsEnabled] = useState<boolean | null>(null);
   
-  // Navigation Galerie
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const touchStartX = useRef<number | null>(null);
 
   const { user } = useAuth();
   const { userLocation } = useGeolocation();
+  const { eventId } = useEvent();
   const lastPoiIdRef = useRef<string | null>(null);
 
   const full = isFullPoi(poi);
 
-  // Agrégation de toutes les images pour la lightbox
   const allImages = useMemo(() => {
     const imgs: string[] = [];
     if (poi.headerPhotoUrl) imgs.push(poi.headerPhotoUrl);
@@ -58,14 +57,14 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   }, [poi.headerPhotoUrl, full, (poi as any).galleryUrls]);
 
   useEffect(() => {
-    fetchAppConfig()
+    fetchAppConfig(eventId)
       .then((config: AppConfig) => {
         setReviewsEnabled(config.reviewsEnabled ?? true);
       })
       .catch(() => {
         setReviewsEnabled(true);
       });
-  }, []);
+  }, [eventId]);
 
   useEffect(() => {
     setPoi(prev => {
@@ -84,13 +83,13 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
     lastPoiIdRef.current = poiId;
     setReviewsLoading(true);
   
-    fetchReviewsByPoiId(poiId)
+    fetchReviewsByPoiId(poiId, eventId)
       .then(setReviews)
       .catch(err =>
         console.error("Impossible de charger les avis pour le POI", err)
       )
       .finally(() => setReviewsLoading(false));
-  }, [initialPoi, reviewsEnabled, reviews.length]);
+  }, [initialPoi, reviewsEnabled, reviews.length, eventId]);
 
   const handleReviewAdded = useCallback((newReview: Review) => {
     setReviews(prev => [newReview, ...prev]);
@@ -108,7 +107,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
     setSelectedIndex((selectedIndex + 1) % allImages.length);
   };
 
-  // Gestion du Swipe Mobile
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
   };
@@ -118,7 +116,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
     const touchEndX = e.changedTouches[0].clientX;
     const diff = touchStartX.current - touchEndX;
 
-    if (Math.abs(diff) > 50) { // Seuil de 50px pour déclencher le swipe
+    if (Math.abs(diff) > 50) {
       if (diff > 0) handleNext();
       else handlePrev();
     }
@@ -141,7 +139,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
 
   return (
     <div className="space-y-6 min-h-[40vh] flex flex-col">
-      {/* Photo d'en-tête */}
       <div className="relative aspect-video w-full bg-muted/30 rounded-3xl overflow-hidden shadow-sm shrink-0">
         {poi.headerPhotoUrl ? (
           <Image
@@ -158,7 +155,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
       </div>
 
       <div className="space-y-4 flex-1">
-        {/* Titre et Badge Sponsor */}
         <div className="flex flex-wrap items-center gap-2">
           {poi?.sponsor && isSponsorActive(poi) && (
             <SponsorBadge sponsor={poi.sponsor} className="px-3 py-1 text-xs" />
@@ -166,7 +162,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
           <h3 className="font-bold text-2xl tracking-tight leading-tight w-full">{poi.title}</h3>
         </div>
 
-        {/* Actions et Distance */}
         <div className="flex flex-wrap items-center gap-4">
           {userLocation && (
             <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-full">
@@ -190,7 +185,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
           </Button>
         </div>
 
-        {/* Description */}
         <div className="pt-2 min-h-[80px]">
           {full ? (
             <p className="text-base text-muted-foreground leading-relaxed whitespace-pre-line">{poi.description}</p>
@@ -204,7 +198,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
         </div>
       </div>
 
-      {/* Galerie */}
       {full && (
         <div className="pt-2">
           <POIGallery
@@ -216,7 +209,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
 
       <div className="h-px bg-border w-full my-6" />
 
-      {/* Section Avis */}
       {reviewsEnabled === true && (
         <div className="space-y-6 pb-6">
           <h4 className="font-bold text-lg tracking-tight">Avis de la communauté</h4>
@@ -251,7 +243,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
         </div>
       )}
 
-      {/* Lightbox avec Navigation */}
       {selectedIndex !== null && (
         <div
           className="fixed inset-0 z-[999] bg-black/95 flex items-center justify-center backdrop-blur-md animate-in fade-in duration-300"
@@ -259,7 +250,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
         >
-          {/* Bouton Fermer */}
           <button
             className="absolute z-[1001] bg-black/60 hover:bg-black/80 text-white rounded-full p-3 transition-all active:scale-95 shadow-2xl backdrop-blur-sm border border-white/20"
             onClick={() => setSelectedIndex(null)}
@@ -272,7 +262,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
             <X className="h-6 w-6" />
           </button>
 
-          {/* Navigation Controls */}
           {allImages.length > 1 && (
             <>
               <button
@@ -298,7 +287,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
             </>
           )}
 
-          {/* Image */}
           <div className="relative w-full h-full flex items-center justify-center p-4">
             <img
               src={allImages[selectedIndex]}
@@ -306,8 +294,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
               className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl animate-in zoom-in-95 duration-300 select-none"
               onClick={(e) => e.stopPropagation()}
             />
-            
-            {/* Indicateur de position */}
             <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-black/50 text-white px-4 py-1.5 rounded-full text-sm font-medium backdrop-blur-sm">
               {selectedIndex + 1} / {allImages.length}
             </div>

@@ -14,6 +14,7 @@ import { addReview } from '@/lib/data';
 import type { Review } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useEvent } from '@/providers/event-provider';
 
 const reviewSchema = z.object({
   rating: z.number().min(1, { message: 'Veuillez sélectionner une note.' }).max(5),
@@ -30,6 +31,7 @@ interface ReviewFormProps {
 export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { eventId } = useEvent();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [hoverRating, setHoverRating] = useState(0);
@@ -61,7 +63,7 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
     };
 
     try {
-      const newReview = await addReview(poiId, reviewData);
+      const newReview = await addReview(poiId, reviewData, eventId);
 
       onReviewAdded(newReview);
       form.reset();
@@ -74,22 +76,12 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
       router.refresh();
 
     } catch (error: any) {
-
-      // 🔥 DEBUG TEMPORAIRE
-      console.error("🔥 ERREUR FIRESTORE COMPLETE :", error);
-      if (error?.code) {
-        console.error("🔥 CODE :", error.code);
-      }
-      if (error?.message) {
-        console.error("🔥 MESSAGE :", error.message);
-      }
-
+      console.error("🔥 ERREUR FIRESTORE :", error);
       toast({
         title: 'Erreur lors de la soumission de l\'avis',
         description: 'Veuillez réessayer plus tard.',
         variant: 'destructive',
       });
-
     } finally {
       setLoading(false);
     }

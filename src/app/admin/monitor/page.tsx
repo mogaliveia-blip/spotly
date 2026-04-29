@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { useRouter } from 'next/navigation';
-import { fetchUsers, fetchPois, fetchAppConfig, fetchMarketingConfig } from '@/lib/data';
-import type { AppUser, POI, AppConfig, MarketingConfig } from '@/lib/types';
+import { fetchUsers, fetchPois, fetchAppConfig, fetchMarketingConfig, DEFAULT_EVENT_ID } from '@/lib/data';
+import type { MonitorStats, POI, AppConfig, MarketingConfig } from '@/lib/types';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,7 +33,7 @@ import { fr } from 'date-fns/locale';
 import { mapsConfig } from '@/lib/firebase-config';
 import { Button } from '@/components/ui/button';
 
-interface MonitorStats {
+interface MonitorStatsData {
   totalPois: number;
   activePartners: number;
   totalReviews: number;
@@ -71,8 +71,8 @@ const StatCard = ({ title, value, icon: Icon, loading, delta }: { title: string;
 export default function MonitorPage() {
     const { role, loading: authLoading } = useAuth();
     const router = useRouter();
-    const [stats, setStats] = useState<MonitorStats | null>(null);
-    const [prevStats, setPrevStats] = useState<MonitorStats | null>(null);
+    const [stats, setStats] = useState<MonitorStatsData | null>(null);
+    const [prevStats, setPrevStats] = useState<MonitorStatsData | null>(null);
     const [loading, setLoading] = useState(true);
     const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
     const isInitialLoad = useRef(true);
@@ -84,16 +84,16 @@ export default function MonitorPage() {
         try {
             const [users, pois, appConfig, marketingConfig] = await Promise.all([
                 fetchUsers(),
-                fetchPois(),
-                fetchAppConfig(),
-                fetchMarketingConfig(),
+                fetchPois(DEFAULT_EVENT_ID),
+                fetchAppConfig(DEFAULT_EVENT_ID),
+                fetchMarketingConfig(DEFAULT_EVENT_ID),
             ]);
 
             const totalReviews = pois.reduce((acc, poi) => acc + (poi.reviewCount || 0), 0);
             const activePartners = pois.filter(isSponsorActive).length;
             const poisWithSponsorField = pois.filter(p => !!p.sponsor).length;
 
-            const newStats: MonitorStats = {
+            const newStats: MonitorStatsData = {
                 totalPois: pois.length,
                 activePartners,
                 totalReviews,
@@ -143,7 +143,6 @@ export default function MonitorPage() {
     const poisDelta = stats && prevStats ? stats.totalPois - prevStats.totalPois : 0;
     const reviewsDelta = stats && prevStats ? stats.totalReviews - prevStats.totalReviews : 0;
 
-    const isMapIdDefined = !!process.env.NEXT_PUBLIC_GOOGLE_MAP_ID;
     const isMapApiKeyDefined = !!mapsConfig.apiKey;
 
     if (authLoading || !stats) {
@@ -160,8 +159,6 @@ export default function MonitorPage() {
         <AppLayout>
             <div className="h-full overflow-y-auto p-6">
                 <div className="space-y-6">
-
-                    {/* HEADER */}
 
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex items-center gap-4">
@@ -187,8 +184,6 @@ export default function MonitorPage() {
                             </div>
                         </div>
                     </div>
-
-                    {/* ALERTES */}
 
                     <Card>
                         <CardHeader>
@@ -247,16 +242,12 @@ export default function MonitorPage() {
                         </CardContent>
                     </Card>
 
-                    {/* STATS */}
-
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <StatCard title="Total Utilisateurs" value={stats.totalUsers} icon={Users} loading={loading} />
                         <StatCard title="Total POIs" value={stats.totalPois} icon={MapPin} loading={loading} delta={poisDelta} />
                         <StatCard title="Total Avis" value={stats.totalReviews} icon={Star} loading={loading} delta={reviewsDelta} />
                         <StatCard title="Partenaires Actifs" value={stats.activePartners} icon={Handshake} loading={loading} />
                     </div>
-
-                    {/* SYSTEM + MAP */}
 
                     <div className="grid gap-4 md:grid-cols-2">
 
@@ -308,21 +299,10 @@ export default function MonitorPage() {
                                     </AlertTitle>
                                 </Alert>
 
-                                <Alert>
-                                    <AlertTitle className="flex items-center justify-between">
-                                        <span>ID de carte</span>
-                                        <Badge variant={isMapIdDefined ? "default" : "destructive"}>
-                                            {isMapIdDefined ? "Présent" : "Absent"}
-                                        </Badge>
-                                    </AlertTitle>
-                                </Alert>
-
                             </CardContent>
                         </Card>
 
                     </div>
-
-                    {/* GA4 */}
 
                     <Card>
                         <CardHeader>

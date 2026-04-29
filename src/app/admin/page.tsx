@@ -1,4 +1,3 @@
-// src/app/admin/page.tsx
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
@@ -7,12 +6,13 @@ import { useRouter } from 'next/navigation';
 import {
   fetchUsers,
   updateUserRole,
-  updateUserApproval, // ✅ Nouvelle fonction
+  updateUserApproval,
   fetchAppConfig,
   updateAppConfig,
   fetchMarketingConfig,
   updateMarketingConfig,
-  uploadFile
+  uploadFile,
+  DEFAULT_EVENT_ID
 } from '@/lib/data';
 import type { AppUser, UserRole, AppConfig, MarketingConfig } from '@/lib/types';
 import { AppLayout } from '@/components/layout/app-layout';
@@ -42,7 +42,7 @@ function AppConfigCard() {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchAppConfig()
+    fetchAppConfig(DEFAULT_EVENT_ID)
       .then(appConfig => {
         setConfig(appConfig);
         setLoading(false);
@@ -60,7 +60,7 @@ function AppConfigCard() {
   const handleToggleLandingPage = async (isActive: boolean) => {
     setSavingKey('landing');
     try {
-      await updateAppConfig({ isLandingPageActive: isActive });
+      await updateAppConfig({ isLandingPageActive: isActive }, DEFAULT_EVENT_ID);
       setConfig(prev => prev ? { ...prev, isLandingPageActive: isActive } : prev);
       toast({
         title: 'Configuration mise à jour',
@@ -81,7 +81,7 @@ function AppConfigCard() {
   const handleToggleReviews = async (isEnabled: boolean) => {
     setSavingKey('reviews');
     try {
-      await updateAppConfig({ reviewsEnabled: isEnabled });
+      await updateAppConfig({ reviewsEnabled: isEnabled }, DEFAULT_EVENT_ID);
       setConfig(prev => prev ? { ...prev, reviewsEnabled: isEnabled } : prev);
       toast({
         title: 'Configuration mise à jour',
@@ -105,8 +105,6 @@ function AppConfigCard() {
 
   return (
     <div className="space-y-4">
-
-      {/* LANDING PAGE */}
       <div className="flex items-center space-x-4 rounded-md border p-4">
         <div className="flex-1 space-y-1">
           <Label htmlFor="landing-page-switch" className="text-base font-medium">
@@ -127,7 +125,6 @@ function AppConfigCard() {
         </div>
       </div>
 
-      {/* REVIEWS TOGGLE */}
       <div className="flex items-center space-x-4 rounded-md border p-4">
         <div className="flex-1 space-y-1">
           <Label htmlFor="reviews-switch" className="text-base font-medium">
@@ -160,7 +157,7 @@ function MarketingConfigCard() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchMarketingConfig()
+    fetchMarketingConfig(DEFAULT_EVENT_ID)
       .then(data => {
         setConfig(data);
         setLoading(false);
@@ -206,7 +203,7 @@ function MarketingConfigCard() {
         imageUrl = url;
       }
       const newConfig = { ...config, heroImageUrl: imageUrl };
-      await updateMarketingConfig(newConfig);
+      await updateMarketingConfig(newConfig, DEFAULT_EVENT_ID);
       setConfig(newConfig);
       setImageFile(null);
       setPreviewUrl(null);

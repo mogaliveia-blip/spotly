@@ -50,7 +50,6 @@ function POIsTable() {
   useEffect(() => {
     async function getPois() {
       try {
-        // ✅ Explicitly fetch from global scope
         const poiData = await fetchPois(DEFAULT_EVENT_ID);
         setPois(poiData);
       } catch (error) {
@@ -77,7 +76,6 @@ function POIsTable() {
 
   const handleDelete = (poiId: string) => {
     try {
-      // ✅ Explicitly delete from global scope
       deletePoi(poiId, DEFAULT_EVENT_ID);
       setPois(pois.filter(p => p.id !== poiId));
       toast({

@@ -4,7 +4,7 @@ import { POIMapAdapter } from '@/components/poi/poi-map-adapter'
 import type { POI, POILite, MainCategory, MarketingConfig, AppConfig } from '@/lib/types'
 import { useSearchParams, usePathname } from 'next/navigation'
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
-import { fetchPoisLite, fetchPoiById, fetchMarketingConfig, fetchAppConfig } from '@/lib/data'
+import { fetchPoisLite, fetchPoiById, fetchMarketingConfig, fetchAppConfig, DEFAULT_EVENT_ID } from '@/lib/data'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth-user'
 import { CategoryFilter } from '@/components/poi/category-filter'
@@ -19,10 +19,6 @@ import { useEvent } from '@/providers/event-provider'
 
 type AppMode = 'normal' | 'map-fallback' | 'static-fallback'
 
-/**
- * Dashboard Racine (/dashboard)
- * Ce dashboard est le "Mode Global". Il ne doit pas afficher de POIs rattachés à des événements.
- */
 export default function DashboardPage() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -39,7 +35,7 @@ export default function DashboardPage() {
   const [activePoi, setActivePoi] = useState<POILite | POI | null>(null)
   const [heroVisible, setHeroVisible] = useState(false)
   const [appMode, setAppMode] = useState<AppMode>('normal')
-  const [isListVisible, setIsListVisible] = useState(false) // Par défaut masqué en global
+  const [isListVisible, setIsListVisible] = useState(false)
 
   const selectedPoiId = searchParams.get('poi')
   const categoryFilter = searchParams.get('category') || 'all'
@@ -56,14 +52,13 @@ export default function DashboardPage() {
   const loadFullPoi = useCallback(async (poiId: string) => {
     const requestId = ++requestIdRef.current
     try {
-      const full = await fetchPoiById(poiId, eventId)
+      const full = await fetchPoiById(poiId, DEFAULT_EVENT_ID)
       if (!full) return
       if (requestId !== requestIdRef.current) return
       setActivePoi(full)
     } catch {
-      // Keep lite if full fetch fails
     }
-  }, [eventId])
+  }, [])
 
   const handleSelectPoi = useCallback(
     (poi: POILite | null) => {
@@ -87,8 +82,7 @@ export default function DashboardPage() {
     if (eventLoading) return;
 
     async function init() {
-      // ✅ Sécurité : Si on est en Mode Global (default-event), on n'affiche rien.
-      if (eventId === 'default-event') {
+      if (eventId === DEFAULT_EVENT_ID) {
         console.log("[Dashboard] Mode Global : Aucune donnée à charger.");
         setPois([]);
         setMarketingConfig(null);
@@ -97,11 +91,10 @@ export default function DashboardPage() {
       }
 
       try {
-        console.log(`[Dashboard] Initializing data for eventId: ${eventId}`);
         const [poiData, marketing, app] = await Promise.all([
-          fetchPoisLite(eventId),
-          fetchMarketingConfig(eventId),
-          fetchAppConfig(eventId)
+          fetchPoisLite(DEFAULT_EVENT_ID),
+          fetchMarketingConfig(DEFAULT_EVENT_ID),
+          fetchAppConfig(DEFAULT_EVENT_ID)
         ])
         setPois(poiData)
         setMarketingConfig(marketing)
@@ -119,7 +112,7 @@ export default function DashboardPage() {
   }, [eventId, eventLoading, toast])
 
   useEffect(() => {
-    if (!marketingConfig?.heroEnabled || eventId === 'default-event') return
+    if (!marketingConfig?.heroEnabled || eventId === DEFAULT_EVENT_ID) return
     const dismissed = sessionStorage.getItem(`heroDismissed_${eventId}`)
     if (!dismissed) setHeroVisible(true)
   }, [marketingConfig, eventId])
@@ -199,8 +192,7 @@ export default function DashboardPage() {
           />
         )}
 
-        {/* Message informatif si aucun événement sélectionné */}
-        {eventId === 'default-event' && (
+        {eventId === DEFAULT_EVENT_ID && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-6">
                 <div className="bg-background/80 backdrop-blur-md p-8 rounded-[2rem] border shadow-2xl text-center max-w-sm pointer-events-auto">
                     <div className="mx-auto h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">

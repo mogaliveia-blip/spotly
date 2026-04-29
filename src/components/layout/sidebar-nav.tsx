@@ -29,7 +29,7 @@ import { usePathname, useRouter, useSearchParams, useParams } from 'next/navigat
 import { Button } from '../ui/button';
 import { useEffect, useState, useMemo } from 'react';
 import type { POI, MainCategory } from '@/lib/types';
-import { fetchPois } from '@/lib/data';
+import { fetchPois, DEFAULT_EVENT_ID } from '@/lib/data';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { getDistance } from '@/lib/utils';
 import { Skeleton } from '../ui/skeleton';
@@ -52,7 +52,7 @@ function POISidebarList() {
   const [pois, setPois] = useState<POI[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const { userLocation, loading: geoLoading } = useGeolocation();
+  const { userLocation } = useGeolocation();
   const { eventId, loading: eventLoading } = useEvent();
   const { setOpenMobile, isMobile } = useSidebar();
   const router = useRouter();
@@ -62,8 +62,7 @@ function POISidebarList() {
   const categoryFilter = (searchParams.get('category') as MainCategory) || 'all';
 
   useEffect(() => {
-    // ✅ En mode global, on ne charge rien dans la liste latérale
-    if (eventLoading || eventId === 'default-event') {
+    if (eventLoading || eventId === DEFAULT_EVENT_ID) {
         setLoading(false);
         setPois([]);
         return;
@@ -142,8 +141,7 @@ function POISidebarList() {
     );
   }
 
-  // ✅ Rien à afficher en mode global
-  if (eventId === 'default-event') return null;
+  if (eventId === DEFAULT_EVENT_ID) return null;
 
   return (
     <div className="flex flex-col">
@@ -274,7 +272,6 @@ export function SidebarNav() {
     },
   ];
 
-  // ✅ Un POI doit TOUJOURS être rattaché à un événement
   const canAddPoi = (role === 'admin' || role === 'editor') && !!eventSlug;
 
   const filteredNavItems = navItems.filter((item) => {
@@ -322,7 +319,6 @@ export function SidebarNav() {
             </SidebarMenu>
           </SidebarGroup>
 
-          {/* ✅ N'afficher l'exploration que si un événement est actif */}
           {isDashboard && !!eventSlug && (
             <SidebarGroup className="py-4">
               <SidebarSeparator className="mx-6 mb-6" />

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { fetchAppConfig } from '@/lib/data';
+import { fetchAppConfig, DEFAULT_EVENT_ID } from '@/lib/data';
 import type { AppConfig } from '@/lib/types';
 import { Mountain } from 'lucide-react';
 import { signOut } from 'firebase/auth';
@@ -20,7 +20,7 @@ export default function LandingPage() {
   const isLoading = authLoading || !config;
 
   useEffect(() => {
-    fetchAppConfig()
+    fetchAppConfig(DEFAULT_EVENT_ID)
       .then(appConfig => {
         if (appConfig.isLandingPageActive) {
           setConfig(appConfig);
@@ -30,15 +30,12 @@ export default function LandingPage() {
       })
       .catch(e => {
         console.error("Could not fetch app config", e);
-        // If config fails to load, redirect to dashboard to avoid blocking access.
         router.replace('/dashboard');
       });
   }, [router]);
 
   const handleSignOut = async () => {
     await signOut(auth);
-    // After sign-out, we want to ensure the page reflects the signed-out state.
-    // A page refresh is a robust way to do this without complex state management.
     router.refresh();
   };
 
@@ -50,8 +47,6 @@ export default function LandingPage() {
     );
   }
   
-  // If we reach here, it means we are definitely on the landing page because config.isLandingPageActive is true.
-  // The redirection logic in useEffect handles the other case.
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">
