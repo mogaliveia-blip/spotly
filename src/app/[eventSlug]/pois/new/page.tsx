@@ -1,9 +1,8 @@
-
 'use client';
 
 import { POIForm } from '@/components/poi/poi-form';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { AppLayout } from '@/components/layout/app-layout';
 import { useParams } from 'next/navigation';
@@ -11,9 +10,19 @@ import { useEvent } from '@/providers/event-provider';
 
 export default function NewPOIPage() {
   const params = useParams();
-  const { eventId } = useEvent();
+  const { eventId, loading: eventLoading } = useEvent();
   const eventSlug = params.eventSlug as string;
   const prefix = eventSlug ? `/${eventSlug}` : '';
+
+  if (eventLoading) {
+    return (
+      <AppLayout>
+        <div className="flex h-full w-full items-center justify-center p-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary opacity-50" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>

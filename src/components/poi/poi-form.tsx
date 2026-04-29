@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -25,7 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { useState, useEffect } from 'react';
-import { Loader2, MapPin, Crosshair, ImagePlus, X, Calendar as CalendarIcon } from 'lucide-react';
+import { Loader2, MapPin, Crosshair, ImagePlus, X, Calendar as CalendarIcon, AlertTriangle } from 'lucide-react';
 import type { POI, MainCategory, SubCategory } from '@/lib/types';
 import { categoriesMap } from '@/lib/types';
 import { useGeolocation } from '@/providers/geolocation-provider';
@@ -35,11 +34,7 @@ import Image from 'next/image';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '@/hooks/use-auth-user';
 import { Switch } from '@/components/ui/switch';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 async function compressImage(file: File): Promise<File> {
   const img = new window.Image();
@@ -164,6 +159,10 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
 
   useEffect(() => {
     async function getPoi() {
+      if (!eventId) return;
+      
+      console.log(`[POIForm] Chargement pour eventId: ${eventId}`);
+      
       if (poiId) {
         try {
           const data = await fetchPoiById(poiId, eventId);
@@ -177,9 +176,11 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
             };
             form.reset({ ...data, sponsor: sponsorSafe } as POIFormValues);
           } else {
+            console.warn(`[POIForm] POI ${poiId} introuvable dans ${eventId}`);
             router.push(`${prefix}/pois`);
           }
-        } catch {
+        } catch (error) {
+          console.error(`[POIForm] Erreur fetch POI:`, error);
           toast({ title: 'Erreur', variant: 'destructive' });
         } finally { setPageIsLoading(false); }
       } else {
@@ -188,7 +189,7 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
       }
     }
     if (!geoLoading) getPoi();
-  }, [poiId, eventId, geoLoading, userLocation]);
+  }, [poiId, eventId, geoLoading, userLocation, router, prefix, toast, form]);
 
   useEffect(() => {
     if (!headerImageFile) return setHeaderPreviewUrl(null);
@@ -204,9 +205,20 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   }, [galleryImageFiles]);
 
   async function onSubmit(values: POIFormValues) {
+    if (!eventId || (eventSlug && eventId === 'default-event')) {
+        toast({
+            title: "Erreur de contexte",
+            description: "L'événement n'est pas encore identifié. Veuillez patienter.",
+            variant: "destructive"
+        });
+        return;
+    }
+
     setFormIsLoading(true);
     let targetId = poiId;
     const storagePrefix = eventId && eventId !== 'default-event' ? `events/${eventId}/` : '';
+
+    console.log(`[POIForm] Soumission pour eventId: ${eventId}, slug: ${eventSlug}`);
 
     try {
       const { sponsor, ...rest } = values;
@@ -227,6 +239,7 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
         }
       
         targetId = await createPoi(createPayload, eventId);
+        console.log(`[POIForm] POI créé avec ID: ${targetId}`);
       }
 
       let finalHeader = values.headerPhotoUrl || '';
@@ -252,12 +265,15 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
         sponsor: sponsor?.enabled ? sponsor : deleteField() as any
       }, eventId);
 
-      toast({ title: 'Succès !' });
+      toast({ title: 'Succès !', description: 'Le lieu a été sauvegardé.' });
       router.push(`${prefix}/pois`);
-    } catch {
+    } catch (error) {
+      console.error("[POIForm] Erreur lors de la sauvegarde:", error);
       toast({ title: 'Erreur lors de la sauvegarde', variant: 'destructive' });
     } finally { setFormIsLoading(false); }
   }
+
+  const isGlobalWarning = eventSlug && eventId === 'default-event';
 
   if (pageIsLoading) return <div className="p-12 text-center animate-pulse">Chargement de l'éditeur...</div>;
 
@@ -265,6 +281,19 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
     <APIProvider apiKey={mapsConfig.apiKey}>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          
+          {isGlobalWarning && (
+            <Alert variant="destructive" className="rounded-2xl">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Attention : Erreur de chargement de l'événement</AlertTitle>
+                <AlertDescription>
+                    Le système n'a pas encore identifié l'événement <strong>{eventSlug}</strong>. 
+                    Si vous sauvegardez maintenant, le lieu risque de ne pas être rattaché correctement. 
+                    Veuillez rafraîchir la page.
+                </AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
               <Card className="rounded-[2rem] border-muted/60">
@@ -353,7 +382,7 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
                   </div>
                 </CardContent>
               </Card>
-              <Button type="submit" disabled={formIsLoading} className="w-full h-14 rounded-2xl font-bold text-lg shadow-xl">
+              <Button type="submit" disabled={formIsLoading || isGlobalWarning} className="w-full h-14 rounded-2xl font-bold text-lg shadow-xl">
                 {formIsLoading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
                 {isEditMode ? 'Mettre à jour' : 'Créer le lieu'}
               </Button>
@@ -367,17 +396,10 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   async function handleRemoveExistingGalleryImage(index: number, path: string) {
     if (!confirm("Supprimer cette image ?")) return;
     try { await deleteFileByPath(path); remove(index); } catch (error: any) {
-      console.error('[POIForm] Save error', {
-        message: error?.message,
-        code: error?.code,
-        stack: error?.stack,
-        eventId,
-        targetId,
-      });
-    
+      console.error('[POIForm] Suppr image error', error);
       toast({
-        title: 'Erreur lors de la sauvegarde',
-        description: error?.message || 'Erreur inconnue',
+        title: 'Erreur',
+        description: 'Impossible de supprimer l\'image du stockage.',
         variant: 'destructive',
       });
     }
