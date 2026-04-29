@@ -273,8 +273,6 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
     } finally { setFormIsLoading(false); }
   }
 
-  const isGlobalWarning = eventSlug && eventId === 'default-event';
-
   if (pageIsLoading) return <div className="p-12 text-center animate-pulse">Chargement de l'éditeur...</div>;
 
   return (
@@ -282,18 +280,6 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           
-          {isGlobalWarning && (
-            <Alert variant="destructive" className="rounded-2xl">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Attention : Erreur de chargement de l'événement</AlertTitle>
-                <AlertDescription>
-                    Le système n'a pas encore identifié l'événement <strong>{eventSlug}</strong>. 
-                    Si vous sauvegardez maintenant, le lieu risque de ne pas être rattaché correctement. 
-                    Veuillez rafraîchir la page.
-                </AlertDescription>
-            </Alert>
-          )}
-
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
               <Card className="rounded-[2rem] border-muted/60">
@@ -351,13 +337,13 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
                     <Label>Galerie</Label>
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                       {galleryFields.map((f, i) => (
-                        <div key={f.id} className="relative aspect-square rounded-2xl overflow-hidden border group">
+                        <div className="relative aspect-square rounded-2xl overflow-hidden border group" key={f.id}>
                           <Image src={f.url} alt="Gallery" fill className="object-cover" />
                           <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => handleRemoveExistingGalleryImage(i, f.path)}><X className="h-3 w-3" /></Button>
                         </div>
                       ))}
                       {galleryPreviewUrls.map((u, i) => (
-                        <div key={u} className="relative aspect-square rounded-2xl overflow-hidden border bg-primary/5">
+                        <div className="relative aspect-square rounded-2xl overflow-hidden border bg-primary/5" key={u}>
                           <Image src={u} alt="New" fill className="object-cover" />
                           <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => setGalleryImageFiles(prev => prev.filter((_, idx) => idx !== i))}><X className="h-3 w-3" /></Button>
                         </div>
@@ -382,7 +368,7 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
                   </div>
                 </CardContent>
               </Card>
-              <Button type="submit" disabled={formIsLoading || isGlobalWarning} className="w-full h-14 rounded-2xl font-bold text-lg shadow-xl">
+              <Button type="submit" disabled={formIsLoading} className="w-full h-14 rounded-2xl font-bold text-lg shadow-xl">
                 {formIsLoading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
                 {isEditMode ? 'Mettre à jour' : 'Créer le lieu'}
               </Button>

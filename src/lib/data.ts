@@ -64,11 +64,20 @@ export function setCurrentEventId(id: string) {
  */
 export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
   if (!slug || slug === 'default' || slug === 'dashboard' || slug === 'admin') return null;
+  
+  // ✅ Normalisation : Firestore est sensible à la casse
+  const normalizedSlug = slug.toLowerCase().trim();
+  
   try {
     const eventsRef = collection(db, 'events');
-    const q = query(eventsRef, where('slug', '==', slug), limit(1));
+    const q = query(eventsRef, where('slug', '==', normalizedSlug), limit(1));
     const snap = await getDocs(q);
-    if (snap.empty) return null;
+    
+    if (snap.empty) {
+      console.warn(`[Data] Aucun événement trouvé pour le slug normalisé: ${normalizedSlug}`);
+      return null;
+    }
+    
     const d = snap.docs[0];
     const data = d.data();
     return { 
@@ -78,7 +87,7 @@ export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
       updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt)
     } as AppEvent;
   } catch (error) {
-    console.warn("Could not resolve event by slug:", slug);
+    console.error(`[Data] Erreur lors de la résolution du slug ${slug}:`, error);
     return null;
   }
 }
