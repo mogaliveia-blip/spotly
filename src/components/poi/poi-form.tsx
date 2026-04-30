@@ -161,8 +161,6 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
     async function getPoi() {
       if (!eventId) return;
       
-      console.log(`[POIForm] Chargement pour eventId: ${eventId}`);
-      
       if (poiId) {
         try {
           const data = await fetchPoiById(poiId, eventId);
@@ -176,11 +174,9 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
             };
             form.reset({ ...data, sponsor: sponsorSafe } as POIFormValues);
           } else {
-            console.warn(`[POIForm] POI ${poiId} introuvable dans ${eventId}`);
             router.push(`${prefix}/pois`);
           }
         } catch (error) {
-          console.error(`[POIForm] Erreur fetch POI:`, error);
           toast({ title: 'Erreur', variant: 'destructive' });
         } finally { setPageIsLoading(false); }
       } else {
@@ -218,8 +214,6 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
     let targetId = poiId;
     const storagePrefix = eventId && eventId !== 'default-event' ? `events/${eventId}/` : '';
 
-    console.log(`[POIForm] Soumission pour eventId: ${eventId}, slug: ${eventSlug}`);
-
     try {
       const { sponsor, ...rest } = values;
 
@@ -239,7 +233,6 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
         }
       
         targetId = await createPoi(createPayload, eventId);
-        console.log(`[POIForm] POI créé avec ID: ${targetId}`);
       }
 
       let finalHeader = values.headerPhotoUrl || '';
@@ -268,7 +261,6 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
       toast({ title: 'Succès !', description: 'Le lieu a été sauvegardé.' });
       router.push(`${prefix}/pois`);
     } catch (error) {
-      console.error("[POIForm] Erreur lors de la sauvegarde:", error);
       toast({ title: 'Erreur lors de la sauvegarde', variant: 'destructive' });
     } finally { setFormIsLoading(false); }
   }
@@ -382,7 +374,6 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   async function handleRemoveExistingGalleryImage(index: number, path: string) {
     if (!confirm("Supprimer cette image ?")) return;
     try { await deleteFileByPath(path); remove(index); } catch (error: any) {
-      console.error('[POIForm] Suppr image error', error);
       toast({
         title: 'Erreur',
         description: 'Impossible de supprimer l\'image du stockage.',

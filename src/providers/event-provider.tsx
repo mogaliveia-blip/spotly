@@ -26,6 +26,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
   const eventSlug = params?.eventSlug as string;
 
+  // Détection immédiate de changement de route pour éviter les fuites de contexte
   const isTransitioning = eventSlug !== (resolvedSlug === 'global' ? undefined : resolvedSlug);
 
   useEffect(() => {
@@ -39,7 +40,6 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     
       if (!eventSlug || eventSlug === 'dashboard' || eventSlug === 'admin') {
         if (isMounted) {
-          console.log("[EventProvider] Mode Global détecté (pas de slug)");
           setResolvedSlug('global');
           setLoading(false);
         }
@@ -47,16 +47,13 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        console.log(`[EventProvider] Tentative de résolution du slug: ${eventSlug}`);
         const resolved = await fetchEventBySlug(eventSlug);
         
         if (isMounted) {
           if (resolved) {
-            console.log(`[EventProvider] Événement résolu: ${resolved.id} (${resolved.name})`);
             setEvent(resolved);
             setInternalEventId(resolved.id);
           } else {
-            console.warn(`[EventProvider] Aucun événement pour le slug: ${eventSlug}`);
             setInternalEventId(DEFAULT_EVENT_ID);
             setEvent(null);
           }
@@ -64,7 +61,6 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
         }
       } catch (error) {
-        console.error("[EventProvider] Erreur résolution:", error);
         if (isMounted) {
           setInternalEventId(DEFAULT_EVENT_ID);
           setEvent(null);

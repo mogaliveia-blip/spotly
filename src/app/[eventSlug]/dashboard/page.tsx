@@ -93,7 +93,6 @@ export default function DashboardPage() {
 
     async function init() {
       try {
-        console.log(`[Dashboard] Chargement des données pour eventId: ${eventId}`);
         const [poiData, marketing, app] = await Promise.all([
           fetchPoisLite(eventId),
           fetchMarketingConfig(eventId),
@@ -101,7 +100,6 @@ export default function DashboardPage() {
         ])
         
         if (isMounted) {
-          console.log(`[Dashboard] Données reçues pour eventId: ${eventId}`, { count: poiData.length });
           setPois(poiData)
           setMarketingConfig(marketing)
           setAppConfig(app)
