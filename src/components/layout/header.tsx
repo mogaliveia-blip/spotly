@@ -21,9 +21,9 @@ export function Header() {
     { href: `${prefix}/dashboard`, icon: LayoutDashboard, label: 'Carte' },
     // ✅ Masquer les outils de gestion en Mode Global
     ...(eventSlug ? [
-        { href: `${prefix}/pois`, icon: MapPin, label: 'Gérer les POIs', roles: ['editor', 'admin'] },
-        { href: `${prefix}/admin`, icon: Users, label: 'Admin', roles: ['admin'] },
-        { href: `${prefix}/admin/monitor`, icon: Monitor, label: 'Supervision', roles: ['admin'] },
+        { href: `${prefix}/pois`, icon: MapPin, label: 'Gérer les POIs', roles: ['editor', 'admin', 'owner'] },
+        { href: `${prefix}/admin`, icon: Users, label: 'Admin', roles: ['admin', 'owner'] },
+        { href: `${prefix}/admin/monitor`, icon: Monitor, label: 'Supervision', roles: ['admin', 'owner'] },
     ] : [])
   ];
   

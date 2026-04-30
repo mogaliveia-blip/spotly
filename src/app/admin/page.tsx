@@ -265,8 +265,10 @@ function UserTable() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('all');
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, role: currentUserRole } = useAuth();
   const { toast } = useToast();
+
+  const isOwner = currentUserRole === 'owner';
 
   useEffect(() => {
     fetchUsers().then(setUsers).finally(() => setLoading(false));
@@ -281,12 +283,14 @@ function UserTable() {
   }, [users, searchTerm, filter]);
 
   const handleRoleChange = (uid: string, newRole: UserRole) => {
+    if (!isOwner) return;
     updateUserRole(uid, newRole);
     setUsers(users.map(u => (u.uid === uid ? { ...u, role: newRole } : u)));
     toast({ title: 'Rôle mis à jour' });
   };
 
   const handleApprovalToggle = async (uid: string, currentStatus: boolean) => {
+    if (!isOwner) return;
     try {
         await updateUserApproval(uid, !currentStatus);
         setUsers(users.map(u => (u.uid === uid ? { ...u, isApproved: !currentStatus } : u)));
@@ -345,28 +349,38 @@ function UserTable() {
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <Select value={user.role} onValueChange={v => handleRoleChange(user.uid, v as UserRole)} disabled={user.uid === currentUser?.uid}>
-                    <SelectTrigger className="w-[100px] h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="editor">Editor</SelectItem>
-                      <SelectItem value="user">User</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {isOwner ? (
+                    <Select 
+                      value={user.role} 
+                      onValueChange={v => handleRoleChange(user.uid, v as UserRole)} 
+                      disabled={user.uid === currentUser?.uid}
+                    >
+                      <SelectTrigger className="w-[110px] h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="owner">Owner</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="editor">Editor</SelectItem>
+                        <SelectItem value="user">User</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Badge variant="outline" className="h-8 capitalize">{user.role}</Badge>
+                  )}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    variant={user.isApproved ? "ghost" : "default"}
-                    size="sm"
-                    className="h-8 gap-1 rounded-lg"
-                    onClick={() => handleApprovalToggle(user.uid, user.isApproved)}
-                    disabled={user.uid === currentUser?.uid}
-                  >
-                    {user.isApproved ? <UserX className="h-3 w-3" /> : <UserCheck className="h-3 w-3" />}
-                    <span className="hidden sm:inline">{user.isApproved ? "Révoquer" : "Approuver"}</span>
-                  </Button>
+                  {isOwner && user.uid !== currentUser?.uid && (
+                    <Button
+                      variant={user.isApproved ? "ghost" : "default"}
+                      size="sm"
+                      className="h-8 gap-1 rounded-lg"
+                      onClick={() => handleApprovalToggle(user.uid, user.isApproved)}
+                    >
+                      {user.isApproved ? <UserX className="h-3 w-3" /> : <UserCheck className="h-3 w-3" />}
+                      <span className="hidden sm:inline">{user.isApproved ? "Révoquer" : "Approuver"}</span>
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -381,12 +395,14 @@ export default function AdminPage() {
   const { role, loading } = useAuth();
   const router = useRouter();
 
+  const canAccess = role === 'admin' || role === 'owner';
+
   useEffect(() => {
-    if (!loading && role !== 'admin') router.replace('/dashboard');
-  }, [role, loading, router]);
+    if (!loading && !canAccess) router.replace('/dashboard');
+  }, [role, loading, router, canAccess]);
 
   if (loading) return <div className="p-12 text-center text-muted-foreground animate-pulse">Chargement de l'administration...</div>;
-  if (role !== 'admin') return null;
+  if (!canAccess) return null;
 
   return (
     <AppLayout>

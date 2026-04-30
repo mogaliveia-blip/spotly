@@ -10,7 +10,7 @@ import {
   Shapes
 } from 'lucide-react'
 
-export type UserRole = 'user' | 'editor' | 'admin'
+export type UserRole = 'user' | 'editor' | 'admin' | 'owner'
 
 export interface AppUser {
   uid: string

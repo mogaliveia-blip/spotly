@@ -253,26 +253,26 @@ export function SidebarNav() {
       href: `${prefix}/pois`,
       icon: MapPin,
       label: 'Points d\'intérêt',
-      roles: ['editor', 'admin'],
+      roles: ['editor', 'admin', 'owner'],
       auth: true,
     },
     {
       href: `${prefix}/admin`,
       icon: Users,
       label: 'Administration',
-      roles: ['admin'],
+      roles: ['admin', 'owner'],
       auth: true,
     },
     {
       href: `${prefix}/admin/monitor`,
       icon: Monitor,
       label: 'Supervision',
-      roles: ['admin'],
+      roles: ['admin', 'owner'],
       auth: true,
     },
   ];
 
-  const canAddPoi = (role === 'admin' || role === 'editor') && !!eventSlug;
+  const canAddPoi = (role === 'admin' || role === 'editor' || role === 'owner') && !!eventSlug;
 
   const filteredNavItems = navItems.filter((item) => {
     if (!item.auth) return true;
