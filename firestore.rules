@@ -15,16 +15,19 @@ service cloud.firestore {
       return request.auth.uid;
     }
 
-    // Vérifie si l'utilisateur est approuvé par l'admin global
-    function isApproved() {
-      let userPath = /databases/$(database)/documents/users/$(getUserId());
-      return isAuthenticated() && exists(userPath) && get(userPath).data.isApproved == true;
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(getUserId())).data;
     }
 
-    // Vérifie si l'utilisateur est Admin Global de la plateforme
+    // Vérifie si l'utilisateur est approuvé par l'admin global
+    function isApproved() {
+      return isAuthenticated() && getUserData().isApproved == true;
+    }
+
+    // Vérifie si l'utilisateur est Admin Global ou Owner Global
     function isGlobalAdmin() {
-      let userPath = /databases/$(database)/documents/users/$(getUserId());
-      return isAuthenticated() && exists(userPath) && get(userPath).data.role == "admin";
+      let role = getUserData().role;
+      return isAuthenticated() && (role == "admin" || role == "owner");
     }
 
     function getEvent(eventId) {
@@ -49,18 +52,18 @@ service cloud.firestore {
         : null;
     }
 
-    function isOwner(eventId) {
-      return isAuthenticated() && (getEvent(eventId).data.ownerId == getUserId() || isGlobalAdmin());
+    function isEventAdmin(eventId) {
+      return isAuthenticated() && (getEvent(eventId).data.adminId == getUserId() || isGlobalAdmin());
     }
 
     function isAdminOnly(eventId) {
       let role = getRole(eventId);
-      return role == "admin" || isOwner(eventId);
+      return role == "admin" || isEventAdmin(eventId);
     }
 
     function isAdminOrEditor(eventId) {
       let role = getRole(eventId);
-      return role == "admin" || role == "editor" || isOwner(eventId);
+      return role == "admin" || role == "editor" || isEventAdmin(eventId);
     }
 
     /* =========================
@@ -69,14 +72,13 @@ service cloud.firestore {
 
     match /events/{eventId} {
       // Lecture : Publique pour permettre la résolution des slugs (slug -> eventId)
-      // La sécurité réelle se fait sur les sous-collections (pois, config)
       allow read: if true;
 
       // Création : Utilisateurs approuvés uniquement
       allow create: if isApproved();
 
-      // Gestion : Propriétaire ou Admin Global
-      allow update, delete: if isOwner(eventId);
+      // Gestion : Administrateur de l'événement ou Admin Global
+      allow update, delete: if isEventAdmin(eventId);
     }
 
     /* =========================
@@ -86,13 +88,12 @@ service cloud.firestore {
     match /events/{eventId}/members/{userId} {
       allow read: if isAuthenticated();
       
-      // Seul l'owner peut ajouter des membres (via createEvent ou admin)
-      allow create: if isApproved() && (request.auth.uid == userId || isOwner(eventId));
+      // Seul l'admin de l'éven peut ajouter des membres
+      allow create: if isApproved() && (request.auth.uid == userId || isEventAdmin(eventId));
       
       allow update, delete: if isAdminOnly(eventId);
     }
 
-    // Nécessaire pour fetchUserEvents (collectionGroup)
     match /{path=**}/members/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isGlobalAdmin());
     }
@@ -101,18 +102,15 @@ service cloud.firestore {
        POIS & REVIEWS
     ========================= */
 
-    // POIs Publics (projection allégée pour la carte)
     match /events/{eventId}/pois_public/{poiId} {
       allow read: if isEventPublished(eventId) || isEventMember(eventId);
       allow write: if isAdminOrEditor(eventId);
     }
 
-    // POIs Complets
     match /events/{eventId}/pois/{poiId} {
       allow read: if isEventPublished(eventId) || isEventMember(eventId);
       allow create, update, delete: if isAdminOrEditor(eventId);
       
-      // Avis et commentaires
       match /reviews/{reviewId} {
         allow read: if isEventPublished(eventId) || isEventMember(eventId);
         allow create: if isApproved();

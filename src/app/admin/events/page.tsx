@@ -29,15 +29,12 @@ export default function MyEventsPage() {
     
     setErrorType('NONE');
     try {
-      console.log("[MyEvents] Chargement des événements pour", user.uid);
       const data = await fetchUserEvents(user.uid);
       setEvents(data);
     } catch (err: any) {
       if (err.message === 'INDEX_MISSING') {
-        console.warn("[MyEvents] Index Firestore en cours de préparation.");
         setErrorType('INDEX_MISSING');
       } else {
-        console.error("[MyEvents] Erreur chargement", err);
         setErrorType('OTHER');
       }
     } finally {
@@ -158,10 +155,10 @@ export default function MyEventsPage() {
                         <ShieldCheck className="h-3 w-3" />
                         {e.userRole || 'Admin'}
                      </Badge>
-                     {e.ownerId === user?.uid && (
+                     {e.adminId === user?.uid && (
                         <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 flex gap-1 items-center text-[10px] uppercase font-bold">
                             <UserCheck className="h-3 w-3" />
-                            Owner
+                            Créateur
                         </Badge>
                      )}
                   </div>

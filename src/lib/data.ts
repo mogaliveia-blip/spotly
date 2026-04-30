@@ -129,14 +129,14 @@ export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRo
 /**
  * Crée un nouvel événement et initialise sa structure de données.
  */
-export async function createEvent(data: { name: string; slug: string; ownerId: string }): Promise<AppEvent> {
+export async function createEvent(data: { name: string; slug: string; adminId: string }): Promise<AppEvent> {
   const eventRef = doc(collection(db, 'events'));
   const id = eventRef.id;
 
   const eventData = {
     name: data.name,
     slug: data.slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
-    ownerId: data.ownerId,
+    adminId: data.adminId,
     status: 'draft' as const,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
@@ -145,9 +145,9 @@ export async function createEvent(data: { name: string; slug: string; ownerId: s
   await runTransaction(db, async (tx) => {
     tx.set(eventRef, eventData);
     
-    const memberRef = doc(db, `events/${id}/members`, data.ownerId);
+    const memberRef = doc(db, `events/${id}/members`, data.adminId);
     tx.set(memberRef, {
-      uid: data.ownerId,
+      uid: data.adminId,
       role: 'admin',
       joinedAt: serverTimestamp()
     });

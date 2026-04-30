@@ -7,11 +7,11 @@
       "properties": {
         "name": { "type": "string" },
         "slug": { "type": "string" },
-        "ownerId": { "type": "string" },
+        "adminId": { "type": "string" },
         "status": { "type": "string", "enum": ["draft", "published", "archived"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["name", "slug", "ownerId", "status"]
+      "required": ["name", "slug", "adminId", "status"]
     },
     "EventMember": {
       "title": "EventMember",

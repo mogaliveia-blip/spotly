@@ -17,7 +17,7 @@ export interface AppUser {
   email: string | null
   displayName: string | null
   role: UserRole
-  isApproved: boolean // ✅ Nouveau champ
+  isApproved: boolean
   photoURL?: string | null
   emailVerified: boolean
 }
@@ -206,15 +206,13 @@ export interface MarketingConfig {
   heroCtaLink?: string
 }
 
-// --- NEW MULTI-EVENT TYPES ---
-
 export type EventStatus = 'draft' | 'published' | 'archived'
 
 export interface AppEvent {
   id: string
   name: string
   slug: string
-  ownerId: string
+  adminId: string
   status: EventStatus
   createdAt: Date
   updatedAt: Date

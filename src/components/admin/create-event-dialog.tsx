@@ -67,7 +67,7 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
     try {
       const event = await createEvent({
         ...values,
-        ownerId: user.uid,
+        adminId: user.uid,
       });
       toast({ title: 'Événement créé !', description: `L'événement ${event.name} est prêt.` });
       setOpen(false);
@@ -80,7 +80,6 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
     }
   }
 
-  // ✅ Blocage UI du trigger
   if (!isApproved) {
     return (
         <Button disabled className="gap-2 rounded-2xl font-bold opacity-60">

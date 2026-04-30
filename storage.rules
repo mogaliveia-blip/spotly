@@ -11,28 +11,24 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Vérifie si l'utilisateur est admin global
     function isGlobalAdmin() {
       return isSignedIn()
         && firestore.get(
           /databases/(default)/documents/users/$(request.auth.uid)
-        ).data.role == 'admin';
+        ).data.role in ['admin', 'owner'];
     }
 
-    // Récupère le rôle d'un membre pour un événement spécifique
     function getEventMemberRole(eventId) {
       let path = /databases/(default)/documents/events/$(eventId)/members/$(request.auth.uid);
       return firestore.exists(path) ? firestore.get(path).data.role : 'none';
     }
 
-    // Vérifie si l'utilisateur est le propriétaire de l'événement
-    function isEventOwner(eventId) {
-      return isSignedIn() && firestore.get(/databases/(default)/documents/events/$(eventId)).data.ownerId == request.auth.uid;
+    function isEventAdmin(eventId) {
+      return isSignedIn() && firestore.get(/databases/(default)/documents/events/$(eventId)).data.adminId == request.auth.uid;
     }
 
-    // Vérifie si l'utilisateur a l'un des rôles requis dans l'événement
     function hasEventRole(eventId, roles) {
-      return isSignedIn() && (getEventMemberRole(eventId) in roles || isEventOwner(eventId) || isGlobalAdmin());
+      return isSignedIn() && (getEventMemberRole(eventId) in roles || isEventAdmin(eventId) || isGlobalAdmin());
     }
 
     /* =========================
@@ -41,23 +37,19 @@ service firebase.storage {
 
     match /events/{eventId} {
       
-      // Accès aux images des POIs de l'événement
       match /poi-images/{allPaths=**} {
         allow read: if true;
-        // Editor, Admin et Owner peuvent uploader/modifier les images de POI
         allow write: if hasEventRole(eventId, ['admin', 'editor']);
       }
 
-      // Accès aux ressources marketing de l'événement
       match /marketing/{allPaths=**} {
         allow read: if true;
-        // Seuls Admin et Owner peuvent modifier le marketing
         allow write: if hasEventRole(eventId, ['admin']);
       }
     }
 
     /* =========================
-       COMPATIBILITÉ : ANCIEN SCHÉMA (À SUPPRIMER APRÈS MIGRATION)
+       COMPATIBILITÉ : ANCIEN SCHÉMA
        ========================= */
 
     match /poi-images/{allPaths=**} {
