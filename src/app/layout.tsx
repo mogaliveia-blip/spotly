@@ -12,7 +12,6 @@ import { EventProvider } from '@/providers/event-provider'
 export const metadata: Metadata = {
   title: 'Spotly',
   description: "Votre guide pour les points d'intérêt de l'événement.",
-  manifest: '/manifest.json',
 }
 
 export default function RootLayout({
@@ -37,7 +36,8 @@ export default function RootLayout({
           rel="stylesheet"
         />
 
-        {/* PWA */}
+        {/* PWA - crossorigin added to handle cloud workstation proxy auth */}
+        <link rel="manifest" href="/manifest.json" crossOrigin="use-credentials" />
         <meta name="theme-color" content="#673AB7" />
         <link rel="apple-touch-icon" href="/icon.svg" />
 

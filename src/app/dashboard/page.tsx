@@ -82,8 +82,8 @@ export default function DashboardPage() {
     if (eventLoading) return;
 
     async function init() {
+      // ✅ En mode Global, on s'assure qu'aucune donnée n'est chargée
       if (eventId === DEFAULT_EVENT_ID) {
-        console.log("[Dashboard] Mode Global : Aucune donnée à charger.");
         setPois([]);
         setMarketingConfig(null);
         setAppConfig(null);
