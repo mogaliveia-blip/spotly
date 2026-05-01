@@ -19,13 +19,13 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(getUserId())).data;
     }
 
-    // Vérifie si l'utilisateur est approuvé par l'admin global
+    // Vérifie si l'utilisateur est approuvé par l'owner global
     function isApproved() {
       return isAuthenticated() && getUserData().isApproved == true;
     }
 
     // Vérifie si l'utilisateur est le Propriétaire Global (Owner)
-    function isGlobalAdmin() {
+    function isOwner() {
       let role = getUserData().role;
       return isAuthenticated() && role == "owner";
     }
@@ -42,14 +42,14 @@ service cloud.firestore {
     function isEventMember(eventId) {
       return isAuthenticated() && (
         exists(/databases/$(database)/documents/events/$(eventId)/members/$(getUserId())) ||
-        isGlobalAdmin()
+        isOwner()
       );
     }
 
     function getRole(eventId) {
       return isEventMember(eventId)
         ? (
-            isGlobalAdmin()
+            isOwner()
               ? "admin"
               : get(
                   /databases/$(database)/documents/events/$(eventId)/members/$(getUserId())
@@ -64,7 +64,7 @@ service cloud.firestore {
         (
           role == "admin" ||
           getEvent(eventId).data.adminId == getUserId() ||
-          isGlobalAdmin()
+          isOwner()
         );
     }
 
@@ -112,7 +112,7 @@ service cloud.firestore {
       allow read: if isAuthenticated() &&
         (
           request.auth.uid == userId ||
-          isGlobalAdmin()
+          isOwner()
         );
     }
 
@@ -164,7 +164,7 @@ service cloud.firestore {
       allow read: if true;
 
       // Modification réservée au propriétaire global
-      allow write: if isGlobalAdmin();
+      allow write: if isOwner();
     }
 
     /* =========================
@@ -172,13 +172,14 @@ service cloud.firestore {
     ========================= */
 
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      // Restriction lecture : soi-même ou owner uniquement
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isOwner());
 
       allow create: if isAuthenticated() &&
         request.auth.uid == userId;
 
       allow update: if
-        isGlobalAdmin() ||
+        isOwner() ||
         (
           request.auth.uid == userId &&
           !request.resource.data
@@ -194,12 +195,12 @@ service cloud.firestore {
 
     match /pois/{poiId} {
       allow read: if true;
-      allow write: if isGlobalAdmin();
+      allow write: if isOwner();
     }
 
     match /pois_public/{poiId} {
       allow read: if true;
-      allow write: if isGlobalAdmin();
+      allow write: if isOwner();
     }
   }
 }

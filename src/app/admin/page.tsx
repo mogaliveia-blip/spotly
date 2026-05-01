@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Trash2, Loader2, ImagePlus, UserCheck, UserX } from 'lucide-react';
+import { Loader2, ImagePlus, UserCheck, UserX } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -115,7 +115,7 @@ function AppConfigCard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {savingKey === 'landing' && <Loader2 className="h-4 w-4 animate-spin" />}
+          {savingKey === 'landing' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
           <Switch
             id="landing-page-switch"
             checked={config?.isLandingPageActive ?? true}
@@ -135,7 +135,7 @@ function AppConfigCard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {savingKey === 'reviews' && <Loader2 className="h-4 w-4 animate-spin" />}
+          {savingKey === 'reviews' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
           <Switch
             id="reviews-switch"
             checked={config?.reviewsEnabled ?? true}
@@ -265,10 +265,8 @@ function UserTable() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('all');
-  const { user: currentUser, role: currentUserRole } = useAuth();
+  const { user: currentUser } = useAuth();
   const { toast } = useToast();
-
-  const isOwner = currentUserRole === 'owner';
 
   useEffect(() => {
     fetchUsers().then(setUsers).finally(() => setLoading(false));
@@ -283,14 +281,12 @@ function UserTable() {
   }, [users, searchTerm, filter]);
 
   const handleRoleChange = (uid: string, newRole: UserRole) => {
-    if (!isOwner) return;
     updateUserRole(uid, newRole);
     setUsers(users.map(u => (u.uid === uid ? { ...u, role: newRole } : u)));
     toast({ title: 'Rôle mis à jour' });
   };
 
   const handleApprovalToggle = async (uid: string, currentStatus: boolean) => {
-    if (!isOwner) return;
     try {
         await updateUserApproval(uid, !currentStatus);
         setUsers(users.map(u => (u.uid === uid ? { ...u, isApproved: !currentStatus } : u)));
@@ -349,26 +345,22 @@ function UserTable() {
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  {isOwner ? (
-                    <Select 
-                      value={user.role} 
-                      onValueChange={v => handleRoleChange(user.uid, v as UserRole)} 
-                      disabled={user.uid === currentUser?.uid}
-                    >
-                      <SelectTrigger className="w-[110px] h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="owner">Owner</SelectItem>
-                        <SelectItem value="user">User</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Badge variant="outline" className="h-8 capitalize">{user.role}</Badge>
-                  )}
+                  <Select 
+                    value={user.role} 
+                    onValueChange={v => handleRoleChange(user.uid, v as UserRole)} 
+                    disabled={user.uid === currentUser?.uid}
+                  >
+                    <SelectTrigger className="w-[110px] h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="owner">Owner</SelectItem>
+                      <SelectItem value="user">User</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </TableCell>
                 <TableCell className="text-right">
-                  {isOwner && user.uid !== currentUser?.uid && (
+                  {user.uid !== currentUser?.uid && (
                     <Button
                       variant={user.isApproved ? "ghost" : "default"}
                       size="sm"
@@ -393,7 +385,7 @@ export default function AdminPage() {
   const { role, loading } = useAuth();
   const router = useRouter();
 
-  // Seul le rôle 'owner' peut désormais accéder à l'administration globale
+  // Seul le rôle global 'owner' peut désormais accéder à l'administration de la plateforme
   const canAccess = role === 'owner';
 
   useEffect(() => {
@@ -411,7 +403,7 @@ export default function AdminPage() {
         <Card className="rounded-2xl border-muted shadow-sm overflow-hidden">
             <CardHeader className="bg-primary/5">
               <CardTitle>Gestion des Utilisateurs</CardTitle>
-              <CardDescription>Validez les accès et gérez les rôles propriétaires.</CardDescription>
+              <CardDescription>Validez les accès et gérez les rôles propriétaires au niveau global.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <UserTable />

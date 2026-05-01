@@ -270,86 +270,29 @@ function MarketingConfigCard() {
   );
 }
 
-function UserTable() {
-  const [users, setUsers] = useState<AppUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const { user: currentUser } = useAuth();
-  const { toast } = useToast();
-
-  useEffect(() => {
-    fetchUsers().then(setUsers).catch(() => toast({ title: 'Erreur', variant: 'destructive' })).finally(() => setLoading(false));
-  }, [toast]);
-
-  const filteredUsers = useMemo(() => {
-    return users.filter(u => !searchTerm || u.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) || u.email?.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [users, searchTerm]);
-
-  if (loading) return <Skeleton className="h-40 w-full" />;
-
-  return (
-    <div className="space-y-4">
-      <Input placeholder="Rechercher un utilisateur..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="max-w-sm rounded-xl" />
-      <div className="rounded-xl border overflow-hidden">
-        <Table>
-          <TableHeader className="bg-muted/50">
-            <TableRow>
-              <TableHead>Utilisateur</TableHead>
-              <TableHead>Rôle Global</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredUsers.map(u => (
-              <TableRow key={u.uid}>
-                <TableCell className="flex items-center gap-3">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={u.photoURL || undefined} />
-                    <AvatarFallback>{u.displayName?.charAt(0) || 'U'}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <div className="font-bold text-sm">{u.displayName}</div>
-                    <div className="text-xs text-muted-foreground">{u.email}</div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Select value={u.role} onValueChange={role => updateUserRole(u.uid, role as UserRole)} disabled={u.uid === currentUser?.uid}>
-                    <SelectTrigger className="w-[120px] h-8 text-xs font-bold rounded-lg bg-muted/50 border-none">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="user">User</SelectItem>
-                      <SelectItem value="editor">Editor</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
 export default function AdminPage() {
-  const { role, loading: authLoading } = useAuth();
-  const { loading: eventLoading } = useEvent();
+  const { user, role, loading: authLoading } = useAuth();
+  const { event, loading: eventLoading } = useEvent();
   const router = useRouter();
 
+  // Autorisation : Créateur de l'événement ou Owner global
+  const isAuthorized = user?.uid === event?.adminId || role === 'owner';
+
   useEffect(() => {
-    if (!authLoading && role !== 'admin') router.replace('/dashboard');
-  }, [role, authLoading, router]);
+    if (!authLoading && !eventLoading && !isAuthorized) {
+        router.replace('/dashboard');
+    }
+  }, [isAuthorized, authLoading, eventLoading, router]);
 
   if (authLoading || eventLoading) return <div className="p-12 text-center text-muted-foreground animate-pulse">Chargement de l'administration...</div>;
-  if (role !== 'admin') return null;
+  if (!isAuthorized) return null;
 
   return (
     <AppLayout>
       <div className="h-full overflow-y-auto p-6 space-y-8">
         <div className="space-y-1">
-           <h1 className="text-3xl font-bold tracking-tight">Administration</h1>
-           <p className="text-muted-foreground">Configuration de l'événement et gestion des accès.</p>
+           <h1 className="text-3xl font-bold tracking-tight">Réglages de l'Événement</h1>
+           <p className="text-muted-foreground">Configuration de l'expérience visiteur pour : <span className="font-bold text-foreground">{event?.name}</span></p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -373,16 +316,6 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         </div>
-
-        <Card className="rounded-[2rem] border-muted/60 shadow-sm overflow-hidden">
-            <CardHeader className="bg-primary/5">
-              <CardTitle>Utilisateurs Globaux</CardTitle>
-              <CardDescription>Modifiez les permissions d'accès au niveau plateforme.</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <UserTable />
-            </CardContent>
-          </Card>
       </div>
     </AppLayout>
   );

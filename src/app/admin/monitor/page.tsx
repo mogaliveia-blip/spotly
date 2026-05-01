@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { useRouter } from 'next/navigation';
 import { fetchUsers, fetchPois, fetchAppConfig, fetchMarketingConfig, DEFAULT_EVENT_ID } from '@/lib/data';
-import type { MonitorStats, POI, AppConfig, MarketingConfig } from '@/lib/types';
+import type { POI, AppConfig, MarketingConfig } from '@/lib/types';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -127,12 +127,13 @@ export default function MonitorPage() {
     useEffect(() => {
         if (authLoading) return;
 
-        if (role && role !== 'admin') {
+        // Seul l'owner plateforme a accès au monitoring global
+        if (role && role !== 'owner') {
             router.replace('/dashboard');
             return;
         }
 
-        if (role === 'admin' && isPageVisible) {
+        if (role === 'owner' && isPageVisible) {
             fetchData();
             const intervalId = setInterval(() => fetchData(), 30000);
             return () => clearInterval(intervalId);
@@ -163,8 +164,8 @@ export default function MonitorPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex items-center gap-4">
                            <div>
-                             <h1 className="text-2xl font-bold tracking-tight">Monitoring</h1>
-                             <p className="text-muted-foreground">Vue d'ensemble en temps réel de l'activité de l'application.</p>
+                             <h1 className="text-2xl font-bold tracking-tight">Monitoring Plateforme</h1>
+                             <p className="text-muted-foreground">Vue d'ensemble en temps réel de l'activité globale.</p>
                            </div>
                            {isFestivalMode && <Badge variant="destructive">Mode Festival Actif</Badge>}
                         </div>
@@ -197,7 +198,7 @@ export default function MonitorPage() {
                                     <AlertTriangle className="h-4 w-4" />
                                     <AlertTitle>Alerte Critique</AlertTitle>
                                     <AlertDescription>
-                                        Aucun point d'intérêt (POI) n'est configuré. L'application est vide.
+                                        Aucun point d'intérêt (POI) n'est configuré sur l'événement par défaut.
                                     </AlertDescription>
                                 </Alert>
                             )}
@@ -207,27 +208,7 @@ export default function MonitorPage() {
                                     <AlertTriangle className="h-4 w-4" />
                                     <AlertTitle>Alerte de Configuration</AlertTitle>
                                     <AlertDescription>
-                                        La Landing Page et le Hero Marketing sont activés en même temps.
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-
-                            {isFestivalMode && stats.totalReviews === 0 && (
-                                <Alert>
-                                    <AlertTriangle className="h-4 w-4" />
-                                    <AlertTitle>Alerte de Contenu</AlertTitle>
-                                    <AlertDescription>
-                                        Le mode festival est actif mais aucun avis n'a été posté.
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-
-                            {stats.poisWithSponsorField > 0 && stats.activePartners === 0 && (
-                                <Alert>
-                                     <Info className="h-4 w-4" />
-                                    <AlertTitle>Information Partenariats</AlertTitle>
-                                    <AlertDescription>
-                                        Des POIs ont un sponsor configuré mais aucun n'est actif.
+                                        La Landing Page et le Hero Marketing sont activés en même temps sur le portail.
                                     </AlertDescription>
                                 </Alert>
                             )}
@@ -236,7 +217,7 @@ export default function MonitorPage() {
                                 <Alert>
                                      <CheckCircle className="h-4 w-4 text-green-500" />
                                     <AlertTitle>Système Nominal</AlertTitle>
-                                    <AlertDescription>Aucune alerte critique détectée.</AlertDescription>
+                                    <AlertDescription>Aucune alerte critique détectée au niveau plateforme.</AlertDescription>
                                 </Alert>
                              )}
                         </CardContent>
@@ -244,8 +225,8 @@ export default function MonitorPage() {
 
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <StatCard title="Total Utilisateurs" value={stats.totalUsers} icon={Users} loading={loading} />
-                        <StatCard title="Total POIs" value={stats.totalPois} icon={MapPin} loading={loading} delta={poisDelta} />
-                        <StatCard title="Total Avis" value={stats.totalReviews} icon={Star} loading={loading} delta={reviewsDelta} />
+                        <StatCard title="Total POIs (Root)" value={stats.totalPois} icon={MapPin} loading={loading} delta={poisDelta} />
+                        <StatCard title="Total Avis (Root)" value={stats.totalReviews} icon={Star} loading={loading} delta={reviewsDelta} />
                         <StatCard title="Partenaires Actifs" value={stats.activePartners} icon={Handshake} loading={loading} />
                     </div>
 
@@ -253,8 +234,8 @@ export default function MonitorPage() {
 
                         <Card>
                             <CardHeader>
-                                <CardTitle>État du système</CardTitle>
-                                <CardDescription>Configuration actuelle.</CardDescription>
+                                <CardTitle>État du Portail</CardTitle>
+                                <CardDescription>Configuration actuelle du point d'entrée.</CardDescription>
                             </CardHeader>
 
                             <CardContent className="space-y-4">
@@ -262,7 +243,7 @@ export default function MonitorPage() {
                                 <Alert>
                                     <MonitorPlay className="h-4 w-4" />
                                     <AlertTitle className="flex items-center justify-between">
-                                        <span>Landing Page</span>
+                                        <span>Landing Page Portail</span>
                                         <Badge variant={stats.isLandingPageActive ? "default" : "secondary"}>
                                             {stats.isLandingPageActive ? "Activée" : "Désactivée"}
                                         </Badge>
@@ -272,7 +253,7 @@ export default function MonitorPage() {
                                 <Alert>
                                     <Presentation className="h-4 w-4" />
                                     <AlertTitle className="flex items-center justify-between">
-                                        <span>Hero Marketing</span>
+                                        <span>Hero Marketing Portail</span>
                                         <Badge variant={stats.isHeroMarketingEnabled ? "default" : "secondary"}>
                                             {stats.isHeroMarketingEnabled ? "Activé" : "Désactivé"}
                                         </Badge>
@@ -303,41 +284,6 @@ export default function MonitorPage() {
                         </Card>
 
                     </div>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Analytics & Monitoring</CardTitle>
-                            <CardDescription>
-                                Accès rapide aux outils d'analyse Google Analytics.
-                            </CardDescription>
-                        </CardHeader>
-
-                        <CardContent className="grid gap-4 sm:grid-cols-2">
-
-                            <Button asChild variant="secondary">
-                                <a
-                                  href="https://analytics.google.com/analytics/web/#/realtime"
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  <BarChart3 className="mr-2 h-4 w-4"/>
-                                  Analytics temps réel
-                                </a>
-                            </Button>
-
-                            <Button asChild variant="outline">
-                                <a
-                                  href="https://analytics.google.com/analytics/web/#/debugview"
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  <Activity className="mr-2 h-4 w-4"/>
-                                  DebugView GA4
-                                </a>
-                            </Button>
-
-                        </CardContent>
-                    </Card>
 
                 </div>
             </div>

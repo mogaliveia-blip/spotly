@@ -20,10 +20,13 @@ export function Header() {
   const navItems = [
     { href: `${prefix}/dashboard`, icon: LayoutDashboard, label: 'Carte' },
     ...(eventSlug ? [
-        { href: `${prefix}/pois`, icon: MapPin, label: 'Lieux', roles: ['editor', 'admin'] },
-        { href: `${prefix}/admin/members`, icon: UsersRound, label: 'Équipe', roles: ['admin'] },
-        { href: `${prefix}/admin`, icon: Users, label: 'Réglages', roles: ['admin'] },
-        { href: `${prefix}/admin/monitor`, icon: Monitor, label: 'Supervision', roles: ['admin'] },
+        { href: `${prefix}/pois`, icon: MapPin, label: 'Lieux' },
+        { href: `${prefix}/admin/members`, icon: UsersRound, label: 'Équipe' },
+        { href: `${prefix}/admin`, icon: Users, label: 'Réglages' },
+        { href: `${prefix}/admin/monitor`, icon: Monitor, label: 'Supervision' },
+    ] : []),
+    ...(role === 'owner' ? [
+        { href: `/admin`, icon: Users, label: 'Administration Plateforme' }
     ] : [])
   ];
   
@@ -31,17 +34,14 @@ export function Header() {
      navItems.unshift({ href: '/admin/events', icon: CalendarDays, label: 'Mes Événements' });
   }
 
+  // Filtrage intelligent de la navigation
   const filteredNavItems = navItems.filter((item) => {
-    // Si c'est un owner global, il a accès à tout
-    if (role === 'owner') return true;
-    
-    // Sinon on filtre par rôle requis
-    if (!item.roles) return true;
-    if (!user) return false;
-    
-    // Note : Ici on vérifie le rôle local si on est dans un event
-    // Pour l'instant on garde une logique simple basée sur global/local
-    return true; // Le filtrage fin est géré par les permissions Firestore et l'UI des pages
+    // Les items globaux sans préfixe d'événement
+    if (!item.href.includes(prefix) && prefix !== '') {
+       // On ne garde que "Mes événements" et "Admin Plateforme" sur les pages locales si owner
+       return item.href === '/admin/events' || (item.href === '/admin' && role === 'owner');
+    }
+    return true;
   });
 
   return (

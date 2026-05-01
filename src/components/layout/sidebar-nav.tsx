@@ -232,6 +232,7 @@ export function SidebarNav() {
   const { user, role } = useAuth();
   const pathname = usePathname();
   const params = useParams();
+  const { event } = useEvent();
   
   const eventSlug = params?.eventSlug as string;
   const prefix = eventSlug ? `/${eventSlug}` : '';
@@ -247,37 +248,41 @@ export function SidebarNav() {
       href: `${prefix}/dashboard`,
       icon: LayoutDashboard,
       label: 'Carte',
-      auth: true,
     },
     {
       href: `${prefix}/pois`,
       icon: MapPin,
       label: 'Points d\'intérêt',
-      roles: ['editor', 'admin', 'owner'],
       auth: true,
     },
     {
       href: `${prefix}/admin`,
       icon: Users,
       label: 'Administration',
-      roles: ['admin', 'owner'],
       auth: true,
     },
     {
       href: `${prefix}/admin/monitor`,
       icon: Monitor,
       label: 'Supervision',
-      roles: ['admin', 'owner'],
+      auth: true,
+    },
+    {
+      href: `/admin`,
+      icon: Users,
+      label: 'Administration Plateforme',
+      roles: ['owner'],
       auth: true,
     },
   ];
 
-  const canAddPoi = (role === 'admin' || role === 'editor' || role === 'owner') && !!eventSlug;
-
   const filteredNavItems = navItems.filter((item) => {
-    if (!item.auth) return true;
-    if (!user) return false;
-    if (item.roles) return role && item.roles.includes(role);
+    if (item.auth && !user) return false;
+    if (item.roles && !item.roles.includes(role || '')) return false;
+    // Si c'est un item local, on ne l'affiche que si on est dans un slug
+    if (item.href.startsWith(prefix) && prefix === '' && item.href !== '/') {
+        return false;
+    }
     return true;
   });
 
@@ -326,13 +331,6 @@ export function SidebarNav() {
                 <SidebarGroupLabel className="p-0 text-[10px] uppercase tracking-[0.2em] font-black text-muted-foreground/60">
                   Exploration
                 </SidebarGroupLabel>
-                {canAddPoi && (
-                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full hover:bg-primary/10 text-primary" asChild>
-                    <Link href={`${prefix}/pois/new`} title="Nouveau POI">
-                      <PlusCircle className="h-4 w-4" />
-                    </Link>
-                  </Button>
-                )}
               </div>
               <POISidebarList />
             </SidebarGroup>
