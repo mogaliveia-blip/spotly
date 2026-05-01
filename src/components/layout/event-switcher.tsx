@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useRouter, useParams } from 'next/navigation';
-import { Calendar } from 'lucide-react';
+import { Calendar, LayoutGrid } from 'lucide-react';
 
 export function EventSwitcher() {
   const { user } = useAuth();
@@ -27,14 +27,11 @@ export function EventSwitcher() {
       fetchUserEvents(user.uid)
         .then(setEvents)
         .catch(() => {
-          // On ignore l'erreur ici (ex: index manquant)
-          // La page "Mes Événements" se chargera d'afficher l'alerte détaillée
           setEvents([]);
         });
     }
   }, [user]);
 
-  // Ne rien afficher si pas d'événements (ou utilisateur non connecté)
   if (!user || events.length === 0) return null;
 
   const currentSlug = params?.eventSlug as string || 'default';
@@ -45,7 +42,8 @@ export function EventSwitcher() {
         value={currentSlug} 
         onValueChange={(slug) => {
           if (slug === 'default') {
-            router.push('/dashboard');
+            // Redirige vers la liste des événements (anciennement mode global)
+            router.push('/admin/events');
           } else {
             router.push(`/${slug}/dashboard`);
           }
@@ -56,7 +54,12 @@ export function EventSwitcher() {
           <SelectValue placeholder="Mes événements" />
         </SelectTrigger>
         <SelectContent>
-           <SelectItem value="default" className="text-xs">🌍 Mode Global</SelectItem>
+           <SelectItem value="default" className="text-xs">
+             <div className="flex items-center gap-2">
+               <LayoutGrid className="h-3 w-3" />
+               <span>Vue d'ensemble</span>
+             </div>
+           </SelectItem>
           {events.map((e) => (
             <SelectItem key={e.id} value={e.slug} className="text-xs">
               {e.name}

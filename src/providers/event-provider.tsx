@@ -26,25 +26,27 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
   const eventSlug = params?.eventSlug as string;
 
-  // Détection immédiate de changement de route pour éviter les fuites de contexte
+  // Détection immédiate de changement de route
   const isTransitioning = eventSlug !== (resolvedSlug === 'global' ? undefined : resolvedSlug);
 
   useEffect(() => {
     let isMounted = true;
 
     async function resolveEvent() {
-      setLoading(true);
-    
-      setInternalEventId(DEFAULT_EVENT_ID);
-      setEvent(null);
-    
-      if (!eventSlug || eventSlug === 'dashboard' || eventSlug === 'admin') {
+      // Si on est sur une route globale (/dashboard, /admin, etc.)
+      if (!eventSlug || ['dashboard', 'admin', 'login', 'signup', 'access-pending'].includes(eventSlug)) {
         if (isMounted) {
+          setEvent(null);
+          setInternalEventId(DEFAULT_EVENT_ID);
           setResolvedSlug('global');
           setLoading(false);
         }
         return;
       }
+
+      setLoading(true);
+      setInternalEventId(DEFAULT_EVENT_ID);
+      setEvent(null);
 
       try {
         const resolved = await fetchEventBySlug(eventSlug);
@@ -54,6 +56,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
             setEvent(resolved);
             setInternalEventId(resolved.id);
           } else {
+            // Slug invalide ou événement introuvable
             setInternalEventId(DEFAULT_EVENT_ID);
             setEvent(null);
           }
