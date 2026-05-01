@@ -22,18 +22,31 @@ export default function PortalPage() {
   const isLoading = authLoading || !config;
 
   useEffect(() => {
+    console.log(`[Audit] PortalPage monté. Chargement de la config globale...`);
+    
     fetchAppConfig(DEFAULT_EVENT_ID)
       .then(appConfig => {
+        console.log(`[Audit] PortalPage a reçu la config:`, appConfig);
+        console.log(`[Audit] Évaluation config.isLandingPageActive:`, appConfig.isLandingPageActive);
+        
         setConfig(appConfig);
+        
         // Si le portail est actif (pas de maintenance), on charge les événements
         if (!appConfig.isLandingPageActive) {
+          console.log(`[Audit] Le portail est ACTIF. Chargement des événements publiés...`);
           setEventsLoading(true);
           fetchPublishedEvents()
-            .then(setEvents)
+            .then(data => {
+                console.log(`[Audit] Événements reçus: ${data.length}`);
+                setEvents(data);
+            })
             .finally(() => setEventsLoading(false));
+        } else {
+            console.log(`[Audit] Le portail est en mode LANDING PAGE.`);
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error(`[Audit] Erreur fatale lors du chargement initial:`, err);
         setConfig({ isLandingPageActive: false });
       });
   }, []);

@@ -204,11 +204,26 @@ export const dbPaths = {
 // --- CONFIG FUNCTIONS ---
 
 export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
+  const path = dbPaths.config(eventId);
+  console.log(`[Audit] fetchAppConfig appelé pour eventId: ${eventId}`);
+  console.log(`[Audit] Chemin Firestore cible: ${path}/main`);
+
   try {
-    const configRef = doc(db, dbPaths.config(eventId), 'main')
+    const configRef = doc(db, path, 'main')
     const configSnap = await getDoc(configRef)
-    if (configSnap.exists()) return configSnap.data() as AppConfig
-  } catch (e) {}
+    
+    if (configSnap.exists()) {
+      const data = configSnap.data() as AppConfig;
+      console.log(`[Audit] Document trouvé ! Données brutes:`, data);
+      return data;
+    } else {
+      console.warn(`[Audit] Document /${path}/main NON TROUVÉ dans Firestore.`);
+    }
+  } catch (e: any) {
+    console.error(`[Audit] ERREUR lors de la lecture de la config:`, e);
+  }
+  
+  console.log(`[Audit] Activation du FALLBACK (LandingPage par défaut à TRUE)`);
   return { isLandingPageActive: true, festivalMode: false, reviewsEnabled: true }
 }
 
