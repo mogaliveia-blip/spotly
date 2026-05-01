@@ -127,6 +127,30 @@ export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRo
 }
 
 /**
+ * Récupère tous les événements publiés pour le portail visiteur.
+ */
+export async function fetchPublishedEvents(): Promise<AppEvent[]> {
+  try {
+    const eventsRef = collection(db, 'events');
+    const q = query(eventsRef, where('status', '==', 'published'));
+    const snap = await getDocs(q);
+    
+    return snap.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt)
+      } as AppEvent;
+    });
+  } catch (error) {
+    console.error("[Data] Erreur fetchPublishedEvents:", error);
+    return [];
+  }
+}
+
+/**
  * Crée un nouvel événement et initialise sa structure de données.
  */
 export async function createEvent(data: { name: string; slug: string; adminId: string }): Promise<AppEvent> {
