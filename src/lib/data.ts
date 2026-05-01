@@ -82,14 +82,18 @@ export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRo
     try {
       membersSnap = await getDocsFromServer(membersQuery);
     } catch (e: any) {
+      // Gestion spécifique de l'index manquant pour aider au diagnostic
       if (e.code === "failed-precondition" && e.message?.toLowerCase().includes("index")) {
+        console.error("Firestore Index Missing: collectionGroup('members') with uid filter.");
         throw new Error("INDEX_MISSING");
       }
       membersSnap = await getDocs(membersQuery);
     }
     
     const memberships = membersSnap.docs.map(d => {
-        const eventId = d.ref.parent.parent?.id;
+        // Extraction robuste de l'eventId depuis le path: events/{eventId}/members/{uid}
+        const segments = d.ref.path.split('/');
+        const eventId = segments[1]; // Index 1 car segment 0 est 'events'
         const role = d.data().role;
         return eventId ? { eventId, role } : null;
     }).filter(Boolean) as { eventId: string; role: string }[];
@@ -122,6 +126,7 @@ export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRo
 
   } catch (error: any) {
     if (error.message === 'INDEX_MISSING') throw error;
+    console.error("[Data] fetchUserEvents failed:", error);
     return [];
   }
 }
@@ -205,25 +210,19 @@ export const dbPaths = {
 
 export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
   const path = dbPaths.config(eventId);
-  console.log(`[Audit] fetchAppConfig appelé pour eventId: ${eventId}`);
-  console.log(`[Audit] Chemin Firestore cible: ${path}/main`);
 
   try {
     const configRef = doc(db, path, 'main')
     const configSnap = await getDoc(configRef)
     
     if (configSnap.exists()) {
-      const data = configSnap.data() as AppConfig;
-      console.log(`[Audit] Document trouvé ! Données brutes:`, data);
-      return data;
-    } else {
-      console.warn(`[Audit] Document /${path}/main NON TROUVÉ dans Firestore.`);
+      return configSnap.data() as AppConfig;
     }
   } catch (e: any) {
-    console.error(`[Audit] ERREUR lors de la lecture de la config:`, e);
+    console.error(`[Data] fetchAppConfig error:`, e);
   }
   
-  console.log(`[Audit] Activation du FALLBACK (LandingPage par défaut à TRUE)`);
+  // Fallback sécurisé : mode landing par défaut
   return { isLandingPageActive: true, festivalMode: false, reviewsEnabled: true }
 }
 

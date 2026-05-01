@@ -32,6 +32,7 @@ export default function MyEventsPage() {
       const data = await fetchUserEvents(user.uid);
       setEvents(data);
     } catch (err: any) {
+      console.error("Erreur lors de la récupération des événements:", err);
       if (err.message === 'INDEX_MISSING') {
         setErrorType('INDEX_MISSING');
       } else {
