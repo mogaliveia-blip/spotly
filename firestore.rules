@@ -25,7 +25,6 @@ service cloud.firestore {
     }
 
     // Vérifie si l'utilisateur est le Propriétaire Global (Owner)
-    // Seul le rôle 'owner' a désormais des privilèges sur toute la plateforme
     function isGlobalAdmin() {
       let role = getUserData().role;
       return isAuthenticated() && role == "owner";
@@ -60,16 +59,17 @@ service cloud.firestore {
     }
 
     function isEventAdmin(eventId) {
+      let role = getRole(eventId);
       return isAuthenticated() &&
         (
+          role == "admin" ||
           getEvent(eventId).data.adminId == getUserId() ||
           isGlobalAdmin()
         );
     }
 
     function isAdminOnly(eventId) {
-      let role = getRole(eventId);
-      return role == "admin" || isEventAdmin(eventId);
+      return isEventAdmin(eventId);
     }
 
     function isAdminOrEditor(eventId) {
@@ -97,20 +97,17 @@ service cloud.firestore {
     ========================= */
 
     match /events/{eventId}/members/{userId} {
-      allow read: if isAuthenticated();
+      // Lecture autorisée pour les membres de l'événement
+      allow read: if isEventMember(eventId);
 
-      // Ajout de membres
-      allow create: if isApproved() &&
-        (
-          request.auth.uid == userId ||
-          isEventAdmin(eventId)
-        );
+      // Ajout de membres : admin local ou owner global
+      allow create: if isApproved() && isEventAdmin(eventId);
 
-      // Gestion membres
-      allow update, delete: if isAdminOnly(eventId);
+      // Gestion membres : admin local ou owner global
+      allow update, delete: if isEventAdmin(eventId);
     }
 
-    // Lecture générique de members
+    // Lecture générique de members pour les requêtes collectionGroup
     match /{path=**}/members/{userId} {
       allow read: if isAuthenticated() &&
         (
@@ -175,11 +172,7 @@ service cloud.firestore {
     ========================= */
 
     match /users/{userId} {
-      allow read: if isAuthenticated() &&
-        (
-          request.auth.uid == userId ||
-          isGlobalAdmin()
-        );
+      allow read: if isAuthenticated();
 
       allow create: if isAuthenticated() &&
         request.auth.uid == userId;

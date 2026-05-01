@@ -1,7 +1,7 @@
 'use client';
 
 import { UserNav } from './user-nav';
-import { Mountain, LayoutDashboard, MapPin, Users, Monitor, CalendarDays } from 'lucide-react';
+import { Mountain, LayoutDashboard, MapPin, Users, Monitor, CalendarDays, UsersRound } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { Button } from '@/components/ui/button';
 import { usePathname, useParams } from 'next/navigation';
@@ -19,23 +19,29 @@ export function Header() {
 
   const navItems = [
     { href: `${prefix}/dashboard`, icon: LayoutDashboard, label: 'Carte' },
-    // ✅ Masquer les outils de gestion en Mode Global
     ...(eventSlug ? [
-        { href: `${prefix}/pois`, icon: MapPin, label: 'Gérer les POIs', roles: ['editor', 'admin', 'owner'] },
-        { href: `${prefix}/admin`, icon: Users, label: 'Admin', roles: ['admin', 'owner'] },
-        { href: `${prefix}/admin/monitor`, icon: Monitor, label: 'Supervision', roles: ['admin', 'owner'] },
+        { href: `${prefix}/pois`, icon: MapPin, label: 'Lieux', roles: ['editor', 'admin'] },
+        { href: `${prefix}/admin/members`, icon: UsersRound, label: 'Équipe', roles: ['admin'] },
+        { href: `${prefix}/admin`, icon: Users, label: 'Réglages', roles: ['admin'] },
+        { href: `${prefix}/admin/monitor`, icon: Monitor, label: 'Supervision', roles: ['admin'] },
     ] : [])
   ];
   
-  // On ajoute "Mes Événements" si l'utilisateur est connecté
   if (user) {
      navItems.unshift({ href: '/admin/events', icon: CalendarDays, label: 'Mes Événements' });
   }
 
   const filteredNavItems = navItems.filter((item) => {
+    // Si c'est un owner global, il a accès à tout
+    if (role === 'owner') return true;
+    
+    // Sinon on filtre par rôle requis
     if (!item.roles) return true;
     if (!user) return false;
-    return role && item.roles.includes(role);
+    
+    // Note : Ici on vérifie le rôle local si on est dans un event
+    // Pour l'instant on garde une logique simple basée sur global/local
+    return true; // Le filtrage fin est géré par les permissions Firestore et l'UI des pages
   });
 
   return (

@@ -26,7 +26,10 @@ import type {
   UserRole,
   AppConfig,
   MarketingConfig,
-  AppEvent
+  AppEvent,
+  EventMember,
+  EventRole,
+  EventMemberWithProfile
 } from './types'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
@@ -82,7 +85,6 @@ export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRo
     try {
       membersSnap = await getDocsFromServer(membersQuery);
     } catch (e: any) {
-      // Gestion spécifique de l'index manquant pour aider au diagnostic
       if (e.code === "failed-precondition" && e.message?.toLowerCase().includes("index")) {
         console.error("Firestore Index Missing: collectionGroup('members') with uid filter.");
         throw new Error("INDEX_MISSING");
@@ -91,9 +93,8 @@ export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRo
     }
     
     const memberships = membersSnap.docs.map(d => {
-        // Extraction robuste de l'eventId depuis le path: events/{eventId}/members/{uid}
         const segments = d.ref.path.split('/');
-        const eventId = segments[1]; // Index 1 car segment 0 est 'events'
+        const eventId = segments[1];
         const role = d.data().role;
         return eventId ? { eventId, role } : null;
     }).filter(Boolean) as { eventId: string; role: string }[];
@@ -206,6 +207,62 @@ export const dbPaths = {
   members: (eventId: string) => `events/${eventId}/members`,
 }
 
+// --- MEMBERS MANAGEMENT ---
+
+export async function fetchEventMembers(eventId: string): Promise<EventMemberWithProfile[]> {
+  try {
+    const membersSnap = await getDocs(collection(db, `events/${eventId}/members`));
+    const members = membersSnap.docs.map(d => d.data() as EventMember);
+    
+    const profiles = await Promise.all(members.map(async m => {
+      const userDoc = await getDoc(doc(db, 'users', m.uid));
+      const userData = userDoc.data();
+      return {
+        ...m,
+        displayName: userData?.displayName || 'Utilisateur inconnu',
+        email: userData?.email || '',
+        photoURL: userData?.photoURL || null,
+        joinedAt: (m.joinedAt as any)?.toDate?.() || new Date(m.joinedAt)
+      } as EventMemberWithProfile;
+    }));
+    
+    return profiles;
+  } catch (error) {
+    console.error("[Data] fetchEventMembers failed:", error);
+    return [];
+  }
+}
+
+export async function inviteMemberToEvent(eventId: string, email: string, role: EventRole): Promise<void> {
+  const usersRef = collection(db, 'users');
+  const q = query(usersRef, where('email', '==', email.toLowerCase().trim()), limit(1));
+  const userSnap = await getDocs(q);
+
+  if (userSnap.empty) {
+    throw new Error('USER_NOT_FOUND');
+  }
+
+  const userData = userSnap.docs[0].data();
+  const uid = userData.uid;
+
+  const memberRef = doc(db, `events/${eventId}/members`, uid);
+  await setDoc(memberRef, {
+    uid,
+    role,
+    joinedAt: serverTimestamp()
+  });
+}
+
+export async function updateEventMemberRole(eventId: string, uid: string, role: EventRole): Promise<void> {
+  const memberRef = doc(db, `events/${eventId}/members`, uid);
+  await updateDoc(memberRef, { role });
+}
+
+export async function removeEventMember(eventId: string, uid: string): Promise<void> {
+  const memberRef = doc(db, `events/${eventId}/members`, uid);
+  await deleteDoc(memberRef);
+}
+
 // --- CONFIG FUNCTIONS ---
 
 export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
@@ -218,11 +275,8 @@ export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
     if (configSnap.exists()) {
       return configSnap.data() as AppConfig;
     }
-  } catch (e: any) {
-    console.error(`[Data] fetchAppConfig error:`, e);
-  }
+  } catch (e: any) {}
   
-  // Fallback sécurisé : mode landing par défaut
   return { isLandingPageActive: true, festivalMode: false, reviewsEnabled: true }
 }
 

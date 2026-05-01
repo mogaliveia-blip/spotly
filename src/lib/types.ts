@@ -10,7 +10,7 @@ import {
   Shapes
 } from 'lucide-react'
 
-export type UserRole = 'user' | 'editor' | 'admin' | 'owner'
+export type UserRole = 'user' | 'owner'
 
 export interface AppUser {
   uid: string
@@ -223,10 +223,16 @@ export interface AppEvent {
   }
 }
 
-export type EventRole = 'owner' | 'admin' | 'editor' | 'viewer'
+export type EventRole = 'admin' | 'editor' | 'viewer'
 
 export interface EventMember {
   uid: string
   role: EventRole
   joinedAt: Date
+}
+
+export interface EventMemberWithProfile extends EventMember {
+  displayName: string | null;
+  email: string | null;
+  photoURL: string | null;
 }
