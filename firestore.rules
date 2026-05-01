@@ -24,10 +24,11 @@ service cloud.firestore {
       return isAuthenticated() && getUserData().isApproved == true;
     }
 
-    // Vérifie si l'utilisateur est Admin Global ou Owner Global
+    // Vérifie si l'utilisateur est le Propriétaire Global (Owner)
+    // Seul le rôle 'owner' a désormais des privilèges sur toute la plateforme
     function isGlobalAdmin() {
       let role = getUserData().role;
-      return isAuthenticated() && (role == "admin" || role == "owner");
+      return isAuthenticated() && role == "owner";
     }
 
     function getEvent(eventId) {
@@ -48,12 +49,22 @@ service cloud.firestore {
 
     function getRole(eventId) {
       return isEventMember(eventId)
-        ? (isGlobalAdmin() ? "admin" : get(/databases/$(database)/documents/events/$(eventId)/members/$(getUserId())).data.role)
+        ? (
+            isGlobalAdmin()
+              ? "admin"
+              : get(
+                  /databases/$(database)/documents/events/$(eventId)/members/$(getUserId())
+                ).data.role
+          )
         : null;
     }
 
     function isEventAdmin(eventId) {
-      return isAuthenticated() && (getEvent(eventId).data.adminId == getUserId() || isGlobalAdmin());
+      return isAuthenticated() &&
+        (
+          getEvent(eventId).data.adminId == getUserId() ||
+          isGlobalAdmin()
+        );
     }
 
     function isAdminOnly(eventId) {
@@ -71,13 +82,13 @@ service cloud.firestore {
     ========================= */
 
     match /events/{eventId} {
-      // Lecture : Publique pour permettre la résolution des slugs (slug -> eventId)
+      // Lecture publique pour résolution slug -> eventId
       allow read: if true;
 
-      // Création : Utilisateurs approuvés uniquement
+      // Création : utilisateurs approuvés
       allow create: if isApproved();
 
-      // Gestion : Administrateur de l'événement ou Admin Global
+      // Gestion : admin événement ou admin global
       allow update, delete: if isEventAdmin(eventId);
     }
 
@@ -87,19 +98,29 @@ service cloud.firestore {
 
     match /events/{eventId}/members/{userId} {
       allow read: if isAuthenticated();
-      
-      // Seul l'admin de l'éven peut ajouter des membres
-      allow create: if isApproved() && (request.auth.uid == userId || isEventAdmin(eventId));
-      
+
+      // Ajout de membres
+      allow create: if isApproved() &&
+        (
+          request.auth.uid == userId ||
+          isEventAdmin(eventId)
+        );
+
+      // Gestion membres
       allow update, delete: if isAdminOnly(eventId);
     }
 
+    // Lecture générique de members
     match /{path=**}/members/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isGlobalAdmin());
+      allow read: if isAuthenticated() &&
+        (
+          request.auth.uid == userId ||
+          isGlobalAdmin()
+        );
     }
 
     /* =========================
-       POIS & REVIEWS
+       POIS PUBLIC
     ========================= */
 
     match /events/{eventId}/pois_public/{poiId} {
@@ -107,19 +128,29 @@ service cloud.firestore {
       allow write: if isAdminOrEditor(eventId);
     }
 
+    /* =========================
+       POIS PRIVÉS + REVIEWS
+    ========================= */
+
     match /events/{eventId}/pois/{poiId} {
       allow read: if isEventPublished(eventId) || isEventMember(eventId);
       allow create, update, delete: if isAdminOrEditor(eventId);
-      
+
       match /reviews/{reviewId} {
         allow read: if isEventPublished(eventId) || isEventMember(eventId);
+
+        // Création d’avis
         allow create: if isApproved();
-        allow update, delete: if isAdminOrEditor(eventId) || request.auth.uid == resource.data.userId;
+
+        // Modification/suppression
+        allow update, delete: if
+          isAdminOrEditor(eventId) ||
+          request.auth.uid == resource.data.userId;
       }
     }
 
     /* =========================
-       CONFIG
+       CONFIG EVENT
     ========================= */
 
     match /events/{eventId}/config/{docId} {
@@ -128,26 +159,51 @@ service cloud.firestore {
     }
 
     /* =========================
+       CONFIG GLOBALE (PORTAL)
+    ========================= */
+
+    match /config/{docId} {
+      // Lecture publique pour la page racine "/"
+      allow read: if true;
+
+      // Modification réservée au propriétaire global
+      allow write: if isGlobalAdmin();
+    }
+
+    /* =========================
        USERS GLOBAL
     ========================= */
 
     match /users/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isGlobalAdmin());
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isGlobalAdmin() || (
-        request.auth.uid == userId && 
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isApproved', 'role'])
-      );
+      allow read: if isAuthenticated() &&
+        (
+          request.auth.uid == userId ||
+          isGlobalAdmin()
+        );
+
+      allow create: if isAuthenticated() &&
+        request.auth.uid == userId;
+
+      allow update: if
+        isGlobalAdmin() ||
+        (
+          request.auth.uid == userId &&
+          !request.resource.data
+            .diff(resource.data)
+            .affectedKeys()
+            .hasAny(['isApproved', 'role'])
+        );
     }
 
     /* =========================
-       LEGACY (POIS RACINE)
+       LEGACY ROOT POIS
     ========================= */
 
     match /pois/{poiId} {
       allow read: if true;
       allow write: if isGlobalAdmin();
     }
+
     match /pois_public/{poiId} {
       allow read: if true;
       allow write: if isGlobalAdmin();

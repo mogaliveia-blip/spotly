@@ -324,7 +324,7 @@ function UserTable() {
             <TableRow>
               <TableHead>Utilisateur</TableHead>
               <TableHead>Statut</TableHead>
-              <TableHead>Rôle</TableHead>
+              <TableHead>Rôle Plateforme</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -360,8 +360,6 @@ function UserTable() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="owner">Owner</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="editor">Editor</SelectItem>
                         <SelectItem value="user">User</SelectItem>
                       </SelectContent>
                     </Select>
@@ -395,7 +393,8 @@ export default function AdminPage() {
   const { role, loading } = useAuth();
   const router = useRouter();
 
-  const canAccess = role === 'admin' || role === 'owner';
+  // Seul le rôle 'owner' peut désormais accéder à l'administration globale
+  const canAccess = role === 'owner';
 
   useEffect(() => {
     if (!loading && !canAccess) router.replace('/dashboard');
@@ -407,12 +406,12 @@ export default function AdminPage() {
   return (
     <AppLayout>
       <div className="h-full overflow-y-auto p-6 space-y-8">
-        <h1 className="text-3xl font-bold tracking-tight">Administration Globale</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Administration Plateforme</h1>
         
         <Card className="rounded-2xl border-muted shadow-sm overflow-hidden">
             <CardHeader className="bg-primary/5">
-              <CardTitle>Utilisateurs & Accès</CardTitle>
-              <CardDescription>Gérez les validations et les permissions de la plateforme.</CardDescription>
+              <CardTitle>Gestion des Utilisateurs</CardTitle>
+              <CardDescription>Validez les accès et gérez les rôles propriétaires.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <UserTable />
@@ -422,7 +421,8 @@ export default function AdminPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <Card className="rounded-2xl border-muted shadow-sm overflow-hidden">
             <CardHeader className="bg-primary/5">
-              <CardTitle>Configuration</CardTitle>
+              <CardTitle>Configuration Globale</CardTitle>
+              <CardDescription>Paramètres applicables à toute la plateforme.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <AppConfigCard />
@@ -432,6 +432,7 @@ export default function AdminPage() {
           <Card className="rounded-2xl border-muted shadow-sm overflow-hidden">
             <CardHeader className="bg-primary/5">
               <CardTitle>Marketing Global</CardTitle>
+              <CardDescription>Overlay marketing pour les visiteurs non connectés.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <MarketingConfigCard />
