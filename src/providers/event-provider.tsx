@@ -3,24 +3,31 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { fetchEventBySlug, DEFAULT_EVENT_ID } from '@/lib/data';
-import type { AppEvent } from '@/lib/types';
+import type { AppEvent, EventRole } from '@/lib/types';
+import { useAuth } from '@/hooks/use-auth-user';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 interface EventContextType {
   event: AppEvent | null;
   eventId: string;
   loading: boolean;
+  userRole: EventRole | null; // Ajout du rôle local de l'utilisateur
 }
 
 const EventContext = createContext<EventContextType>({
   event: null,
   eventId: DEFAULT_EVENT_ID,
   loading: true,
+  userRole: null,
 });
 
 export function EventProvider({ children }: { children: React.ReactNode }) {
   const params = useParams();
+  const { user, role: globalRole } = useAuth();
   const [event, setEvent] = useState<AppEvent | null>(null);
   const [currentEventId, setInternalEventId] = useState<string>(DEFAULT_EVENT_ID);
+  const [userRole, setUserRole] = useState<EventRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [resolvedSlug, setResolvedSlug] = useState<string | null>(null);
 
@@ -33,12 +40,13 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
 
     async function resolveEvent() {
-      // Si on est sur une route globale (/dashboard, /admin, etc.)
+      // Si on est sur une route globale
       if (!eventSlug || ['dashboard', 'admin', 'login', 'signup', 'access-pending'].includes(eventSlug)) {
         if (isMounted) {
           setEvent(null);
           setInternalEventId(DEFAULT_EVENT_ID);
           setResolvedSlug('global');
+          setUserRole(null);
           setLoading(false);
         }
         return;
@@ -47,6 +55,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setInternalEventId(DEFAULT_EVENT_ID);
       setEvent(null);
+      setUserRole(null);
 
       try {
         const resolved = await fetchEventBySlug(eventSlug);
@@ -55,8 +64,17 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           if (resolved) {
             setEvent(resolved);
             setInternalEventId(resolved.id);
+
+            // Résolution du rôle local si l'utilisateur est connecté
+            if (user) {
+              const memberDoc = await getDoc(doc(db, `events/${resolved.id}/members`, user.uid));
+              if (memberDoc.exists()) {
+                setUserRole(memberDoc.data().role as EventRole);
+              } else if (globalRole === 'owner') {
+                setUserRole('admin'); // Le proprio plateforme est admin partout
+              }
+            }
           } else {
-            // Slug invalide ou événement introuvable
             setInternalEventId(DEFAULT_EVENT_ID);
             setEvent(null);
           }
@@ -78,13 +96,14 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [eventSlug]);
+  }, [eventSlug, user, globalRole]);
 
   return (
     <EventContext.Provider value={{ 
       event, 
       eventId: currentEventId, 
-      loading: loading || isTransitioning 
+      loading: loading || isTransitioning,
+      userRole
     }}>
       {children}
     </EventContext.Provider>

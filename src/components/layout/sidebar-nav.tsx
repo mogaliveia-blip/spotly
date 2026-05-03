@@ -22,13 +22,14 @@ import {
   Navigation,
   Monitor,
   Filter,
-  CalendarDays
+  CalendarDays,
+  UsersRound
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams, useParams } from 'next/navigation';
 import { Button } from '../ui/button';
 import { useEffect, useState, useMemo } from 'react';
-import type { POI, MainCategory } from '@/lib/types';
+import type { POI, MainCategory, EventRole } from '@/lib/types';
 import { fetchPois, DEFAULT_EVENT_ID } from '@/lib/data';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { getDistance } from '@/lib/utils';
@@ -229,13 +230,15 @@ function POISidebarList() {
 }
 
 export function SidebarNav() {
-  const { user, role } = useAuth();
+  const { user, role: globalRole } = useAuth();
+  const { userRole } = useEvent();
   const pathname = usePathname();
   const params = useParams();
-  const { event } = useEvent();
   
   const eventSlug = params?.eventSlug as string;
   const prefix = eventSlug ? `/${eventSlug}` : '';
+
+  const canManageEvent = globalRole === 'owner' || userRole === 'admin' || userRole === 'editor';
 
   const navItems = [
     {
@@ -253,18 +256,28 @@ export function SidebarNav() {
       href: `${prefix}/pois`,
       icon: MapPin,
       label: 'Points d\'intérêt',
+      visible: !!eventSlug && canManageEvent,
+      auth: true,
+    },
+    {
+      href: `${prefix}/admin/members`,
+      icon: UsersRound,
+      label: 'Équipe',
+      visible: !!eventSlug && canManageEvent,
       auth: true,
     },
     {
       href: `${prefix}/admin`,
       icon: Users,
       label: 'Administration',
+      visible: !!eventSlug && canManageEvent,
       auth: true,
     },
     {
       href: `${prefix}/admin/monitor`,
       icon: Monitor,
       label: 'Supervision',
+      visible: !!eventSlug && canManageEvent,
       auth: true,
     },
     {
@@ -278,8 +291,8 @@ export function SidebarNav() {
 
   const filteredNavItems = navItems.filter((item) => {
     if (item.auth && !user) return false;
-    if (item.roles && !item.roles.includes(role || '')) return false;
-    // Si c'est un item local, on ne l'affiche que si on est dans un slug
+    if (item.roles && !item.roles.includes(globalRole || '')) return false;
+    if (item.visible === false) return false;
     if (item.href.startsWith(prefix) && prefix === '' && item.href !== '/') {
         return false;
     }

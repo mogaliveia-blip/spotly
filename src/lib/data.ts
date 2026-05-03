@@ -79,6 +79,7 @@ export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
  */
 export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRole?: string })[]> {
   try {
+    // Filtrage strict par UID pour respecter les Security Rules
     const membersQuery = query(collectionGroup(db, 'members'), where('uid', '==', uid));
     
     let membersSnap;
@@ -163,6 +164,10 @@ export async function createEvent(data: { name: string; slug: string; adminId: s
   const eventRef = doc(collection(db, 'events'));
   const id = eventRef.id;
 
+  // On récupère le profil de l'admin pour la redondance dans members
+  const userDoc = await getDoc(doc(db, 'users', data.adminId));
+  const userData = userDoc.data();
+
   const eventData = {
     name: data.name,
     slug: data.slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
@@ -179,6 +184,9 @@ export async function createEvent(data: { name: string; slug: string; adminId: s
     tx.set(memberRef, {
       uid: data.adminId,
       role: 'admin',
+      displayName: userData?.displayName || 'Créateur',
+      email: userData?.email || '',
+      photoURL: userData?.photoURL || null,
       joinedAt: serverTimestamp()
     });
 
@@ -212,21 +220,14 @@ export const dbPaths = {
 export async function fetchEventMembers(eventId: string): Promise<EventMemberWithProfile[]> {
   try {
     const membersSnap = await getDocs(collection(db, `events/${eventId}/members`));
-    const members = membersSnap.docs.map(d => d.data() as EventMember);
-    
-    const profiles = await Promise.all(members.map(async m => {
-      const userDoc = await getDoc(doc(db, 'users', m.uid));
-      const userData = userDoc.data();
+    // Plus besoin de lire /users, les données sont redondées dans le membre
+    return membersSnap.docs.map(d => {
+      const data = d.data();
       return {
-        ...m,
-        displayName: userData?.displayName || 'Utilisateur inconnu',
-        email: userData?.email || '',
-        photoURL: userData?.photoURL || null,
-        joinedAt: (m.joinedAt as any)?.toDate?.() || new Date(m.joinedAt)
+        ...data,
+        joinedAt: (data.joinedAt as any)?.toDate?.() || new Date(data.joinedAt)
       } as EventMemberWithProfile;
-    }));
-    
-    return profiles;
+    });
   } catch (error) {
     console.error("[Data] fetchEventMembers failed:", error);
     return [];
@@ -245,10 +246,14 @@ export async function inviteMemberToEvent(eventId: string, email: string, role: 
   const userData = userSnap.docs[0].data();
   const uid = userData.uid;
 
+  // On stocke les infos de profil directement dans le membre pour éviter les lectures croisées de collections
   const memberRef = doc(db, `events/${eventId}/members`, uid);
   await setDoc(memberRef, {
     uid,
     role,
+    displayName: userData.displayName || 'Utilisateur',
+    email: userData.email || '',
+    photoURL: userData.photoURL || null,
     joinedAt: serverTimestamp()
   });
 }

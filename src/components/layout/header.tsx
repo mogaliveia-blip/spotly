@@ -8,24 +8,29 @@ import { usePathname, useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { AuthDialog } from '../auth/auth-dialog';
 import { EventSwitcher } from './event-switcher';
+import { useEvent } from '@/providers/event-provider';
 
 export function Header() {
-  const { user, role } = useAuth();
+  const { user, role: globalRole } = useAuth();
+  const { userRole } = useEvent();
   const pathname = usePathname();
   const params = useParams();
   
   const eventSlug = params?.eventSlug as string;
   const prefix = eventSlug ? `/${eventSlug}` : '';
 
+  // Autorisation pour les outils de gestion d'événement
+  const canManageEvent = globalRole === 'owner' || userRole === 'admin' || userRole === 'editor';
+
   const navItems = [
     { href: `${prefix}/dashboard`, icon: LayoutDashboard, label: 'Carte' },
-    ...(eventSlug ? [
+    ...(eventSlug && canManageEvent ? [
         { href: `${prefix}/pois`, icon: MapPin, label: 'Lieux' },
         { href: `${prefix}/admin/members`, icon: UsersRound, label: 'Équipe' },
         { href: `${prefix}/admin`, icon: Users, label: 'Réglages' },
         { href: `${prefix}/admin/monitor`, icon: Monitor, label: 'Supervision' },
     ] : []),
-    ...(role === 'owner' ? [
+    ...(globalRole === 'owner' ? [
         { href: `/admin`, icon: Users, label: 'Administration Plateforme' }
     ] : [])
   ];
@@ -36,10 +41,8 @@ export function Header() {
 
   // Filtrage intelligent de la navigation
   const filteredNavItems = navItems.filter((item) => {
-    // Les items globaux sans préfixe d'événement
     if (!item.href.includes(prefix) && prefix !== '') {
-       // On ne garde que "Mes événements" et "Admin Plateforme" sur les pages locales si owner
-       return item.href === '/admin/events' || (item.href === '/admin' && role === 'owner');
+       return item.href === '/admin/events' || (item.href === '/admin' && globalRole === 'owner');
     }
     return true;
   });

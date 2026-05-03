@@ -109,9 +109,12 @@ service cloud.firestore {
 
     // Lecture générique de members pour les requêtes collectionGroup
     match /{path=**}/members/{userId} {
+      // On permet la requête groupée si l'UID filtré est celui de l'utilisateur
+      // resource.data.uid est crucial pour la validation de la requête
       allow read: if isAuthenticated() &&
         (
           request.auth.uid == userId ||
+          (resource != null && request.auth.uid == resource.data.uid) ||
           isOwner()
         );
     }
@@ -142,7 +145,7 @@ service cloud.firestore {
         // Modification/suppression
         allow update, delete: if
           isAdminOrEditor(eventId) ||
-          request.auth.uid == resource.data.userId;
+          (resource != null && request.auth.uid == resource.data.userId);
       }
     }
 
