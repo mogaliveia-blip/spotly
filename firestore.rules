@@ -19,31 +19,40 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(getUserId())).data;
     }
 
-    // Vérifie si l'utilisateur est approuvé par l'owner global
+    // Utilisateur validé par owner
     function isApproved() {
-      return isAuthenticated() && getUserData().isApproved == true;
+      return isAuthenticated() &&
+        getUserData().isApproved == true;
     }
 
-    // Vérifie si l'utilisateur est le Propriétaire Global (Owner)
+    // Owner plateforme
     function isOwner() {
-      let role = getUserData().role;
-      return isAuthenticated() && role == "owner";
+      return isAuthenticated() &&
+        getUserData().role == "owner";
     }
 
     function getEvent(eventId) {
-      return get(/databases/$(database)/documents/events/$(eventId));
+      return get(
+        /databases/$(database)/documents/events/$(eventId)
+      );
     }
 
     function isEventPublished(eventId) {
-      let eventPath = /databases/$(database)/documents/events/$(eventId);
-      return exists(eventPath) && get(eventPath).data.status == "published";
+      let eventPath =
+        /databases/$(database)/documents/events/$(eventId);
+
+      return exists(eventPath) &&
+        get(eventPath).data.status == "published";
     }
 
     function isEventMember(eventId) {
-      return isAuthenticated() && (
-        exists(/databases/$(database)/documents/events/$(eventId)/members/$(getUserId())) ||
-        isOwner()
-      );
+      return isAuthenticated() &&
+        (
+          exists(
+            /databases/$(database)/documents/events/$(eventId)/members/$(getUserId())
+          ) ||
+          isOwner()
+        );
     }
 
     function getRole(eventId) {
@@ -60,6 +69,7 @@ service cloud.firestore {
 
     function isEventAdmin(eventId) {
       let role = getRole(eventId);
+
       return isAuthenticated() &&
         (
           role == "admin" ||
@@ -68,13 +78,13 @@ service cloud.firestore {
         );
     }
 
-    function isAdminOnly(eventId) {
-      return isEventAdmin(eventId);
-    }
-
     function isAdminOrEditor(eventId) {
       let role = getRole(eventId);
-      return role == "admin" || role == "editor" || isEventAdmin(eventId);
+
+      return
+        role == "admin" ||
+        role == "editor" ||
+        isEventAdmin(eventId);
     }
 
     /* =========================
@@ -82,13 +92,10 @@ service cloud.firestore {
     ========================= */
 
     match /events/{eventId} {
-      // Lecture publique pour résolution slug -> eventId
       allow read: if true;
 
-      // Création : utilisateurs approuvés
       allow create: if isApproved();
 
-      // Gestion : admin événement ou admin global
       allow update, delete: if isEventAdmin(eventId);
     }
 
@@ -97,24 +104,29 @@ service cloud.firestore {
     ========================= */
 
     match /events/{eventId}/members/{userId} {
-      // Lecture autorisée pour les membres de l'événement
+      // lecture équipe
       allow read: if isEventMember(eventId);
 
-      // Ajout de membres : admin local ou owner global
-      allow create: if isApproved() && isEventAdmin(eventId);
+      // IMPORTANT :
+      // permet la création initiale du créateur dans le batch
+      allow create: if isApproved() &&
+        (
+          request.auth.uid == userId ||
+          isEventAdmin(eventId)
+        );
 
-      // Gestion membres : admin local ou owner global
       allow update, delete: if isEventAdmin(eventId);
     }
 
-    // Lecture générique de members pour les requêtes collectionGroup
+    // collectionGroup(members)
     match /{path=**}/members/{userId} {
-      // On permet la requête groupée si l'UID filtré est celui de l'utilisateur
-      // resource.data.uid est crucial pour la validation de la requête
       allow read: if isAuthenticated() &&
         (
           request.auth.uid == userId ||
-          (resource != null && request.auth.uid == resource.data.uid) ||
+          (
+            resource != null &&
+            request.auth.uid == resource.data.uid
+          ) ||
           isOwner()
         );
     }
@@ -124,28 +136,39 @@ service cloud.firestore {
     ========================= */
 
     match /events/{eventId}/pois_public/{poiId} {
-      allow read: if isEventPublished(eventId) || isEventMember(eventId);
-      allow write: if isAdminOrEditor(eventId);
+      allow read: if
+        isEventPublished(eventId) ||
+        isEventMember(eventId);
+
+      allow write: if
+        isAdminOrEditor(eventId);
     }
 
     /* =========================
-       POIS PRIVÉS + REVIEWS
+       POIS PRIVÉS
     ========================= */
 
     match /events/{eventId}/pois/{poiId} {
-      allow read: if isEventPublished(eventId) || isEventMember(eventId);
-      allow create, update, delete: if isAdminOrEditor(eventId);
+      allow read: if
+        isEventPublished(eventId) ||
+        isEventMember(eventId);
+
+      allow create, update, delete: if
+        isAdminOrEditor(eventId);
 
       match /reviews/{reviewId} {
-        allow read: if isEventPublished(eventId) || isEventMember(eventId);
+        allow read: if
+          isEventPublished(eventId) ||
+          isEventMember(eventId);
 
-        // Création d’avis
         allow create: if isApproved();
 
-        // Modification/suppression
         allow update, delete: if
           isAdminOrEditor(eventId) ||
-          (resource != null && request.auth.uid == resource.data.userId);
+          (
+            resource != null &&
+            request.auth.uid == resource.data.userId
+          );
       }
     }
 
@@ -154,19 +177,25 @@ service cloud.firestore {
     ========================= */
 
     match /events/{eventId}/config/{docId} {
-      allow read: if isEventPublished(eventId) || isEventMember(eventId);
-      allow write: if isAdminOnly(eventId);
+      allow read: if
+        isEventPublished(eventId) ||
+        isEventMember(eventId);
+
+      // IMPORTANT :
+      // autorise création initiale dans batch
+      allow create: if isApproved();
+
+      allow update, delete: if
+        isEventAdmin(eventId);
     }
 
     /* =========================
-       CONFIG GLOBALE (PORTAL)
+       CONFIG PORTAIL
     ========================= */
 
     match /config/{docId} {
-      // Lecture publique pour la page racine "/"
       allow read: if true;
 
-      // Modification réservée au propriétaire global
       allow write: if isOwner();
     }
 
@@ -175,10 +204,16 @@ service cloud.firestore {
     ========================= */
 
     match /users/{userId} {
-      // Restriction lecture : soi-même ou owner uniquement
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isOwner());
+      // confidentialité stricte
+      allow read: if
+        isAuthenticated() &&
+        (
+          request.auth.uid == userId ||
+          isOwner()
+        );
 
-      allow create: if isAuthenticated() &&
+      allow create: if
+        isAuthenticated() &&
         request.auth.uid == userId;
 
       allow update: if
@@ -188,12 +223,15 @@ service cloud.firestore {
           !request.resource.data
             .diff(resource.data)
             .affectedKeys()
-            .hasAny(['isApproved', 'role'])
+            .hasAny([
+              'isApproved',
+              'role'
+            ])
         );
     }
 
     /* =========================
-       LEGACY ROOT POIS
+       LEGACY ROOT
     ========================= */
 
     match /pois/{poiId} {
