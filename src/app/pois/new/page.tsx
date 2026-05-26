@@ -1,10 +1,15 @@
+'use client';
+
 // src/app/pois/new/page.tsx
 import { POIForm } from '@/components/poi/poi-form';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { AppLayout } from '@/components/layout/app-layout';
-import { DEFAULT_EVENT_ID } from '@/lib/data';
+
+export const dynamic = 'force-dynamic';
+
+const DEFAULT_EVENT_ID = 'default-event';
 
 export default function NewPOIPage() {
   return (

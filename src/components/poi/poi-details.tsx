@@ -287,14 +287,22 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
             </>
           )}
 
-          <div className="relative w-full h-full flex items-center justify-center px-6 py-12">
-            <img
-              src={allImages[selectedIndex]}
-              alt={`Aperçu ${selectedIndex + 1}`}
-              className="w-auto h-auto max-w-[92vw] max-h-[82vh] object-contain rounded-2xl shadow-2xl animate-in zoom-in-95 duration-300 select-none"
-              onClick={(e) => e.stopPropagation()}
-              draggable={false}
-            />
+          <div
+            className="relative w-full h-full flex items-center justify-center px-10 py-16"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative w-full h-full max-w-[80vw] max-h-[75vh]">
+              <Image
+                src={allImages[selectedIndex]}
+                alt={`Aperçu ${selectedIndex + 1}`}
+                fill
+                className="object-contain rounded-2xl shadow-2xl select-none"
+                sizes="80vw"
+                priority
+                draggable={false}
+              />
+            </div>
+
             <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-black/50 text-white px-4 py-1.5 rounded-full text-sm font-medium backdrop-blur-sm">
               {selectedIndex + 1} / {allImages.length}
             </div>
