@@ -23,13 +23,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Loader2, ImagePlus, UserCheck, UserX } from 'lucide-react';
+import { CalendarDays, ImagePlus, Loader2, ShieldCheck, UserCheck, UserX, UsersRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
+import Link from 'next/link';
+
+const PLATFORM_ROLE_DESCRIPTIONS: Record<UserRole, string> = {
+  owner: 'Administration globale, validation des comptes et supervision plateforme.',
+  user: "Compte standard. Les droits admin/editor se donnent dans l'équipe d'un événement."
+};
 
 /* =========================
    APP CONFIG CARD
@@ -280,10 +286,24 @@ function UserTable() {
     }).sort((a, b) => (a.isApproved === b.isApproved ? 0 : a.isApproved ? 1 : -1));
   }, [users, searchTerm, filter]);
 
-  const handleRoleChange = (uid: string, newRole: UserRole) => {
-    updateUserRole(uid, newRole);
+  const handleRoleChange = async (uid: string, newRole: UserRole) => {
+    const previousUsers = users;
     setUsers(users.map(u => (u.uid === uid ? { ...u, role: newRole } : u)));
-    toast({ title: 'Rôle mis à jour' });
+
+    try {
+      await updateUserRole(uid, newRole);
+      toast({
+        title: 'Rôle plateforme mis à jour',
+        description: "Les rôles d'événement restent gérés dans l'équipe de chaque événement."
+      });
+    } catch {
+      setUsers(previousUsers);
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de modifier le rôle plateforme.',
+        variant: 'destructive'
+      });
+    }
   };
 
   const handleApprovalToggle = async (uid: string, currentStatus: boolean) => {
@@ -300,6 +320,10 @@ function UserTable() {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
+        Cette table gère uniquement les rôles plateforme : <span className="font-semibold text-foreground">owner</span> et <span className="font-semibold text-foreground">user</span>. Les rôles événement <span className="font-semibold text-foreground">admin</span> et <span className="font-semibold text-foreground">editor</span> se gèrent dans l'équipe de chaque événement.
+      </div>
+
       <div className="flex flex-col sm:flex-row gap-4">
         <Input placeholder="Rechercher..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="max-w-sm" />
         <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
@@ -320,7 +344,8 @@ function UserTable() {
             <TableRow>
               <TableHead>Utilisateur</TableHead>
               <TableHead>Statut</TableHead>
-              <TableHead>Rôle Plateforme</TableHead>
+              <TableHead>Rôle plateforme</TableHead>
+              <TableHead className="hidden lg:table-cell">Périmètre</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -350,14 +375,19 @@ function UserTable() {
                     onValueChange={v => handleRoleChange(user.uid, v as UserRole)} 
                     disabled={user.uid === currentUser?.uid}
                   >
-                    <SelectTrigger className="w-[110px] h-8 text-xs">
+                    <SelectTrigger className="w-[170px] h-8 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="owner">Owner</SelectItem>
-                      <SelectItem value="user">User</SelectItem>
+                      <SelectItem value="owner">Owner plateforme</SelectItem>
+                      <SelectItem value="user">Utilisateur</SelectItem>
                     </SelectContent>
                   </Select>
+                </TableCell>
+                <TableCell className="hidden lg:table-cell max-w-xs">
+                  <div className="text-xs text-muted-foreground">
+                    {PLATFORM_ROLE_DESCRIPTIONS[user.role]}
+                  </div>
                 </TableCell>
                 <TableCell className="text-right">
                   {user.uid !== currentUser?.uid && (
@@ -398,12 +428,62 @@ export default function AdminPage() {
   return (
     <AppLayout>
       <div className="h-full overflow-y-auto p-6 space-y-8">
-        <h1 className="text-3xl font-bold tracking-tight">Administration Plateforme</h1>
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight">Administration Plateforme</h1>
+          <p className="text-muted-foreground">
+            Console réservée aux owners pour valider les comptes, gérer les owners plateforme et superviser Spotly.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card className="rounded-2xl border-muted shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                Rôles plateforme
+              </CardTitle>
+              <CardDescription>Attribués sur les documents users.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Badge>owner</Badge>
+              <Badge variant="outline">user</Badge>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-muted shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <UsersRound className="h-4 w-4 text-primary" />
+                Rôles événement
+              </CardTitle>
+              <CardDescription>Attribués dans events/{'{eventId}'}/members.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Badge variant="secondary">admin</Badge>
+              <Badge variant="secondary">editor</Badge>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-muted shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CalendarDays className="h-4 w-4 text-primary" />
+                Équipes événement
+              </CardTitle>
+              <CardDescription>La gestion admin/editor se fait événement par événement.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild variant="outline" className="h-9 rounded-xl">
+                <Link href="/admin/events">Voir les événements</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
         
         <Card className="rounded-2xl border-muted shadow-sm overflow-hidden">
             <CardHeader className="bg-primary/5">
-              <CardTitle>Gestion des Utilisateurs</CardTitle>
-              <CardDescription>Validez les accès et gérez les rôles propriétaires au niveau global.</CardDescription>
+              <CardTitle>Gestion des utilisateurs plateforme</CardTitle>
+              <CardDescription>Validez les accès et gérez uniquement les rôles globaux owner/user.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <UserTable />

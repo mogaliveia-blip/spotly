@@ -58,7 +58,10 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       setUserRole(null);
 
       try {
-        const resolved = await fetchEventBySlug(eventSlug);
+        const resolved = await fetchEventBySlug(eventSlug, {
+          uid: user?.uid,
+          isOwner: globalRole === 'owner'
+        });
         
         if (isMounted) {
           if (resolved) {

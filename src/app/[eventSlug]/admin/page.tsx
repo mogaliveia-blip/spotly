@@ -2,17 +2,16 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
-  fetchUsers,
-  updateUserRole,
   fetchAppConfig,
   updateAppConfig,
   fetchMarketingConfig,
   updateMarketingConfig,
+  updateEventDetails,
   uploadFile
 } from '@/lib/data';
-import type { AppUser, UserRole, AppConfig, MarketingConfig } from '@/lib/types';
+import type { AppConfig, MarketingConfig } from '@/lib/types';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -28,6 +27,94 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import Image from 'next/image';
 import { useEvent } from '@/providers/event-provider';
+
+function toDateInputValue(value?: Date): string {
+  if (!value) return '';
+  return value.toISOString().slice(0, 10);
+}
+
+function parseDateInputValue(value: string): Date | undefined {
+  if (!value) return undefined;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function EventDetailsCard() {
+  const { event, eventId } = useEvent();
+  const { toast } = useToast();
+  const [name, setName] = useState(event?.name ?? '');
+  const [startDate, setStartDate] = useState(toDateInputValue(event?.startDate));
+  const [endDate, setEndDate] = useState(toDateInputValue(event?.endDate));
+  const [timezone, setTimezone] = useState(event?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Europe/Paris');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setName(event?.name ?? '');
+    setStartDate(toDateInputValue(event?.startDate));
+    setEndDate(toDateInputValue(event?.endDate));
+    setTimezone(event?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Europe/Paris');
+  }, [event]);
+
+  const handleSave = async () => {
+    if (!event) return;
+
+    if (startDate && endDate && startDate > endDate) {
+      toast({
+        title: 'Dates invalides',
+        description: 'La date de fin doit être postérieure à la date de début.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await updateEventDetails(eventId, {
+        name: name.trim(),
+        startDate: parseDateInputValue(startDate),
+        endDate: parseDateInputValue(endDate),
+        timezone: timezone.trim() || 'Europe/Paris'
+      });
+      toast({ title: 'Événement mis à jour' });
+    } catch (error) {
+      console.error('[EventDetailsCard] updateEventDetails failed', error);
+      toast({
+        title: 'Erreur',
+        description: "Impossible de sauvegarder les informations de l'événement.",
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="event-name">Nom</Label>
+        <Input id="event-name" value={name} onChange={(event) => setName(event.target.value)} className="rounded-xl" />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="event-start-date">Date de début</Label>
+          <Input id="event-start-date" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="rounded-xl" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="event-end-date">Date de fin</Label>
+          <Input id="event-end-date" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="rounded-xl" />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="event-timezone">Fuseau horaire</Label>
+        <Input id="event-timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} className="rounded-xl" />
+      </div>
+      <Button onClick={handleSave} disabled={saving || !name.trim()} className="w-full sm:w-auto font-bold rounded-xl h-11">
+        {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        Sauvegarder
+      </Button>
+    </div>
+  );
+}
 
 /* =========================
    APP CONFIG CARD
@@ -271,12 +358,12 @@ function MarketingConfigCard() {
 }
 
 export default function AdminPage() {
-  const { user, role, loading: authLoading } = useAuth();
-  const { event, loading: eventLoading } = useEvent();
+  const { role, loading: authLoading } = useAuth();
+  const { event, loading: eventLoading, userRole } = useEvent();
   const router = useRouter();
 
-  // Autorisation : Créateur de l'événement ou Owner global
-  const isAuthorized = user?.uid === event?.adminId || role === 'owner';
+  // Autorisation : Admin local ou Owner global
+  const isAuthorized = role === 'owner' || userRole === 'admin';
 
   useEffect(() => {
     if (!authLoading && !eventLoading && !isAuthorized) {
@@ -296,6 +383,16 @@ export default function AdminPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <Card className="rounded-[2rem] border-muted/60 shadow-sm overflow-hidden">
+            <CardHeader className="bg-primary/5">
+              <CardTitle>Informations</CardTitle>
+              <CardDescription>Nom, dates et fuseau horaire de l'événement.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <EventDetailsCard />
+            </CardContent>
+          </Card>
+
           <Card className="rounded-[2rem] border-muted/60 shadow-sm overflow-hidden">
             <CardHeader className="bg-primary/5">
               <CardTitle>Application</CardTitle>

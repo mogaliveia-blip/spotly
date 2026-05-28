@@ -3,66 +3,62 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    /* =========================
-       FONCTIONS UTILITAIRES
-       ========================= */
-
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isGlobalAdmin() {
-      return isSignedIn()
-        && firestore.get(
+    function isOwner() {
+      return isSignedIn() &&
+        firestore.get(
           /databases/(default)/documents/users/$(request.auth.uid)
-        ).data.role in ['admin', 'owner'];
+        ).data.role == 'owner';
     }
 
-    function getEventMemberRole(eventId) {
-      let path = /databases/(default)/documents/events/$(eventId)/members/$(request.auth.uid);
-      return firestore.exists(path) ? firestore.get(path).data.role : 'none';
+    function isEventPublished(eventId) {
+      return firestore.exists(
+        /databases/(default)/documents/events/$(eventId)
+      ) &&
+        firestore.get(
+          /databases/(default)/documents/events/$(eventId)
+        ).data.status == 'published';
+    }
+
+    function getEventRole(eventId) {
+      let memberPath =
+        /databases/(default)/documents/events/$(eventId)/members/$(request.auth.uid);
+
+      return firestore.exists(memberPath)
+        ? firestore.get(memberPath).data.role
+        : 'none';
     }
 
     function isEventAdmin(eventId) {
-      return isSignedIn() && firestore.get(/databases/(default)/documents/events/$(eventId)).data.adminId == request.auth.uid;
+      return isSignedIn() &&
+        (
+          firestore.get(
+            /databases/(default)/documents/events/$(eventId)
+          ).data.adminId == request.auth.uid ||
+          getEventRole(eventId) == 'admin' ||
+          isOwner()
+        );
     }
 
-    function hasEventRole(eventId, roles) {
-      return isSignedIn() && (getEventMemberRole(eventId) in roles || isEventAdmin(eventId) || isGlobalAdmin());
+    function isAdminOrEditor(eventId) {
+      let role = getEventRole(eventId);
+
+      return role == 'admin' ||
+             role == 'editor' ||
+             isEventAdmin(eventId);
     }
 
-    /* =========================
-       NOUVELLE STRUCTURE : EVENTS
-       ========================= */
-
-    match /events/{eventId} {
-      
-      match /poi-images/{allPaths=**} {
-        allow read: if true;
-        allow write: if hasEventRole(eventId, ['admin', 'editor']);
-      }
-
-      match /marketing/{allPaths=**} {
-        allow read: if true;
-        allow write: if hasEventRole(eventId, ['admin']);
-      }
+    match /events/{eventId}/poi-images/{allPaths=**} {
+      allow read: if isEventPublished(eventId) || isAdminOrEditor(eventId);
+      allow write: if isAdminOrEditor(eventId);
     }
 
-    /* =========================
-       COMPATIBILITÉ : ANCIEN SCHÉMA
-       ========================= */
-
-    match /poi-images/{allPaths=**} {
+    match /events/{eventId}/marketing/{allPaths=**} {
       allow read: if true;
-      allow write: if isSignedIn() && (
-        isGlobalAdmin() || 
-        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['editor', 'admin']
-      );
-    }
-
-    match /marketing/{allPaths=**} {
-      allow read: if true;
-      allow write: if isGlobalAdmin();
+      allow write: if isEventAdmin(eventId);
     }
   }
 }

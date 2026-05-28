@@ -70,8 +70,8 @@ const StatCard = ({ title, value, icon: Icon, loading, delta }: { title: string;
 }
 
 export default function MonitorPage() {
-    const { role, loading: authLoading } = useAuth();
-    const { eventId, loading: eventLoading } = useEvent();
+    const { role: globalRole, loading: authLoading } = useAuth();
+    const { eventId, loading: eventLoading, userRole } = useEvent();
     const router = useRouter();
     const [stats, setStats] = useState<MonitorStats | null>(null);
     const [prevStats, setPrevStats] = useState<MonitorStats | null>(null);
@@ -85,7 +85,7 @@ export default function MonitorPage() {
 
         try {
             const [users, pois, appConfig, marketingConfig] = await Promise.all([
-                fetchUsers(),
+                globalRole === 'owner' ? fetchUsers() : Promise.resolve([]),
                 fetchPois(eventId),
                 fetchAppConfig(eventId),
                 fetchMarketingConfig(eventId),
@@ -118,18 +118,18 @@ export default function MonitorPage() {
         } finally {
             setLoading(false);
         }
-    }, [eventId, eventLoading]);
+    }, [eventId, eventLoading, globalRole]);
 
     useEffect(() => {
         if (authLoading || eventLoading) return;
-        if (role && role !== 'admin') {
+        if (globalRole !== 'owner' && userRole !== 'admin') {
             router.replace('/dashboard');
             return;
         }
         fetchData();
         const intervalId = setInterval(() => fetchData(), 60000);
         return () => clearInterval(intervalId);
-    }, [role, authLoading, eventLoading, router, fetchData]);
+    }, [globalRole, userRole, authLoading, eventLoading, router, fetchData]);
 
     const poisDelta = stats && prevStats ? stats.totalPois - prevStats.totalPois : 0;
     const reviewsDelta = stats && prevStats ? stats.totalReviews - prevStats.totalReviews : 0;

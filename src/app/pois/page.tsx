@@ -44,7 +44,7 @@ function POIsTable() {
   const router = useRouter();
   const { toast } = useToast();
   const { role } = useAuth();
-  const canManagePois = role === 'admin' || role === 'editor';
+  const canManagePois = role === 'owner';
   const [categoryFilter, setCategoryFilter] = useState<MainCategory | 'all'>('all');
 
   useEffect(() => {
@@ -201,7 +201,7 @@ function POIsTable() {
 
 export default function POIsPage() {
     const { role } = useAuth();
-    const canManagePois = role === 'admin' || role === 'editor';
+    const canManagePois = role === 'owner';
 
     return (
         <AppLayout>

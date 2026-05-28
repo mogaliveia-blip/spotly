@@ -32,7 +32,19 @@ import { Loader2, PlusCircle, Lock } from 'lucide-react';
 const formSchema = z.object({
   name: z.string().min(3, 'Le nom doit faire au moins 3 caractères'),
   slug: z.string().min(3, 'Le slug doit faire au moins 3 caractères').regex(/^[a-z0-9-]+$/, 'Slug invalide (minuscules, chiffres et tirets uniquement)'),
-});
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  timezone: z.string().min(1, 'Fuseau horaire requis'),
+}).refine((data) => {
+  if (!data.startDate || !data.endDate) return true;
+  return data.startDate <= data.endDate;
+}, { message: 'La date de fin doit être postérieure à la date de début', path: ['endDate'] });
+
+function parseDateInput(value?: string): Date | undefined {
+  if (!value) return undefined;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
 
 interface CreateEventDialogProps {
   onEventCreated?: () => void;
@@ -47,7 +59,13 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: { name: '', slug: '' },
+    defaultValues: {
+      name: '',
+      slug: '',
+      startDate: '',
+      endDate: '',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris'
+    },
   });
 
   const onNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,8 +84,12 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
     setLoading(true);
     try {
       const event = await createEvent({
-        ...values,
+        name: values.name,
+        slug: values.slug,
         adminId: user.uid,
+        startDate: parseDateInput(values.startDate),
+        endDate: parseDateInput(values.endDate),
+        timezone: values.timezone,
       });
       toast({ title: 'Événement créé !', description: `L'événement ${event.name} est prêt.` });
       setOpen(false);
@@ -84,7 +106,7 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
     return (
         <Button disabled className="gap-2 rounded-2xl font-bold opacity-60">
             <Lock className="h-4 w-4" />
-            Créer un événement (Compte non validé)
+            Créer un événement
         </Button>
     );
   }
@@ -132,6 +154,48 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
                     </div>
                   </FormControl>
                   <FormDescription>Identifiant unique dans l'adresse web.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="startDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date de début</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} className="rounded-xl" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="endDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date de fin</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} className="rounded-xl" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name="timezone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Fuseau horaire</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Europe/Paris" {...field} className="rounded-xl" />
+                  </FormControl>
+                  <FormDescription>Utilisé pour classer l'événement dans les vues publiques.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

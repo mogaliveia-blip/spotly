@@ -1,12 +1,6 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  experimental: {
-    allowedDevOrigins: [
-      '6000-firebase-studio-1767289134434.cluster-cbeiita7rbe7iuwhvjs5zww2i4.cloudworkstations.dev',
-      'localhost:9002'
-    ],
-  },
   async headers() {
     return [
       {

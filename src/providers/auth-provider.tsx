@@ -6,7 +6,7 @@ import { createContext, useEffect, useState, useContext, ReactNode } from 'react
 import { auth, db } from '@/lib/firebase';
 import type { AppUser, UserRole } from '@/lib/types';
 import FirebaseErrorListener from '@/components/FirebaseErrorListener';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 interface AuthContextType {
   user: AppUser | null;
@@ -43,7 +43,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const userData = userDoc.data();
         
         const userRole = (userData?.role as UserRole) || 'user';
-        const approved = userData?.isApproved ?? false;
+        let approved = userData?.isApproved ?? false;
+
+        if (firebaseUser.emailVerified && !approved) {
+          await updateDoc(userDocRef, { isApproved: true });
+          approved = true;
+        }
 
         const appUser: AppUser = {
           uid: firebaseUser.uid,

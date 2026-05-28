@@ -181,8 +181,7 @@ export interface Review {
   id: string
   poiId: string
   userId: string
-  userDisplayName: string
-  userPhotoURL: string | null
+  userName: string
   rating: number
   comment: string
   createdAt: Date
@@ -206,7 +205,7 @@ export interface MarketingConfig {
   heroCtaLink?: string
 }
 
-export type EventStatus = 'draft' | 'published' | 'archived'
+export type EventStatus = 'draft' | 'published' | 'paused'
 
 export interface AppEvent {
   id: string
@@ -216,6 +215,14 @@ export interface AppEvent {
   status: EventStatus
   createdAt: Date
   updatedAt: Date
+  startDate?: Date
+  endDate?: Date
+  timezone?: string
+  city?: string
+  departmentCode?: string
+  departmentName?: string
+  region?: string
+  country?: string
   defaultMapCenter?: { lat: number; lng: number }
   branding?: {
     primaryColor?: string
@@ -223,7 +230,7 @@ export interface AppEvent {
   }
 }
 
-export type EventRole = 'admin' | 'editor' | 'viewer'
+export type EventRole = 'admin' | 'editor'
 
 export interface EventMember {
   uid: string

@@ -10,7 +10,9 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   addDoc,
+  writeBatch,
   serverTimestamp,
   runTransaction,
   query,
@@ -27,9 +29,11 @@ import type {
   AppConfig,
   MarketingConfig,
   AppEvent,
+  EventStatus,
   EventMember,
   EventRole,
-  EventMemberWithProfile
+  EventMemberWithProfile,
+  POISponsor
 } from './types'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
@@ -48,26 +52,56 @@ export const DEFAULT_EVENT_ID = 'default-event';
 /**
  * Résout un événement à partir de son slug URL.
  */
-export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
+export async function fetchEventBySlug(
+  slug: string,
+  options: { uid?: string; isOwner?: boolean } = {}
+): Promise<AppEvent | null> {
   if (!slug || slug === 'default' || slug === 'dashboard' || slug === 'admin') return null;
   
   const normalizedSlug = slug.toLowerCase().trim();
   
   try {
     const eventsRef = collection(db, 'events');
-    const q = query(eventsRef, where('slug', '==', normalizedSlug), limit(1));
+    const q = query(eventsRef, where('slug', '==', normalizedSlug), where('status', '==', 'published'), limit(1));
     const snap = await getDocs(q);
     
-    if (snap.empty) return null;
-    
-    const d = snap.docs[0];
-    const data = d.data();
-    return { 
-      id: d.id, 
-      ...data, 
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
-      updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt)
-    } as AppEvent;
+    if (!snap.empty) {
+      const d = snap.docs[0];
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+        startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
+        endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
+      } as AppEvent;
+    }
+
+    if (options.isOwner) {
+      const ownerQuery = query(eventsRef, where('slug', '==', normalizedSlug), limit(1));
+      const ownerSnap = await getDocs(ownerQuery);
+
+      if (!ownerSnap.empty) {
+        const d = ownerSnap.docs[0];
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+          startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
+          endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
+        } as AppEvent;
+      }
+    }
+
+    if (options.uid) {
+      const userEvents = await fetchUserEvents(options.uid);
+      return userEvents.find((event) => event.slug === normalizedSlug) ?? null;
+    }
+
+    return null;
   } catch (error) {
     console.error(`[Data] Erreur lors de la résolution du slug ${slug}:`, error);
     return null;
@@ -77,7 +111,7 @@ export async function fetchEventBySlug(slug: string): Promise<AppEvent | null> {
 /**
  * Récupère tous les événements où l'utilisateur est membre.
  */
-export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRole?: string })[]> {
+export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRole?: EventRole })[]> {
   try {
     // Filtrage strict par UID pour respecter les Security Rules
     const membersQuery = query(collectionGroup(db, 'members'), where('uid', '==', uid));
@@ -86,19 +120,24 @@ export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRo
     try {
       membersSnap = await getDocsFromServer(membersQuery);
     } catch (e: any) {
-      if (e.code === "failed-precondition" && e.message?.toLowerCase().includes("index")) {
-        console.error("Firestore Index Missing: collectionGroup('members') with uid filter.");
-        throw new Error("INDEX_MISSING");
+      console.error('[Data] fetchUserEvents members collectionGroup server query failed');
+      console.error('[Data] Firestore raw error code:', e?.code);
+      console.error('[Data] Firestore raw error message:', e?.message);
+      console.error('[Data] Firestore raw error object:', e);
+
+      if (e?.code !== 'unavailable') {
+        throw e;
       }
+
       membersSnap = await getDocs(membersQuery);
     }
     
     const memberships = membersSnap.docs.map(d => {
         const segments = d.ref.path.split('/');
         const eventId = segments[1];
-        const role = d.data().role;
+        const role = d.data().role as EventRole;
         return eventId ? { eventId, role } : null;
-    }).filter(Boolean) as { eventId: string; role: string }[];
+    }).filter(Boolean) as { eventId: string; role: EventRole }[];
 
     const eventIds = Array.from(new Set(memberships.map(m => m.eventId)));
     
@@ -116,19 +155,46 @@ export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRo
           ...d, 
           userRole: membership?.role,
           createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt),
-          updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate() : new Date(d.updatedAt)
-        } as (AppEvent & { userRole?: string });
+          updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate() : new Date(d.updatedAt),
+          startDate: d.startDate?.toDate ? d.startDate.toDate() : (d.startDate ? new Date(d.startDate) : undefined),
+          endDate: d.endDate?.toDate ? d.endDate.toDate() : (d.endDate ? new Date(d.endDate) : undefined)
+        } as (AppEvent & { userRole?: EventRole });
       } catch (e) {
         return null;
       }
     });
 
     const events = await Promise.all(eventPromises);
-    return events.filter((e): e is (AppEvent & { userRole: string }) => e !== null);
+    return events.filter((e): e is (AppEvent & { userRole: EventRole }) => e !== null);
 
   } catch (error: any) {
     if (error.message === 'INDEX_MISSING') throw error;
     console.error("[Data] fetchUserEvents failed:", error);
+    return [];
+  }
+}
+
+/**
+ * Récupère tous les événements de la plateforme.
+ * Réservé aux owners par les règles Firestore.
+ */
+export async function fetchAllEvents(): Promise<AppEvent[]> {
+  try {
+    const snap = await getDocs(collection(db, 'events'));
+
+    return snap.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+        startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
+        endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
+      } as AppEvent;
+    });
+  } catch (error) {
+    console.error("[Data] fetchAllEvents failed:", error);
     return [];
   }
 }
@@ -148,7 +214,9 @@ export async function fetchPublishedEvents(): Promise<AppEvent[]> {
         id: d.id,
         ...data,
         createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
-        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt)
+        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+        startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
+        endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
       } as AppEvent;
     });
   } catch (error) {
@@ -160,7 +228,14 @@ export async function fetchPublishedEvents(): Promise<AppEvent[]> {
 /**
  * Crée un nouvel événement et initialise sa structure de données.
  */
-export async function createEvent(data: { name: string; slug: string; adminId: string }): Promise<AppEvent> {
+export async function createEvent(data: {
+  name: string;
+  slug: string;
+  adminId: string;
+  startDate?: Date;
+  endDate?: Date;
+  timezone?: string;
+}): Promise<AppEvent> {
   const eventRef = doc(collection(db, 'events'));
   const id = eventRef.id;
 
@@ -168,20 +243,40 @@ export async function createEvent(data: { name: string; slug: string; adminId: s
   const userDoc = await getDoc(doc(db, 'users', data.adminId));
   const userData = userDoc.data();
 
-  const eventData = {
+  const eventData: {
+    name: string;
+    slug: string;
+    adminId: string;
+    status: 'draft';
+    startDate?: Date;
+    endDate?: Date;
+    timezone: string;
+    createdAt: ReturnType<typeof serverTimestamp>;
+    updatedAt: ReturnType<typeof serverTimestamp>;
+  } = {
     name: data.name,
     slug: data.slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
     adminId: data.adminId,
     status: 'draft' as const,
+    timezone: data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
 
-  await runTransaction(db, async (tx) => {
-    tx.set(eventRef, eventData);
-    
+  if (data.startDate) {
+    eventData.startDate = data.startDate;
+  }
+
+  if (data.endDate) {
+    eventData.endDate = data.endDate;
+  }
+
+  try {
+    await setDoc(eventRef, eventData);
+
+    const batch = writeBatch(db);
     const memberRef = doc(db, `events/${id}/members`, data.adminId);
-    tx.set(memberRef, {
+    batch.set(memberRef, {
       uid: data.adminId,
       role: 'admin',
       displayName: userData?.displayName || 'Créateur',
@@ -190,12 +285,12 @@ export async function createEvent(data: { name: string; slug: string; adminId: s
       joinedAt: serverTimestamp()
     });
 
-    tx.set(doc(db, `events/${id}/config`, 'main'), {
+    batch.set(doc(db, `events/${id}/config`, 'main'), {
       isLandingPageActive: true,
       reviewsEnabled: true
     });
 
-    tx.set(doc(db, `events/${id}/config`, 'marketing'), {
+    batch.set(doc(db, `events/${id}/config`, 'marketing'), {
       heroEnabled: false,
       heroTitle: `Bienvenue à ${data.name}`,
       heroSubtitle: "Découvrez l'application officielle du festival.",
@@ -203,9 +298,44 @@ export async function createEvent(data: { name: string; slug: string; adminId: s
       heroCtaText: 'Commencer',
       heroCtaMode: 'auth'
     });
-  });
+
+    await batch.commit();
+  } catch (error: any) {
+    console.error('[Data] createEvent failed', {
+      code: error?.code,
+      message: error?.message,
+      eventId: id,
+      eventData,
+      adminId: data.adminId
+    });
+
+    throw error;
+  }
 
   return { id, ...eventData, createdAt: new Date(), updatedAt: new Date() } as AppEvent;
+}
+
+export async function updateEventDetails(
+  eventId: string,
+  data: Partial<Pick<AppEvent, 'name' | 'startDate' | 'endDate' | 'timezone' | 'city' | 'departmentCode' | 'departmentName' | 'region' | 'country'>>
+): Promise<void> {
+  const payload: Record<string, unknown> = {};
+
+  Object.entries(data).forEach(([key, value]) => {
+    payload[key] = value === undefined ? deleteField() : value;
+  });
+
+  await updateDoc(doc(db, 'events', eventId), {
+    ...payload,
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function updateEventStatus(eventId: string, status: EventStatus): Promise<void> {
+  await updateDoc(doc(db, 'events', eventId), {
+    status,
+    updatedAt: serverTimestamp()
+  });
 }
 
 export const dbPaths = {
@@ -213,6 +343,64 @@ export const dbPaths = {
   poisPublic: (eventId: string) => eventId === DEFAULT_EVENT_ID ? 'pois_public' : `events/${eventId}/pois_public`,
   config: (eventId: string) => eventId === DEFAULT_EVENT_ID ? 'config' : `events/${eventId}/config`,
   members: (eventId: string) => `events/${eventId}/members`,
+}
+
+function sanitizeSponsorForFirestore(sponsor: POISponsor): POISponsor {
+  const sanitized: POISponsor = {
+    enabled: sponsor.enabled,
+    level: sponsor.level,
+    priority: sponsor.priority
+  };
+
+  if (sponsor.startDate) {
+    sanitized.startDate = sponsor.startDate;
+  }
+
+  if (sponsor.endDate) {
+    sanitized.endDate = sponsor.endDate;
+  }
+
+  return sanitized;
+}
+
+function sanitizePoiPayloadForFirestore<T extends Partial<Omit<POI, 'id' | 'averageRating' | 'reviewCount'>>>(poiData: T): T {
+  if (!poiData.sponsor || typeof poiData.sponsor.enabled !== 'boolean') {
+    return poiData;
+  }
+
+  return {
+    ...poiData,
+    sponsor: sanitizeSponsorForFirestore(poiData.sponsor)
+  };
+}
+
+async function deleteCollectionDocs(path: string): Promise<void> {
+  const snap = await getDocs(collection(db, path));
+  let batch = writeBatch(db);
+  let writes = 0;
+
+  for (const document of snap.docs) {
+    batch.delete(document.ref);
+    writes += 1;
+
+    if (writes === 450) {
+      await batch.commit();
+      batch = writeBatch(db);
+      writes = 0;
+    }
+  }
+
+  if (writes > 0) {
+    await batch.commit();
+  }
+}
+
+async function deleteStorageFolder(folderPath: string): Promise<void> {
+  const folderRef = ref(storage, folderPath);
+  const res = await listAll(folderRef);
+
+  await Promise.all(res.items.map((itemRef) => deleteObject(itemRef)));
+  await Promise.all(res.prefixes.map((prefixRef) => deleteStorageFolder(prefixRef.fullPath)));
 }
 
 // --- MEMBERS MANAGEMENT ---
@@ -428,18 +616,13 @@ export async function fetchReviewsByPoiId(poiId: string, eventId: string): Promi
 
 export async function addReview(poiId: string, reviewData: Omit<Review, 'id' | 'poiId' | 'createdAt'>, eventId: string): Promise<Review> {
   const reviewsCollection = collection(db, dbPaths.pois(eventId), poiId, 'reviews');
-  const poiRef = doc(db, dbPaths.pois(eventId), poiId);
   try {
-    let newReviewId = '';
-    await runTransaction(db, async (tx) => {
-      const poiSnap = await tx.get(poiRef);
-      const currentCount = poiSnap.exists() ? (poiSnap.data().reviewCount || 0) : 0;
-      const newReviewRef = doc(reviewsCollection);
-      newReviewId = newReviewRef.id;
-      tx.set(newReviewRef, { ...reviewData, poiId, createdAt: serverTimestamp() });
-      tx.update(poiRef, { reviewCount: currentCount + 1 });
+    const newReviewRef = await addDoc(reviewsCollection, {
+      ...reviewData,
+      poiId,
+      createdAt: serverTimestamp()
     });
-    return { id: newReviewId, ...reviewData, createdAt: new Date(), poiId };
+    return { id: newReviewRef.id, ...reviewData, createdAt: new Date(), poiId };
   } catch (e: any) {
     if (e.code?.includes('permission-denied')) {
       const permissionError = new FirestorePermissionError({ path: `${dbPaths.pois(eventId)}/${poiId}/reviews`, operation: 'create', requestResourceData: reviewData });
@@ -459,12 +642,15 @@ export async function fetchUsers(): Promise<AppUser[]> {
   }
 }
 
-export function updateUserRole(uid: string, role: UserRole): void {
+export async function updateUserRole(uid: string, role: UserRole): Promise<void> {
   const userRef = doc(db, 'users', uid)
-  updateDoc(userRef, { role }).catch(async (serverError) => {
+  try {
+    await updateDoc(userRef, { role })
+  } catch (serverError) {
     const permissionError = new FirestorePermissionError({ path: userRef.path, operation: 'update', requestResourceData: { role } })
     errorEmitter.emit('permission-error', permissionError)
-  })
+    throw serverError
+  }
 }
 
 /**
@@ -478,31 +664,45 @@ export async function createPoi(
   const poiPublicCollection = collection(db, dbPaths.poisPublic(eventId))
   
   const id = doc(poiCollection).id;
+  const sanitizedPoiData = sanitizePoiPayloadForFirestore(poiData);
   const fullPoiData = {
-    ...poiData,
+    ...sanitizedPoiData,
     averageRating: 0,
     reviewCount: 0
   }
 
-  await runTransaction(db, async (tx) => {
-    tx.set(doc(poiCollection, id), fullPoiData);
-    const liteData: any = {
-      id,
-      title: fullPoiData.title,
-      location: fullPoiData.location,
-      mainCategory: fullPoiData.mainCategory,
-      subCategory: fullPoiData.subCategory,
-      averageRating: 0,
-      reviewCount: 0,
-      headerPhotoUrl: fullPoiData.headerPhotoUrl
-    };
-    
-    if (fullPoiData.sponsor) {
-      liteData.sponsor = fullPoiData.sponsor;
-    }
-    
-    tx.set(doc(poiPublicCollection, id), liteData);
-  });
+  try {
+    await runTransaction(db, async (tx) => {
+      tx.set(doc(poiCollection, id), fullPoiData);
+      const liteData: any = {
+        id,
+        title: fullPoiData.title,
+        location: fullPoiData.location,
+        mainCategory: fullPoiData.mainCategory,
+        subCategory: fullPoiData.subCategory,
+        averageRating: 0,
+        reviewCount: 0,
+        headerPhotoUrl: fullPoiData.headerPhotoUrl
+      };
+      
+      if (fullPoiData.sponsor) {
+        liteData.sponsor = fullPoiData.sponsor;
+      }
+      
+      tx.set(doc(poiPublicCollection, id), liteData);
+    });
+  } catch (serverError: any) {
+    console.error('[Data] createPoi failed', {
+      code: serverError?.code,
+      message: serverError?.message,
+      eventId,
+      poiId: id,
+      poiData: sanitizedPoiData
+    });
+    const permissionError = new FirestorePermissionError({ path: `${dbPaths.pois(eventId)}/${id}`, operation: 'create', requestResourceData: sanitizedPoiData })
+    errorEmitter.emit('permission-error', permissionError)
+    throw serverError
+  }
 
   return id;
 }
@@ -517,6 +717,7 @@ export async function updatePoi(
 ): Promise<void> {
   const poiRef = doc(db, dbPaths.pois(eventId), poiId)
   const poiPublicRef = doc(db, dbPaths.poisPublic(eventId), poiId)
+  const sanitizedPoiData = sanitizePoiPayloadForFirestore(poiData)
 
   try {
     await runTransaction(db, async (tx) => {
@@ -524,9 +725,9 @@ export async function updatePoi(
       if (!currentSnap.exists()) return;
       
       const currentData = currentSnap.data() as POI;
-      const updatedData = { ...currentData, ...poiData };
+      const updatedData = { ...currentData, ...sanitizedPoiData };
 
-      tx.update(poiRef, poiData);
+      tx.update(poiRef, sanitizedPoiData);
       tx.set(poiPublicRef, {
         id: poiId,
         title: updatedData.title,
@@ -540,7 +741,14 @@ export async function updatePoi(
       }, { merge: true });
     });
   } catch (serverError: any) {
-    const permissionError = new FirestorePermissionError({ path: poiRef.path, operation: 'update', requestResourceData: poiData })
+    console.error('[Data] updatePoi failed', {
+      code: serverError?.code,
+      message: serverError?.message,
+      eventId,
+      poiId,
+      poiData: sanitizedPoiData
+    });
+    const permissionError = new FirestorePermissionError({ path: poiRef.path, operation: 'update', requestResourceData: sanitizedPoiData })
     errorEmitter.emit('permission-error', permissionError)
     throw serverError
   }
@@ -550,25 +758,50 @@ export async function deletePoi(poiId: string, eventId: string): Promise<void> {
   const poiRef = doc(db, dbPaths.pois(eventId), poiId)
   const poiPublicRef = doc(db, dbPaths.poisPublic(eventId), poiId)
   const storagePrefix = eventId === DEFAULT_EVENT_ID ? '' : `events/${eventId}/`;
-  const imagesFolderRef = ref(storage, `${storagePrefix}poi-images/${poiId}`)
+  const imagesFolderPath = `${storagePrefix}poi-images/${poiId}`
 
   try {
+    await deleteCollectionDocs(`${dbPaths.pois(eventId)}/${poiId}/reviews`)
+
     await runTransaction(db, async (tx) => {
       tx.delete(poiRef);
       tx.delete(poiPublicRef);
     });
 
-    const res = await listAll(imagesFolderRef)
-    await Promise.all(res.items.map((itemRef) => deleteObject(itemRef)))
-    await Promise.all(res.prefixes.map(async (folderRef) => {
-      const sub = await listAll(folderRef)
-      return Promise.all(sub.items.map((itemRef) => deleteObject(itemRef)))
-    }))
+    await deleteStorageFolder(imagesFolderPath)
   } catch (serverError: any) {
     if (serverError.code?.includes('permission-denied')) {
       const permissionError = new FirestorePermissionError({ path: poiRef.path, operation: 'delete' })
       errorEmitter.emit('permission-error', permissionError)
     }
+    throw serverError
+  }
+}
+
+export async function deleteEvent(eventId: string): Promise<void> {
+  const eventRef = doc(db, 'events', eventId)
+
+  try {
+    await updateDoc(eventRef, { updatedAt: serverTimestamp() })
+
+    const poisSnap = await getDocs(collection(db, dbPaths.pois(eventId)))
+
+    for (const poiDoc of poisSnap.docs) {
+      await deletePoi(poiDoc.id, eventId)
+    }
+
+    await deleteCollectionDocs(dbPaths.poisPublic(eventId))
+    await deleteCollectionDocs(dbPaths.config(eventId))
+    await deleteCollectionDocs(dbPaths.members(eventId))
+
+    await deleteStorageFolder(`events/${eventId}/poi-images`).catch((error: unknown) => {
+      console.warn('Could not delete event storage folder:', error)
+    })
+
+    await deleteDoc(eventRef)
+  } catch (serverError: unknown) {
+    const permissionError = new FirestorePermissionError({ path: eventRef.path, operation: 'delete' })
+    errorEmitter.emit('permission-error', permissionError)
     throw serverError
   }
 }

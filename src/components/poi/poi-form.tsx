@@ -25,7 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui
 import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { useState, useEffect } from 'react';
 import { Loader2, MapPin, Crosshair, ImagePlus, X, Calendar as CalendarIcon, AlertTriangle } from 'lucide-react';
-import type { POI, MainCategory, SubCategory } from '@/lib/types';
+import type { POI, MainCategory, SubCategory, POISponsor } from '@/lib/types';
 import { categoriesMap } from '@/lib/types';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
@@ -33,6 +33,7 @@ import { mapsConfig } from '@/lib/firebase-config';
 import Image from 'next/image';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '@/hooks/use-auth-user';
+import { useEvent } from '@/providers/event-provider';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -47,17 +48,19 @@ async function compressImage(file: File): Promise<File> {
     });
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    const MAX_WIDTH = 1600;
+    const MAX_LONG_EDGE = 3200;
     let { width, height } = img;
-    if (width > MAX_WIDTH) {
-      height = height * (MAX_WIDTH / width);
-      width = MAX_WIDTH;
+    const longEdge = Math.max(width, height);
+    if (longEdge > MAX_LONG_EDGE) {
+      const ratio = MAX_LONG_EDGE / longEdge;
+      width = Math.round(width * ratio);
+      height = Math.round(height * ratio);
     }
     canvas.width = width;
     canvas.height = height;
     ctx?.drawImage(img, 0, 0, width, height);
     const blob = await new Promise<Blob>((resolve) =>
-      canvas.toBlob((b) => resolve(b as Blob), 'image/jpeg', 0.75)
+      canvas.toBlob((b) => resolve(b as Blob), 'image/jpeg', 0.86)
     );
     return new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
       type: 'image/jpeg',
@@ -68,8 +71,10 @@ async function compressImage(file: File): Promise<File> {
   }
 }
 
-const mainCategories = Object.keys(categoriesMap) as MainCategory[];
-const allSubCategories = Object.values(categoriesMap).flatMap((main) => Object.keys(main.subCategories)) as SubCategory[];
+const mainCategories = Object.keys(categoriesMap) as [MainCategory, ...MainCategory[]];
+const allSubCategories = Object.values(categoriesMap).flatMap((main) =>
+  Object.keys(main.subCategories)
+) as [SubCategory, ...SubCategory[]];
 
 const formSchema = z.object({
     title: z.string().min(3, 'Titre trop court'),
@@ -92,9 +97,55 @@ const formSchema = z.object({
         return valid && Object.keys(valid).includes(data.subCategory);
     }
     return true;
-}, { message: 'Sous-catégorie invalide', path: ['subCategory'] });
+}, { message: 'Sous-catégorie invalide', path: ['subCategory'] }).refine(data => {
+    const startDate = data.sponsor?.startDate;
+    const endDate = data.sponsor?.endDate;
+    return !startDate || !endDate || startDate <= endDate;
+}, { message: 'La date de fin doit être postérieure à la date de début', path: ['sponsor.endDate'] });
 
 type POIFormValues = z.infer<typeof formSchema>;
+
+function getErrorDetails(error: unknown): { code?: string; message: string } {
+  if (error instanceof Error) {
+    const maybeCode = (error as Error & { code?: string }).code;
+    return { code: maybeCode, message: error.message };
+  }
+
+  return { message: String(error) };
+}
+
+function toDateInputValue(value?: Date): string {
+  if (!value) return '';
+
+  return value.toISOString().slice(0, 10);
+}
+
+function parseDateInputValue(value: string): Date | undefined {
+  if (!value) return undefined;
+
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function buildSponsorPayload(sponsor?: POIFormValues['sponsor']): POISponsor | undefined {
+  if (!sponsor?.enabled) return undefined;
+
+  const sponsorPayload: POISponsor = {
+    enabled: true,
+    level: sponsor.level ?? 'standard',
+    priority: sponsor.priority ?? 0
+  };
+
+  if (sponsor.startDate) {
+    sponsorPayload.startDate = sponsor.startDate;
+  }
+
+  if (sponsor.endDate) {
+    sponsorPayload.endDate = sponsor.endDate;
+  }
+
+  return sponsorPayload;
+}
 
 interface POIFormProps {
   poiId?: string;
@@ -119,10 +170,11 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   const [formIsLoading, setFormIsLoading] = useState(false);
   const [pageIsLoading, setPageIsLoading] = useState(true);
   const { userLocation, loading: geoLoading } = useGeolocation();
-  const { role } = useAuth();
+  const { role: globalRole } = useAuth();
+  const { userRole } = useEvent();
 
   const isEditMode = !!poiId;
-  const canManageSponsor = role === 'admin' || role === 'editor';
+  const canManageSponsor = globalRole === 'owner' || userRole === 'admin' || userRole === 'editor';
   const prefix = eventSlug ? `/${eventSlug}` : '';
 
   const form = useForm<POIFormValues>({
@@ -216,9 +268,10 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
 
     try {
       const { sponsor, ...rest } = values;
+      const sponsorPayload = buildSponsorPayload(sponsor);
 
       if (!isEditMode) {
-        const createPayload: any = {
+        const createPayload: Omit<POI, 'id' | 'averageRating' | 'reviewCount'> = {
           title: rest.title,
           description: rest.description,
           mainCategory: rest.mainCategory,
@@ -228,8 +281,8 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
           galleryUrls: [],
         };
       
-        if (sponsor?.enabled) {
-          createPayload.sponsor = sponsor;
+        if (sponsorPayload) {
+          createPayload.sponsor = sponsorPayload;
         }
       
         targetId = await createPoi(createPayload, eventId);
@@ -251,17 +304,34 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
         }));
       }
 
-      await updatePoi(targetId!, {
+      const updatePayload = {
         ...rest,
         headerPhotoUrl: finalHeader,
         galleryUrls: [...existingGallery, ...newUploads],
-        sponsor: sponsor?.enabled ? sponsor : deleteField() as any
-      }, eventId);
+        sponsor: sponsorPayload ?? deleteField() as any
+      };
+
+      await updatePoi(targetId!, updatePayload, eventId);
 
       toast({ title: 'Succès !', description: 'Le lieu a été sauvegardé.' });
       router.push(`${prefix}/pois`);
     } catch (error) {
-      toast({ title: 'Erreur lors de la sauvegarde', variant: 'destructive' });
+      const details = getErrorDetails(error);
+      console.error('[POIForm] Erreur lors de la sauvegarde du POI', {
+        code: details.code,
+        message: details.message,
+        poiId: targetId,
+        eventId,
+        isEditMode,
+        values,
+      });
+      toast({
+        title: 'Erreur lors de la sauvegarde',
+        description: details.code
+          ? `${details.code}: ${details.message}`
+          : details.message,
+        variant: 'destructive'
+      });
     } finally { setFormIsLoading(false); }
   }
 
@@ -308,6 +378,34 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
                         )} />
                         <FormField control={form.control} name="sponsor.priority" render={({ field }) => (
                           <FormItem><FormLabel>Priorité (0-100)</FormLabel><FormControl><Input type="number" {...field} className="rounded-xl" /></FormControl></FormItem>
+                        )} />
+                        <FormField control={form.control} name="sponsor.startDate" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Date de début</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                value={toDateInputValue(field.value)}
+                                onChange={(event) => field.onChange(parseDateInputValue(event.target.value))}
+                                className="rounded-xl"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="sponsor.endDate" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Date de fin</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                value={toDateInputValue(field.value)}
+                                onChange={(event) => field.onChange(parseDateInputValue(event.target.value))}
+                                className="rounded-xl"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
                         )} />
                       </div>
                     )}

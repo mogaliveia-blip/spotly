@@ -1,6 +1,6 @@
 // src/components/poi/review-list.tsx
 import type { Review } from '@/lib/types';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Star } from 'lucide-react';
 import { format } from 'date-fns';
@@ -34,12 +34,11 @@ export function ReviewList({ reviews }: ReviewListProps) {
         <Card key={review.id}>
           <CardContent className="p-4 flex gap-4">
             <Avatar>
-              <AvatarImage src={review.userPhotoURL || undefined} alt={review.userDisplayName} />
-              <AvatarFallback>{review.userDisplayName.charAt(0)}</AvatarFallback>
+              <AvatarFallback>{review.userName.charAt(0)}</AvatarFallback>
             </Avatar>
             <div className="flex-1">
               <div className="flex items-center justify-between">
-                <span className="font-semibold">{review.userDisplayName}</span>
+                <span className="font-semibold">{review.userName}</span>
                 <span className="text-xs text-muted-foreground">
                   {format(new Date(review.createdAt), 'PP', { locale: fr })}
                 </span>

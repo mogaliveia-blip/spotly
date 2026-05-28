@@ -44,7 +44,7 @@ export default function EventMembersPage() {
   const [members, setMembers] = useState<EventMemberWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<EventRole>('viewer');
+  const [inviteRole, setInviteRole] = useState<EventRole>('editor');
   const [inviting, setInviting] = useState(false);
 
   const eventSlug = params.eventSlug as string;
@@ -162,7 +162,6 @@ export default function EventMembersPage() {
                   <SelectContent>
                     <SelectItem value="admin">Administrateur</SelectItem>
                     <SelectItem value="editor">Éditeur</SelectItem>
-                    <SelectItem value="viewer">Lecteur</SelectItem>
                   </SelectContent>
                 </Select>
                 <Button type="submit" disabled={inviting} className="rounded-xl h-11 px-6 font-bold shadow-sm">
@@ -182,7 +181,7 @@ export default function EventMembersPage() {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="pl-6">Collaborateur</TableHead>
-                  <TableHead>Rôle local</TableHead>
+                  <TableHead>Rôle événement</TableHead>
                   <TableHead className="hidden md:table-cell">Date d'ajout</TableHead>
                   <TableHead className="text-right pr-6">Actions</TableHead>
                 </TableRow>
@@ -216,7 +215,6 @@ export default function EventMembersPage() {
                           <SelectContent>
                             <SelectItem value="admin">Administrateur</SelectItem>
                             <SelectItem value="editor">Éditeur</SelectItem>
-                            <SelectItem value="viewer">Lecteur</SelectItem>
                           </SelectContent>
                         </Select>
                       ) : (

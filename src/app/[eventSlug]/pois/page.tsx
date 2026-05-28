@@ -43,14 +43,14 @@ function POIsTable() {
   const [pois, setPois] = useState<POI[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const { eventId, loading: eventLoading } = useEvent();
+  const { eventId, loading: eventLoading, userRole } = useEvent();
   const { toast } = useToast();
-  const { role } = useAuth();
+  const { role: globalRole } = useAuth();
   const params = useParams();
   const eventSlug = params.eventSlug as string;
   const prefix = eventSlug ? `/${eventSlug}` : '';
 
-  const canManagePois = role === 'admin' || role === 'editor';
+  const canManagePois = globalRole === 'owner' || userRole === 'admin' || userRole === 'editor';
   const [categoryFilter, setCategoryFilter] = useState<MainCategory | 'all'>('all');
 
   useEffect(() => {
@@ -222,11 +222,12 @@ function POIsTable() {
 
 
 export default function POIsPage() {
-    const { role } = useAuth();
+    const { role: globalRole } = useAuth();
+    const { userRole } = useEvent();
     const params = useParams();
     const eventSlug = params.eventSlug as string;
     const prefix = eventSlug ? `/${eventSlug}` : '';
-    const canManagePois = role === 'admin' || role === 'editor';
+    const canManagePois = globalRole === 'owner' || userRole === 'admin' || userRole === 'editor';
 
     return (
         <AppLayout>

@@ -11,9 +11,10 @@ import { AuthDialog } from '@/components/auth/auth-dialog';
 import { ReviewForm } from './review-form';
 import { ReviewList } from './review-list';
 import { POIGallery } from './poi-gallery';
+import { ImageViewer } from './image-viewer';
 import { getDistance } from '@/lib/utils';
 import { useGeolocation } from '@/providers/geolocation-provider';
-import { Navigation, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Navigation } from 'lucide-react';
 import { SponsorBadge } from '../sponsor/sponsor-badge';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { useEvent } from '@/providers/event-provider';
@@ -38,7 +39,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   const [reviewsEnabled, setReviewsEnabled] = useState<boolean | null>(null);
   
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const touchStartX = useRef<number | null>(null);
 
   const { user } = useAuth();
   const { userLocation } = useGeolocation();
@@ -94,34 +94,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   const handleReviewAdded = useCallback((newReview: Review) => {
     setReviews(prev => [newReview, ...prev]);
   }, []);
-
-  const handlePrev = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (selectedIndex === null) return;
-    setSelectedIndex((selectedIndex - 1 + allImages.length) % allImages.length);
-  };
-
-  const handleNext = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (selectedIndex === null) return;
-    setSelectedIndex((selectedIndex + 1) % allImages.length);
-  };
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
-
-  const onTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const touchEndX = e.changedTouches[0].clientX;
-    const diff = touchStartX.current - touchEndX;
-
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) handleNext();
-      else handlePrev();
-    }
-    touchStartX.current = null;
-  };
 
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${poi.location.lat},${poi.location.lng}&travelmode=walking`;
 
@@ -215,7 +187,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
           
           {user ? (
             <div className="bg-muted/30 p-4 rounded-3xl border border-white/5">
-              <ReviewForm poiId={poi.id} onReviewAdded={handleReviewAdded} />
+              <ReviewForm poiId={poi.id} reviewsEnabled={reviewsEnabled} onReviewAdded={handleReviewAdded} />
             </div>
           ) : (
             <div className="text-center text-sm text-muted-foreground border rounded-3xl p-6 bg-muted/10">
@@ -244,70 +216,12 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
       )}
 
       {selectedIndex !== null && (
-        <div
-          className="fixed inset-0 z-[999] bg-black/95 flex items-center justify-center backdrop-blur-md animate-in fade-in duration-300"
-          onClick={() => setSelectedIndex(null)}
-          onTouchStart={onTouchStart}
-          onTouchEnd={onTouchEnd}
-        >
-          <button
-            className="absolute z-[1001] bg-black/60 hover:bg-black/80 text-white rounded-full p-3 transition-all active:scale-95 shadow-2xl backdrop-blur-sm border border-white/20"
-            onClick={() => setSelectedIndex(null)}
-            aria-label="Fermer l'aperçu"
-            style={{ 
-                top: 'calc(1.5rem + env(safe-area-inset-top, 0px))', 
-                right: 'calc(1.5rem + env(safe-area-inset-right, 0px))' 
-            }}
-          >
-            <X className="h-6 w-6" />
-          </button>
-
-          {allImages.length > 1 && (
-            <>
-              <button
-                className="absolute z-[1001] flex bg-black/50 hover:bg-black/70 text-white rounded-full p-3 md:p-4 transition-all active:scale-90 shadow-2xl backdrop-blur-sm border border-white/10 top-1/2 -translate-y-1/2"
-                onClick={handlePrev}
-                aria-label="Précédent"
-                style={{ 
-                    left: 'calc(1rem + env(safe-area-inset-left, 0px))' 
-                }}
-              >
-                <ChevronLeft className="h-6 w-6 md:h-8 md:w-8" />
-              </button>
-              <button
-                className="absolute z-[1001] flex bg-black/50 hover:bg-black/70 text-white rounded-full p-3 md:p-4 transition-all active:scale-90 shadow-2xl backdrop-blur-sm border border-white/10 top-1/2 -translate-y-1/2"
-                onClick={handleNext}
-                aria-label="Suivant"
-                style={{ 
-                    right: 'calc(1rem + env(safe-area-inset-right, 0px))' 
-                }}
-              >
-                <ChevronRight className="h-6 w-6 md:h-8 md:w-8" />
-              </button>
-            </>
-          )}
-
-          <div
-            className="relative w-full h-full flex items-center justify-center px-10 py-16"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="relative w-full h-full max-w-[80vw] max-h-[75vh]">
-              <Image
-                src={allImages[selectedIndex]}
-                alt={`Aperçu ${selectedIndex + 1}`}
-                fill
-                className="object-contain rounded-2xl shadow-2xl select-none"
-                sizes="80vw"
-                priority
-                draggable={false}
-              />
-            </div>
-
-            <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-black/50 text-white px-4 py-1.5 rounded-full text-sm font-medium backdrop-blur-sm">
-              {selectedIndex + 1} / {allImages.length}
-            </div>
-          </div>
-        </div>
+        <ImageViewer
+          images={allImages}
+          selectedIndex={selectedIndex}
+          onSelect={setSelectedIndex}
+          onClose={() => setSelectedIndex(null)}
+        />
       )}
     </div>
   );

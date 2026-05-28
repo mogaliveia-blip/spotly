@@ -25,10 +25,11 @@ type ReviewFormValues = z.infer<typeof reviewSchema>;
 
 interface ReviewFormProps {
   poiId: string;
+  reviewsEnabled: boolean;
   onReviewAdded: (newReview: Review) => void;
 }
 
-export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
+export function ReviewForm({ poiId, reviewsEnabled, onReviewAdded }: ReviewFormProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const { eventId } = useEvent();
@@ -53,12 +54,20 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
       return;
     }
 
+    if (!reviewsEnabled) {
+      toast({
+        title: 'Avis désactivés',
+        description: 'Les avis ne sont pas ouverts pour cet événement.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
 
     const reviewData = {
       userId: user.uid,
-      userDisplayName: user.displayName || 'Anonyme',
-      userPhotoURL: user.photoURL || null,
+      userName: user.displayName || 'Anonyme',
       ...values
     };
 
@@ -145,7 +154,7 @@ export function ReviewForm({ poiId, onReviewAdded }: ReviewFormProps) {
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={loading}>
+        <Button type="submit" disabled={loading || !reviewsEnabled}>
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Soumettre l'avis
         </Button>

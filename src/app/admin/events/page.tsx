@@ -2,35 +2,89 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
-import { fetchUserEvents } from '@/lib/data';
-import type { AppEvent } from '@/lib/types';
+import { deleteEvent, fetchAllEvents, fetchUserEvents, updateEventStatus } from '@/lib/data';
+import type { AppEvent, EventRole, EventStatus } from '@/lib/types';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Calendar, LayoutDashboard, Settings, AlertCircle, RefreshCw, Lock, UserCheck, ShieldCheck } from 'lucide-react';
+import { Calendar, LayoutDashboard, Settings, AlertCircle, RefreshCw, Lock, UserCheck, ShieldCheck, Loader2, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { CreateEventDialog } from '@/components/admin/create-event-dialog';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
-type AppEventWithRole = AppEvent & { userRole?: string };
+type AppEventWithRole = AppEvent & { userRole?: EventRole };
+
+function getEventOwnerLabel(event: AppEvent): string {
+  return event.adminId;
+}
+
+function getStatusLabel(status: EventStatus): string {
+  if (status === 'published') return 'En ligne';
+  if (status === 'paused') return 'En pause';
+  return 'Brouillon';
+}
+
+function getStatusAction(status: EventStatus): { label: string; nextStatus: EventStatus } {
+  if (status === 'published') return { label: 'Mettre en pause', nextStatus: 'paused' };
+  if (status === 'paused') return { label: 'Réactiver', nextStatus: 'published' };
+  return { label: 'Publier', nextStatus: 'published' };
+}
+
+function formatEventDateRange(event: AppEvent): string {
+  if (!event.startDate && !event.endDate) return 'Dates à définir';
+
+  return [event.startDate, event.endDate]
+    .filter(Boolean)
+    .map((date) => date!.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }))
+    .join(' - ');
+}
 
 export default function MyEventsPage() {
-  const { user, loading: authLoading, isApproved } = useAuth();
+  const { user, loading: authLoading, isApproved, role: globalRole } = useAuth();
+  const { toast } = useToast();
   const [events, setEvents] = useState<AppEventWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorType, setErrorType] = useState<'NONE' | 'INDEX_MISSING' | 'OTHER'>('NONE');
+  const [updatingEventId, setUpdatingEventId] = useState<string | null>(null);
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+  const [eventToDelete, setEventToDelete] = useState<AppEventWithRole | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const isPlatformOwner = globalRole === 'owner';
+  const canAccessEvents = isApproved || isPlatformOwner;
 
   const loadEvents = useCallback(async (isManual = false) => {
-    if (!user || !isApproved) return;
+    if (!user || !canAccessEvents) return;
     if (!isManual) setLoading(true);
     
     setErrorType('NONE');
     try {
-      const data = await fetchUserEvents(user.uid);
-      setEvents(data);
+      const data: AppEventWithRole[] = isPlatformOwner
+        ? await fetchAllEvents()
+        : await fetchUserEvents(user.uid);
+
+      setEvents(
+        data
+          .map((event) => ({
+            ...event,
+            userRole: isPlatformOwner ? 'admin' : event.userRole
+          }))
+          .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+      );
     } catch (err: any) {
       console.error("Erreur lors de la récupération des événements:", err);
       if (err.message === 'INDEX_MISSING') {
@@ -41,15 +95,68 @@ export default function MyEventsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, isApproved]);
+  }, [user, canAccessEvents, isPlatformOwner]);
+
+  const handleStatusChange = async (event: AppEventWithRole) => {
+    const action = getStatusAction(event.status);
+    setUpdatingEventId(event.id);
+
+    try {
+      await updateEventStatus(event.id, action.nextStatus);
+      setEvents((currentEvents) =>
+        currentEvents.map((currentEvent) =>
+          currentEvent.id === event.id
+            ? { ...currentEvent, status: action.nextStatus, updatedAt: new Date() }
+            : currentEvent
+        )
+      );
+      toast({
+        title: 'Statut mis à jour',
+        description: `${event.name} est maintenant ${getStatusLabel(action.nextStatus).toLowerCase()}.`
+      });
+    } catch {
+      toast({
+        title: 'Erreur',
+        description: "Impossible de mettre à jour le statut de l'événement.",
+        variant: 'destructive'
+      });
+    } finally {
+      setUpdatingEventId(null);
+    }
+  };
+
+  const handleDeleteEvent = async () => {
+    if (!eventToDelete || deleteConfirmation !== 'SUPPRIMER') return;
+
+    setDeletingEventId(eventToDelete.id);
+
+    try {
+      await deleteEvent(eventToDelete.id);
+      setEvents((currentEvents) => currentEvents.filter((event) => event.id !== eventToDelete.id));
+      toast({
+        title: 'Événement supprimé',
+        description: `${eventToDelete.name} a été supprimé définitivement.`
+      });
+      setEventToDelete(null);
+      setDeleteConfirmation('');
+    } catch {
+      toast({
+        title: 'Erreur',
+        description: "Impossible de supprimer l'événement.",
+        variant: 'destructive'
+      });
+    } finally {
+      setDeletingEventId(null);
+    }
+  };
 
   useEffect(() => {
-    if (user && isApproved) {
+    if (user && canAccessEvents) {
       loadEvents();
     } else if (!authLoading) {
       setLoading(false);
     }
-  }, [user, isApproved, authLoading, loadEvents]);
+  }, [user, canAccessEvents, authLoading, loadEvents]);
 
   if (authLoading || (loading && events.length === 0)) {
     return (
@@ -66,7 +173,7 @@ export default function MyEventsPage() {
     );
   }
 
-  if (!isApproved) {
+  if (!canAccessEvents) {
     return (
         <AppLayout>
             <div className="p-6 max-w-4xl mx-auto pt-20">
@@ -94,8 +201,14 @@ export default function MyEventsPage() {
       <div className="h-full overflow-y-auto p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Mes Événements</h1>
-            <p className="text-muted-foreground">Gestion de vos espaces et festivals personnels.</p>
+            <h1 className="text-3xl font-bold tracking-tight">
+              {isPlatformOwner ? 'Tous les événements' : 'Mes Événements'}
+            </h1>
+            <p className="text-muted-foreground">
+              {isPlatformOwner
+                ? 'Supervision globale des événements de la plateforme Spotly.'
+                : 'Gestion de vos espaces et festivals personnels.'}
+            </p>
           </div>
           <div className="flex gap-2">
             <Button 
@@ -130,7 +243,9 @@ export default function MyEventsPage() {
             </div>
             <CardTitle className="text-2xl">Aucun événement trouvé</CardTitle>
             <CardDescription className="mt-2 max-w-sm">
-               Vous n'avez pas encore créé d'événement ou vous n'êtes membre d'aucun espace.
+               {isPlatformOwner
+                 ? "Aucun événement n'existe encore sur la plateforme."
+                 : "Vous n'avez pas encore créé d'événement ou vous n'êtes membre d'aucun espace."}
             </CardDescription>
             <div className="mt-8">
               <CreateEventDialog onEventCreated={() => loadEvents(true)} />
@@ -145,16 +260,18 @@ export default function MyEventsPage() {
                      <CardTitle className="text-xl font-bold line-clamp-1">{e.name}</CardTitle>
                      <Badge variant={e.status === 'published' ? "default" : "outline"} className={cn(
                         "text-[10px] uppercase font-bold",
-                        e.status === 'published' ? "bg-green-500/10 text-green-600 border-none" : "text-muted-foreground"
+                        e.status === 'published' && "bg-green-500/10 text-green-600 border-none",
+                        e.status === 'paused' && "bg-amber-500/10 text-amber-600 border-none",
+                        e.status === 'draft' && "text-muted-foreground"
                      )}>
-                        {e.status === 'published' ? 'En ligne' : 'Brouillon'}
+                        {getStatusLabel(e.status)}
                      </Badge>
                   </div>
                   
                   <div className="flex flex-wrap gap-2">
                      <Badge className="bg-primary/10 text-primary hover:bg-primary/10 border-none flex gap-1 items-center text-[10px] uppercase font-bold">
                         <ShieldCheck className="h-3 w-3" />
-                        {e.userRole || 'Admin'}
+                        {isPlatformOwner ? 'Owner plateforme' : e.userRole || 'Admin'}
                      </Badge>
                      {e.adminId === user?.uid && (
                         <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 flex gap-1 items-center text-[10px] uppercase font-bold">
@@ -163,20 +280,69 @@ export default function MyEventsPage() {
                         </Badge>
                      )}
                   </div>
+                  <p className="mt-4 text-xs font-semibold text-muted-foreground">
+                    {formatEventDateRange(e)}
+                    {e.timezone ? ` · ${e.timezone}` : ''}
+                  </p>
+                  {isPlatformOwner && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Créateur : <span className="font-semibold text-foreground">{getEventOwnerLabel(e)}</span>
+                    </p>
+                  )}
                 </CardHeader>
                 <CardContent className="pt-6 space-y-4">
-                  <div className="flex gap-2">
-                    <Button variant="default" size="sm" asChild className="flex-1 rounded-xl h-12 gap-2 font-bold shadow-md">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <Button variant="default" size="sm" asChild className="rounded-xl h-12 gap-2 font-bold shadow-md">
                        <Link href={`/${e.slug}/dashboard`}>
                           <LayoutDashboard className="h-4 w-4" />
                           Dashboard
                        </Link>
                     </Button>
-                    <Button variant="secondary" size="icon" asChild className="rounded-xl h-12 w-12 shrink-0">
+                    <Button variant="secondary" size="sm" asChild className="rounded-xl h-12 gap-2 font-bold">
                        <Link href={`/${e.slug}/admin`}>
                           <Settings className="h-4 w-4" />
+                          Modifier
                        </Link>
                     </Button>
+                    {isPlatformOwner && (
+                      <Button variant="outline" size="sm" asChild className="rounded-xl h-12 gap-2 font-bold">
+                        <Link href={`/${e.slug}/admin/members`}>
+                          <UserCheck className="h-4 w-4" />
+                          Équipe
+                        </Link>
+                      </Button>
+                    )}
+                    {(globalRole === 'owner' || e.userRole === 'admin') && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleStatusChange(e)}
+                          disabled={updatingEventId === e.id || deletingEventId === e.id}
+                          className="rounded-xl h-12 font-bold"
+                        >
+                          {updatingEventId === e.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          {getStatusAction(e.status).label}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => {
+                            setEventToDelete(e);
+                            setDeleteConfirmation('');
+                          }}
+                          disabled={deletingEventId === e.id || updatingEventId === e.id}
+                          className="rounded-xl h-12 font-bold"
+                        >
+                          {deletingEventId === e.id ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4 mr-2" />
+                          )}
+                          Supprimer
+                        </Button>
+                      </>
+                    )}
                   </div>
                   <div className="text-[10px] font-mono text-muted-foreground text-center">
                     ID: {e.id} | /{e.slug}
@@ -186,6 +352,58 @@ export default function MyEventsPage() {
             ))}
           </div>
         )}
+        <AlertDialog
+          open={eventToDelete !== null}
+          onOpenChange={(open) => {
+            if (!open && deletingEventId === null) {
+              setEventToDelete(null);
+              setDeleteConfirmation('');
+            }
+          }}
+        >
+          <AlertDialogContent className="rounded-[2rem]">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Suppression définitive</AlertDialogTitle>
+              <AlertDialogDescription className="space-y-4">
+                <span className="block">
+                  Cette action supprimera définitivement l'événement,
+                  ses POI, sa configuration et ses données associées.
+                </span>
+                <span className="block font-semibold text-destructive">
+                  Cette action est irréversible.
+                </span>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-2">
+              <label htmlFor="delete-event-confirmation" className="text-sm font-medium">
+                Tapez SUPPRIMER pour confirmer
+              </label>
+              <Input
+                id="delete-event-confirmation"
+                value={deleteConfirmation}
+                onChange={(event) => setDeleteConfirmation(event.target.value)}
+                disabled={deletingEventId !== null}
+                autoComplete="off"
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="rounded-xl" disabled={deletingEventId !== null}>
+                Annuler
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(event) => {
+                  event.preventDefault();
+                  void handleDeleteEvent();
+                }}
+                disabled={deleteConfirmation !== 'SUPPRIMER' || deletingEventId !== null}
+                className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deletingEventId !== null && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Supprimer
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AppLayout>
   );

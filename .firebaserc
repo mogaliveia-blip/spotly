@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "studio-9874506289-6647e"
-  }
+    "default": "studio-9874506289-6647e",
+    "spotly": "spotly-app-events"
+  },
+  "targets": {},
+  "etags": {}
 }

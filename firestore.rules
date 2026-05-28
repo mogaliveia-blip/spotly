@@ -45,6 +45,62 @@ service cloud.firestore {
         get(eventPath).data.status == "published";
     }
 
+    function areReviewsEnabled(eventId) {
+      let configPath =
+        /databases/$(database)/documents/events/$(eventId)/config/main;
+
+      return !exists(configPath) ||
+        get(configPath).data.reviewsEnabled != false;
+    }
+
+    function isValidReviewCreate(poiId) {
+      return request.resource.data.keys().hasOnly([
+        "userId",
+        "userName",
+        "rating",
+        "comment",
+        "poiId",
+        "createdAt"
+      ]) &&
+      request.resource.data.keys().hasAll([
+        "userId",
+        "userName",
+        "rating",
+        "comment",
+        "poiId",
+        "createdAt"
+      ]) &&
+      request.resource.data.userId == getUserId() &&
+      request.resource.data.poiId == poiId &&
+      request.resource.data.rating is number &&
+      request.resource.data.rating >= 1 &&
+      request.resource.data.rating <= 5 &&
+      request.resource.data.comment is string &&
+      request.resource.data.comment.size() >= 10 &&
+      request.resource.data.comment.size() <= 2000 &&
+      request.resource.data.userName is string &&
+      request.resource.data.userName.size() > 0 &&
+      request.resource.data.userName.size() <= 120 &&
+      request.resource.data.createdAt == request.time;
+    }
+
+    function isValidReviewUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        "rating",
+        "comment"
+      ]) &&
+      request.resource.data.userId == resource.data.userId &&
+      request.resource.data.poiId == resource.data.poiId &&
+      request.resource.data.createdAt == resource.data.createdAt &&
+      request.resource.data.userName == resource.data.userName &&
+      request.resource.data.rating is number &&
+      request.resource.data.rating >= 1 &&
+      request.resource.data.rating <= 5 &&
+      request.resource.data.comment is string &&
+      request.resource.data.comment.size() >= 10 &&
+      request.resource.data.comment.size() <= 2000;
+    }
+
     function isEventMember(eventId) {
       return isAuthenticated() &&
         (
@@ -81,10 +137,15 @@ service cloud.firestore {
     function isAdminOrEditor(eventId) {
       let role = getRole(eventId);
 
-      return
+      return (
         role == "admin" ||
         role == "editor" ||
-        isEventAdmin(eventId);
+        isEventAdmin(eventId)
+      );
+    }
+
+    function isValidEventRole(role) {
+      return role == "admin" || role == "editor";
     }
 
     /* =========================
@@ -92,9 +153,21 @@ service cloud.firestore {
     ========================= */
 
     match /events/{eventId} {
-      allow read: if true;
+      allow get: if
+        resource.data.status == "published" ||
+        isEventMember(eventId);
 
-      allow create: if isApproved();
+      allow list: if
+        isOwner() ||
+        resource.data.status == "published";
+
+      allow create: if
+        isApproved() &&
+        (
+          isOwner() ||
+          request.resource.data.adminId == getUserId()
+        ) &&
+        request.resource.data.status == "draft";
 
       allow update, delete: if isEventAdmin(eventId);
     }
@@ -108,14 +181,26 @@ service cloud.firestore {
       allow read: if isEventMember(eventId);
 
       // IMPORTANT :
-      // permet la création initiale du créateur dans le batch
-      allow create: if isApproved() &&
+      // permet la création initiale du créateur après création du document event
+      allow create: if isAuthenticated() &&
         (
-          request.auth.uid == userId ||
+          (
+            request.auth.uid == userId &&
+            request.resource.data.uid == userId &&
+            request.resource.data.role == "admin"
+          ) ||
+          isOwner() ||
           isEventAdmin(eventId)
-        );
+        ) &&
+        isValidEventRole(request.resource.data.role);
 
-      allow update, delete: if isEventAdmin(eventId);
+      allow update: if isEventAdmin(eventId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "role"
+        ]) &&
+        isValidEventRole(request.resource.data.role);
+
+      allow delete: if isEventAdmin(eventId);
     }
 
     // collectionGroup(members)
@@ -161,11 +246,28 @@ service cloud.firestore {
           isEventPublished(eventId) ||
           isEventMember(eventId);
 
-        allow create: if isApproved();
+        allow create: if
+          isApproved() &&
+          areReviewsEnabled(eventId) &&
+          isValidReviewCreate(poiId) &&
+          (
+            isEventPublished(eventId) ||
+            isEventMember(eventId)
+          );
 
-        allow update, delete: if
+        allow update: if
           isAdminOrEditor(eventId) ||
           (
+            isAuthenticated() &&
+            resource != null &&
+            request.auth.uid == resource.data.userId &&
+            isValidReviewUpdate()
+          );
+
+        allow delete: if
+          isAdminOrEditor(eventId) ||
+          (
+            isAuthenticated() &&
             resource != null &&
             request.auth.uid == resource.data.userId
           );
@@ -182,8 +284,10 @@ service cloud.firestore {
         isEventMember(eventId);
 
       // IMPORTANT :
-      // autorise création initiale dans batch
-      allow create: if isApproved();
+      // autorise création initiale après création du document event
+      allow create: if
+        isOwner() ||
+        isEventAdmin(eventId);
 
       allow update, delete: if
         isEventAdmin(eventId);
@@ -218,6 +322,18 @@ service cloud.firestore {
 
       allow update: if
         isOwner() ||
+        (
+          request.auth.uid == userId &&
+          request.auth.token.email_verified == true &&
+          resource.data.isApproved == false &&
+          request.resource.data.isApproved == true &&
+          request.resource.data
+            .diff(resource.data)
+            .affectedKeys()
+            .hasOnly([
+              'isApproved'
+            ])
+        ) ||
         (
           request.auth.uid == userId &&
           !request.resource.data

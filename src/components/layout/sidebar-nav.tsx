@@ -60,7 +60,7 @@ function POISidebarList() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const selectedPoiId = searchParams.get('poi');
-  const categoryFilter = (searchParams.get('category') as MainCategory) || 'all';
+  const categoryFilter = (searchParams.get('category') as MainCategory | null) || 'all';
 
   useEffect(() => {
     if (eventLoading || eventId === DEFAULT_EVENT_ID) {
