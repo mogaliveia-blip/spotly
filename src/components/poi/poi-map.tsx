@@ -128,9 +128,9 @@ function MapController({
       })}
 
       {!isMobile && selectedPoi && (
-        <InfoWindow position={selectedPoi.location} onCloseClick={() => onSelectPoi(null)} pixelOffset={[0, -48]} maxWidth={400}>
-          <ScrollArea className="h-[50vh] w-full max-w-sm">
-            <div className="pr-4">
+        <InfoWindow position={selectedPoi.location} onCloseClick={() => onSelectPoi(null)} pixelOffset={[0, -48]} maxWidth={460}>
+          <ScrollArea className="h-[50vh] w-[min(420px,calc(100vw-4rem))]">
+            <div className="pr-4 min-w-0">
               <POIDetails poi={selectedPoi} />
             </div>
           </ScrollArea>

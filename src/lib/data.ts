@@ -574,16 +574,21 @@ export async function fetchPois(eventId: string): Promise<POI[]> {
 
 export async function fetchPoisLite(eventId: string): Promise<POILite[]> {
   const colRef = collection(db, dbPaths.poisPublic(eventId))
+
+  const mapSnap = (snap: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) =>
+    snap.docs.map((d) => ({ id: d.id, ...d.data() } as POILite))
+
   try {
-    const cacheSnap = await getDocsFromCache(colRef)
-    if (!cacheSnap.empty) {
-      const cached = cacheSnap.docs.map((d) => ({ id: d.id, ...d.data() } as POILite))
+    const cacheSnap = await getDocsFromCache(colRef).catch(() => null)
+
+    if (cacheSnap && !cacheSnap.empty) {
+      const cached = mapSnap(cacheSnap)
       void getDocsFromServer(colRef).catch(() => {})
       return cached
     }
+
     const serverSnap = await getDocsFromServer(colRef)
-    if (serverSnap.empty) return []
-    return serverSnap.docs.map((d) => ({ id: d.id, ...d.data() } as POILite))
+    return mapSnap(serverSnap)
   } catch (e: any) {
     const full = await fetchPois(eventId)
     return full as unknown as POILite[]

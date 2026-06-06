@@ -53,10 +53,10 @@ export function MobilePOIBottomSheet({
       <div
         className={cn(
           "fixed bottom-4 left-1/2 -translate-x-1/2 z-[60]",
-          "w-full max-w-[94%] md:max-w-[75%] lg:max-w-[60%] min-w-[300px]",
+          "w-[calc(100vw-2rem)] md:w-[min(760px,calc(100vw-3rem))] lg:w-[min(900px,calc(100vw-4rem))]",
           "bg-background/95 backdrop-blur-md",
           "rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-white/10",
-          "flex flex-col overflow-hidden transition-all duration-300 ease-out animate-in slide-in-from-bottom-10"
+          "flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 duration-300 ease-out"
         )}
         style={{
           maxHeight: '85vh',
