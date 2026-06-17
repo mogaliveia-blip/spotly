@@ -235,6 +235,10 @@ export async function createEvent(data: {
   startDate?: Date;
   endDate?: Date;
   timezone?: string;
+  city?: string;
+  departmentName?: string;
+  region?: string;
+  country?: string;
 }): Promise<AppEvent> {
   const eventRef = doc(collection(db, 'events'));
   const id = eventRef.id;
@@ -251,6 +255,10 @@ export async function createEvent(data: {
     startDate?: Date;
     endDate?: Date;
     timezone: string;
+    city?: string;
+    departmentName?: string;
+    region?: string;
+    country?: string;
     createdAt: ReturnType<typeof serverTimestamp>;
     updatedAt: ReturnType<typeof serverTimestamp>;
   } = {
@@ -270,6 +278,19 @@ export async function createEvent(data: {
   if (data.endDate) {
     eventData.endDate = data.endDate;
   }
+
+  const locationFields = {
+    city: data.city?.trim(),
+    departmentName: data.departmentName?.trim(),
+    region: data.region?.trim(),
+    country: data.country?.trim()
+  };
+
+  Object.entries(locationFields).forEach(([key, value]) => {
+    if (value) {
+      eventData[key as keyof typeof locationFields] = value;
+    }
+  });
 
   try {
     await setDoc(eventRef, eventData);

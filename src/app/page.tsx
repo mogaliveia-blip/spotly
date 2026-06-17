@@ -23,7 +23,11 @@ function normalizeSearchValue(value?: string): string {
 
 function getEventDepartmentLabel(event: AppEvent): string | null {
   if (!event.departmentCode && !event.departmentName) return null;
-  return [event.departmentCode, event.departmentName].filter(Boolean).join(' - ');
+  return [event.departmentCode?.trim(), event.departmentName?.trim()].filter(Boolean).join(' - ');
+}
+
+function getEventDepartmentFilterValue(event: AppEvent): string | null {
+  return event.departmentCode?.trim() || event.departmentName?.trim() || null;
 }
 
 function startOfToday(): Date {
@@ -65,16 +69,13 @@ export default function PortalPage() {
     const map = new Map<string, { code: string; name: string; label: string }>();
 
     events.forEach((event) => {
-      if (!event.departmentCode && !event.departmentName) return;
-
-      const code = event.departmentCode?.trim() || event.departmentName?.trim() || '';
-      const name = event.departmentName?.trim() || event.departmentCode?.trim() || '';
-      if (!code || !name) return;
+      const code = getEventDepartmentFilterValue(event);
+      if (!code) return;
 
       map.set(code, {
         code,
-        name,
-        label: [event.departmentCode, event.departmentName].filter(Boolean).join(' - ')
+        name: event.departmentName?.trim() || event.departmentCode?.trim() || code,
+        label: getEventDepartmentLabel(event) ?? code
       });
     });
 
@@ -89,8 +90,7 @@ export default function PortalPage() {
     return events.filter((event) => {
       const matchesDepartment =
         departmentFilter === ALL_DEPARTMENTS_VALUE ||
-        event.departmentCode === departmentFilter ||
-        (!event.departmentCode && event.departmentName === departmentFilter);
+        getEventDepartmentFilterValue(event) === departmentFilter;
 
       if (!matchesDepartment) return false;
       if (!normalizedQuery) return true;

@@ -17,6 +17,68 @@ import { useToast } from '@/hooks/use-toast';
 
 type POIAny = POILite | POI;
 
+function POIMarkerContent({
+  poi,
+  colorClass,
+  isSelected,
+  isMobile,
+  sponsorIsActive,
+  onSelect
+}: {
+  poi: POIAny;
+  colorClass: string;
+  isSelected: boolean;
+  isMobile: boolean;
+  sponsorIsActive: boolean;
+  onSelect: () => void;
+}) {
+  const iconSize = isMobile ? 18 : 20;
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={`Voir ${poi.title}`}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      className={cn(
+        "group relative flex cursor-pointer flex-col items-center -translate-y-2 select-none outline-none",
+        isSelected && "-translate-y-3"
+      )}
+    >
+      {sponsorIsActive && !isSelected && (
+        <div className="pointer-events-none absolute mt-1 h-11 w-11 rounded-full bg-amber-400/25 blur-md" />
+      )}
+      <div
+        className={cn(
+          "relative rounded-full bg-white p-1.5 shadow-md border border-black/10 transition-all",
+          "group-hover:scale-110 group-focus-visible:scale-110 group-focus-visible:ring-2 group-focus-visible:ring-accent",
+          sponsorIsActive && "border-amber-400 bg-amber-50 shadow-amber-500/20",
+          isSelected && "scale-110 ring-2 ring-accent shadow-lg"
+        )}
+      >
+        <MapPin size={iconSize} strokeWidth={2.75} className={cn("drop-shadow-sm", sponsorIsActive ? "text-amber-500" : colorClass)} />
+      </div>
+      <div
+        className={cn(
+          "relative mt-1 max-w-[140px] truncate rounded-full border border-black/10 bg-white px-3 py-1 text-center text-[11px] font-semibold leading-none text-slate-950 shadow-md transition-all",
+          "group-hover:scale-105 group-focus-visible:scale-105 group-focus-visible:ring-2 group-focus-visible:ring-accent",
+          !isMobile && "max-w-[168px] px-3.5 py-1.5 text-xs",
+          sponsorIsActive && "border-amber-400 bg-amber-50",
+          isSelected && "scale-105 ring-2 ring-accent shadow-lg"
+        )}
+      >
+        {poi.title}
+      </div>
+    </div>
+  );
+}
+
 function MapController({
   pois,
   onSelectPoi,
@@ -103,26 +165,15 @@ function MapController({
         if (isSelected) colorClass = 'text-accent';
 
         return (
-          <AdvancedMarker key={poi.id} position={poi.location} onClick={() => onSelectPoi(poi)}>
-            {isMobile ? (
-              <div className="flex flex-col items-center -translate-y-2 select-none">
-                <div className={cn("rounded-full bg-white shadow-md p-1 transition-all", sponsorIsActive && "border-2 border-amber-400 bg-amber-50", isSelected && "ring-2 ring-accent scale-110")}>
-                  <MapPin size={18} className={sponsorIsActive ? "text-amber-500" : colorClass} />
-                </div>
-                <div className={cn("mt-1 px-3 py-1 rounded-full text-[11px] font-semibold shadow-md", "bg-white border max-w-[140px] text-center truncate", sponsorIsActive && "border-amber-400", isSelected && "ring-2 ring-accent scale-105")}>
-                  {poi.title}
-                </div>
-              </div>
-            ) : (
-              <div className="relative">
-                {sponsorIsActive && !isSelected && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-10 h-10 rounded-full bg-amber-400/20 blur-md" />
-                  </div>
-                )}
-                <MapPin size={36} className={cn("relative transition-transform drop-shadow-md", colorClass, isSelected ? "scale-125" : "hover:scale-110", sponsorIsActive && !isSelected && "drop-shadow-lg")} />
-              </div>
-            )}
+          <AdvancedMarker key={poi.id} position={poi.location}>
+            <POIMarkerContent
+              poi={poi}
+              colorClass={colorClass}
+              isSelected={isSelected}
+              isMobile={isMobile}
+              sponsorIsActive={sponsorIsActive}
+              onSelect={() => onSelectPoi(poi)}
+            />
           </AdvancedMarker>
         );
       })}

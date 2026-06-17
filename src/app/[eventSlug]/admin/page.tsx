@@ -39,6 +39,11 @@ function parseDateInputValue(value: string): Date | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
+function optionalText(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
 function EventDetailsCard() {
   const { event, eventId } = useEvent();
   const { toast } = useToast();
@@ -46,6 +51,10 @@ function EventDetailsCard() {
   const [startDate, setStartDate] = useState(toDateInputValue(event?.startDate));
   const [endDate, setEndDate] = useState(toDateInputValue(event?.endDate));
   const [timezone, setTimezone] = useState(event?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Europe/Paris');
+  const [city, setCity] = useState(event?.city ?? '');
+  const [departmentName, setDepartmentName] = useState(event?.departmentName ?? '');
+  const [region, setRegion] = useState(event?.region ?? '');
+  const [country, setCountry] = useState(event?.country ?? 'France');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -53,6 +62,10 @@ function EventDetailsCard() {
     setStartDate(toDateInputValue(event?.startDate));
     setEndDate(toDateInputValue(event?.endDate));
     setTimezone(event?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Europe/Paris');
+    setCity(event?.city ?? '');
+    setDepartmentName(event?.departmentName ?? '');
+    setRegion(event?.region ?? '');
+    setCountry(event?.country ?? 'France');
   }, [event]);
 
   const handleSave = async () => {
@@ -67,13 +80,27 @@ function EventDetailsCard() {
       return;
     }
 
+    const locationValues = [city, departmentName, region, country];
+    if (locationValues.some((value) => value.trim().length > 80)) {
+      toast({
+        title: 'Localisation invalide',
+        description: 'Les champs de localisation ne doivent pas dépasser 80 caractères.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       await updateEventDetails(eventId, {
         name: name.trim(),
         startDate: parseDateInputValue(startDate),
         endDate: parseDateInputValue(endDate),
-        timezone: timezone.trim() || 'Europe/Paris'
+        timezone: timezone.trim() || 'Europe/Paris',
+        city: optionalText(city),
+        departmentName: optionalText(departmentName),
+        region: optionalText(region),
+        country: optionalText(country)
       });
       toast({ title: 'Événement mis à jour' });
     } catch (error) {
@@ -107,6 +134,24 @@ function EventDetailsCard() {
       <div className="space-y-2">
         <Label htmlFor="event-timezone">Fuseau horaire</Label>
         <Input id="event-timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} className="rounded-xl" />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="event-city">Ville</Label>
+          <Input id="event-city" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Lorient" className="rounded-xl" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="event-department">Département</Label>
+          <Input id="event-department" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Morbihan" className="rounded-xl" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="event-region">Région</Label>
+          <Input id="event-region" value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Bretagne" className="rounded-xl" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="event-country">Pays</Label>
+          <Input id="event-country" value={country} onChange={(event) => setCountry(event.target.value)} placeholder="France" className="rounded-xl" />
+        </div>
       </div>
       <Button onClick={handleSave} disabled={saving || !name.trim()} className="w-full sm:w-auto font-bold rounded-xl h-11">
         {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -386,7 +431,7 @@ export default function AdminPage() {
           <Card className="rounded-[2rem] border-muted/60 shadow-sm overflow-hidden">
             <CardHeader className="bg-primary/5">
               <CardTitle>Informations</CardTitle>
-              <CardDescription>Nom, dates et fuseau horaire de l'événement.</CardDescription>
+              <CardDescription>Nom, dates, fuseau horaire et localisation de l'événement.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <EventDetailsCard />
