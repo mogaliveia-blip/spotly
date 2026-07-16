@@ -159,6 +159,11 @@ export default function DashboardPage() {
     setIsListVisible(true) 
   }
 
+  const closeMarketingOverlay = useCallback(() => {
+    sessionStorage.setItem(`heroDismissed_${eventId}`, 'true')
+    setHeroVisible(false)
+  }, [eventId])
+
   const visiblePois = useMemo(() => {
     return pois.filter((p) => categoryFilter === 'all' || p.mainCategory === categoryFilter)
   }, [pois, categoryFilter])
@@ -186,10 +191,7 @@ export default function DashboardPage() {
         {showHero && marketingConfig && (
           <HeroOverlay
             config={marketingConfig}
-            onClose={() => {
-              sessionStorage.setItem(`heroDismissed_${eventId}`, 'true')
-              setHeroVisible(false)
-            }}
+            onClose={closeMarketingOverlay}
           />
         )}
 

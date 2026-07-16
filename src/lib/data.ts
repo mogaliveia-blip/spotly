@@ -316,8 +316,8 @@ export async function createEvent(data: {
       heroTitle: `Bienvenue à ${data.name}`,
       heroSubtitle: "Découvrez l'application officielle du festival.",
       heroImageUrl: 'https://picsum.photos/seed/festival/1200/800',
-      heroCtaText: 'Commencer',
-      heroCtaMode: 'auth'
+      heroCtaText: '',
+      heroCtaMode: 'none'
     });
 
     await batch.commit();
@@ -516,8 +516,8 @@ export async function fetchMarketingConfig(eventId: string): Promise<MarketingCo
     heroTitle: 'Découvrez le festival',
     heroSubtitle: "Connectez-vous pour accéder à toutes les fonctionnalités.",
     heroImageUrl: 'https://picsum.photos/seed/marketing/1200/800',
-    heroCtaText: 'Se connecter',
-    heroCtaMode: 'auth'
+    heroCtaText: '',
+    heroCtaMode: 'none'
   }
 }
 

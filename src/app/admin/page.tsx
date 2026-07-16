@@ -258,6 +258,56 @@ function MarketingConfigCard() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 rounded-md border p-4">
+        <div className="space-y-2">
+          <Label htmlFor="heroCtaMode">Bouton CTA</Label>
+          <Select
+            value={config?.heroCtaMode ?? 'none'}
+            onValueChange={(value) =>
+              setConfig(prev => prev ? {
+                ...prev,
+                heroCtaMode: value as MarketingConfig['heroCtaMode'],
+                heroCtaText: value === 'none' || value === 'close' ? '' : prev.heroCtaText
+              } : null)
+            }
+          >
+            <SelectTrigger id="heroCtaMode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Aucun bouton</SelectItem>
+              <SelectItem value="auth">Connexion</SelectItem>
+              <SelectItem value="external">Lien externe</SelectItem>
+              <SelectItem value="close">Aucun bouton (ancien mode fermeture)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {config?.heroCtaMode !== 'none' && config?.heroCtaMode !== 'close' && (
+          <div className="space-y-2">
+            <Label htmlFor="heroCtaText">Texte du bouton</Label>
+            <Input
+              id="heroCtaText"
+              value={config?.heroCtaText}
+              onChange={e => setConfig(prev => prev ? { ...prev, heroCtaText: e.target.value } : null)}
+              placeholder={config?.heroCtaMode === 'auth' ? 'Se connecter' : 'En savoir plus'}
+            />
+          </div>
+        )}
+
+        {config?.heroCtaMode === 'external' && (
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="heroCtaLink">Lien externe</Label>
+            <Input
+              id="heroCtaLink"
+              value={config?.heroCtaLink ?? ''}
+              onChange={e => setConfig(prev => prev ? { ...prev, heroCtaLink: e.target.value } : null)}
+              placeholder="https://..."
+            />
+          </div>
+        )}
+      </div>
+
       <Button onClick={handleSave} disabled={saving}>
         {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Sauvegarder

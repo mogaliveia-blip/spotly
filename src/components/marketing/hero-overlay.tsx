@@ -1,64 +1,35 @@
 'use client';
 
 import type { MarketingConfig } from '@/lib/types';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import Image from 'next/image';
-import { AuthDialog } from '@/components/auth/auth-dialog';
 import { X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 
 interface HeroOverlayProps {
   config: MarketingConfig;
   onClose?: () => void;
 }
 
-function CtaButton({
-  config,
-  onClose
-}: {
-  config: MarketingConfig;
-  onClose?: () => void;
-}) {
-  if (config.heroCtaMode === 'none' || !config.heroCtaText) {
-    return null;
-  }
-
-  if (config.heroCtaMode === 'auth') {
-    return (
-      <AuthDialog
-        trigger={<Button className="mt-4 rounded-full px-8 h-12 font-bold shadow-lg text-base">{config.heroCtaText}</Button>}
-      />
-    );
-  }
-
-  if (config.heroCtaMode === 'external' && config.heroCtaLink) {
-    return (
-      <Button className="mt-4 rounded-full px-8 h-12 font-bold shadow-lg text-base" asChild>
-        <a
-          href={config.heroCtaLink}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {config.heroCtaText}
-        </a>
-      </Button>
-    );
-  }
-
-  if (config.heroCtaMode === 'close') {
-    return (
-      <Button className="mt-4 rounded-full px-8 h-12 font-bold shadow-lg text-base" onClick={onClose}>
-        {config.heroCtaText}
-      </Button>
-    );
-  }
-
-  return null;
-}
-
 export function HeroOverlay({ config, onClose }: HeroOverlayProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-500">
+    <div
+      ref={dialogRef}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-500"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="hero-overlay-title"
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') onClose?.();
+      }}
+    >
       <div className="relative w-full h-full max-w-4xl max-h-[80vh] animate-in zoom-in-95 duration-500">
         <Card className="relative h-full w-full overflow-hidden flex flex-col justify-end shadow-2xl rounded-[3rem] border-none">
 
@@ -89,17 +60,12 @@ export function HeroOverlay({ config, onClose }: HeroOverlayProps) {
 
           {/* Contenu texte */}
           <div className="relative z-10 p-8 md:p-16 space-y-4">
-            <h2 className="text-4xl md:text-6xl font-bold text-white tracking-tight">
+            <h2 id="hero-overlay-title" className="text-4xl md:text-6xl font-bold text-white tracking-tight">
               {config.heroTitle}
             </h2>
             <p className="text-lg md:text-xl text-white/90 max-w-2xl font-medium leading-relaxed">
               {config.heroSubtitle}
             </p>
-            
-            {/* CTA */}
-            <div className="pt-4">
-              <CtaButton config={config} onClose={onClose} />
-            </div>
           </div>
 
         </Card>
