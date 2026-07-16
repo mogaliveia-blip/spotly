@@ -26,6 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { canAccessMyEvents, canAccessPlatformAdmin } from '@/lib/access-control';
 
 type AppEventWithRole = AppEvent & { userRole?: EventRole };
 
@@ -64,8 +65,10 @@ export default function MyEventsPage() {
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
   const [eventToDelete, setEventToDelete] = useState<AppEventWithRole | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
-  const isPlatformOwner = globalRole === 'owner';
-  const canAccessEvents = isApproved || isPlatformOwner;
+  const [hasEventMembership, setHasEventMembership] = useState(false);
+  const [accessLoading, setAccessLoading] = useState(true);
+  const isPlatformOwner = canAccessPlatformAdmin(globalRole);
+  const canAccessEvents = canAccessMyEvents({ globalRole, isApproved, hasEventMembership });
 
   const loadEvents = useCallback(async (isManual = false) => {
     if (!user || !canAccessEvents) return;
@@ -151,14 +154,50 @@ export default function MyEventsPage() {
   };
 
   useEffect(() => {
-    if (user && canAccessEvents) {
+    let isMounted = true;
+
+    if (authLoading) return;
+
+    if (!user) {
+      setHasEventMembership(false);
+      setAccessLoading(false);
+      return;
+    }
+
+    if (isPlatformOwner || isApproved) {
+      setHasEventMembership(false);
+      setAccessLoading(false);
+      return;
+    }
+
+    setAccessLoading(true);
+    fetchUserEvents(user.uid)
+      .then((userEvents) => {
+        if (!isMounted) return;
+        setHasEventMembership(userEvents.length > 0);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setHasEventMembership(false);
+      })
+      .finally(() => {
+        if (isMounted) setAccessLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [authLoading, user, isPlatformOwner, isApproved]);
+
+  useEffect(() => {
+    if (user && canAccessEvents && !accessLoading) {
       loadEvents();
-    } else if (!authLoading) {
+    } else if (!authLoading && !accessLoading) {
       setLoading(false);
     }
-  }, [user, canAccessEvents, authLoading, loadEvents]);
+  }, [user, canAccessEvents, authLoading, accessLoading, loadEvents]);
 
-  if (authLoading || (loading && events.length === 0)) {
+  if (authLoading || accessLoading || (loading && events.length === 0)) {
     return (
       <AppLayout>
         <div className="p-6 space-y-6">

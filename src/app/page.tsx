@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { Button } from '@/components/ui/button';
-import { fetchAppConfig, DEFAULT_EVENT_ID, fetchPublishedEvents } from '@/lib/data';
+import { fetchAppConfig, DEFAULT_EVENT_ID, fetchPublishedEvents, fetchUserEvents } from '@/lib/data';
 import type { AppConfig, AppEvent } from '@/lib/types';
 import { Mountain, ArrowRight, Calendar, Search, MapPin, X } from 'lucide-react';
 import { signOut } from 'firebase/auth';
@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { canAccessMyEvents, canAccessPlatformAdmin } from '@/lib/access-control';
 
 const ALL_DEPARTMENTS_VALUE = 'all';
 
@@ -59,11 +60,14 @@ export default function PortalPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
+  const [hasEventMembership, setHasEventMembership] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState(ALL_DEPARTMENTS_VALUE);
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, role: globalRole, isApproved } = useAuth();
 
   const isLoading = authLoading || !config;
+  const showMyEvents = !!user && canAccessMyEvents({ globalRole, isApproved, hasEventMembership });
+  const showPlatformAdmin = canAccessPlatformAdmin(globalRole);
 
   const departments = useMemo(() => {
     const map = new Map<string, { code: string; name: string; label: string }>();
@@ -140,6 +144,27 @@ export default function PortalPage() {
       setDepartmentFilter(ALL_DEPARTMENTS_VALUE);
     }
   }, [departmentFilter, departments]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!user || showPlatformAdmin || isApproved) {
+      setHasEventMembership(false);
+      return;
+    }
+
+    fetchUserEvents(user.uid)
+      .then((userEvents) => {
+        if (isMounted) setHasEventMembership(userEvents.length > 0);
+      })
+      .catch(() => {
+        if (isMounted) setHasEventMembership(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, showPlatformAdmin, isApproved]);
 
   const renderEventCard = (event: AppEvent) => {
     const departmentLabel = getEventDepartmentLabel(event);
@@ -249,12 +274,19 @@ export default function PortalPage() {
           </div>
           {user && (
             <div className="flex items-center gap-2">
+              {showMyEvents && (
                 <Button variant="outline" size="sm" asChild>
-                    <Link href="/admin/events">Espace Organisateur</Link>
+                  <Link href="/admin/events">Mes Événements</Link>
                 </Button>
-                <Button variant="ghost" size="sm" onClick={handleSignOut}>
-                    Se déconnecter
+              )}
+              {showPlatformAdmin && (
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/admin">Administration Plateforme</Link>
                 </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                Se déconnecter
+              </Button>
             </div>
           )}
         </header>
@@ -323,9 +355,16 @@ export default function PortalPage() {
         <div className="flex items-center gap-3">
           {user ? (
             <>
-              <Button variant="ghost" size="sm" asChild className="hidden sm:flex font-bold rounded-xl">
+              {showMyEvents && (
+                <Button variant="ghost" size="sm" asChild className="font-bold rounded-xl">
                  <Link href="/admin/events">Mes Événements</Link>
-              </Button>
+                </Button>
+              )}
+              {showPlatformAdmin && (
+                <Button variant="ghost" size="sm" asChild className="hidden sm:flex font-bold rounded-xl">
+                  <Link href="/admin">Administration Plateforme</Link>
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={handleSignOut} className="rounded-xl font-bold">
                   Quitter
               </Button>
