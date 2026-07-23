@@ -37,6 +37,7 @@ import type {
 } from './types'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
+import { isSponsorActive } from './sponsor-utils'
 import {
   ref,
   uploadBytes,
@@ -222,6 +223,89 @@ export async function fetchPublishedEvents(): Promise<AppEvent[]> {
   } catch (error) {
     console.error("[Data] Erreur fetchPublishedEvents:", error);
     return [];
+  }
+}
+
+export interface PlatformMonitorStats {
+  users: {
+    total: number
+    approved: number
+    revoked: number
+    owners: number
+  }
+  events: {
+    total: number
+    draft: number
+    published: number
+    paused: number
+    ongoing: number
+    upcoming: number
+    ended: number
+  }
+  content: {
+    totalPois: number
+    totalReviews: number
+    activeSponsors: number
+    poisWithSponsorField: number
+  }
+  marketing: {
+    heroEnabledEvents: number
+  }
+}
+
+function isEventOngoing(event: AppEvent, now: Date): boolean {
+  if (!event.startDate) return false
+  const endDate = event.endDate ?? event.startDate
+  return event.startDate <= now && endDate >= now
+}
+
+function isEventUpcoming(event: AppEvent, now: Date): boolean {
+  return !!event.startDate && event.startDate > now
+}
+
+function isEventEnded(event: AppEvent, now: Date): boolean {
+  return !!event.endDate && event.endDate < now
+}
+
+export async function fetchPlatformMonitorStats(): Promise<PlatformMonitorStats> {
+  const [users, events] = await Promise.all([
+    fetchUsers(),
+    fetchAllEvents()
+  ])
+
+  const [poisByEvent, marketingConfigs] = await Promise.all([
+    Promise.all(events.map((event) => fetchPois(event.id))),
+    Promise.all(events.map((event) => fetchMarketingConfig(event.id)))
+  ])
+
+  const allPois = poisByEvent.flat()
+  const now = new Date()
+
+  return {
+    users: {
+      total: users.length,
+      approved: users.filter((user) => user.isApproved).length,
+      revoked: users.filter((user) => !user.isApproved).length,
+      owners: users.filter((user) => user.role === 'owner').length
+    },
+    events: {
+      total: events.length,
+      draft: events.filter((event) => event.status === 'draft').length,
+      published: events.filter((event) => event.status === 'published').length,
+      paused: events.filter((event) => event.status === 'paused').length,
+      ongoing: events.filter((event) => isEventOngoing(event, now)).length,
+      upcoming: events.filter((event) => isEventUpcoming(event, now)).length,
+      ended: events.filter((event) => isEventEnded(event, now)).length
+    },
+    content: {
+      totalPois: allPois.length,
+      totalReviews: allPois.reduce((total, poi) => total + (poi.reviewCount || 0), 0),
+      activeSponsors: allPois.filter(isSponsorActive).length,
+      poisWithSponsorField: allPois.filter((poi) => !!poi.sponsor).length
+    },
+    marketing: {
+      heroEnabledEvents: marketingConfigs.filter((config) => config.heroEnabled).length
+    }
   }
 }
 

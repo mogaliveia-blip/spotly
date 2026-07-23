@@ -2,9 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
-import { useRouter, useParams } from 'next/navigation';
-import { fetchUsers, fetchPois, fetchAppConfig, fetchMarketingConfig } from '@/lib/data';
-import type { POI, AppConfig, MarketingConfig } from '@/lib/types';
+import { useRouter } from 'next/navigation';
+import { fetchUsers, fetchPois, fetchMarketingConfig } from '@/lib/data';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,16 +11,10 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
-  Server,
   Users,
   MapPin,
   Star,
   Handshake,
-  MonitorPlay,
-  Presentation,
-  AlertTriangle,
-  Info,
-  CheckCircle,
   RefreshCw,
   Loader2,
   BarChart3,
@@ -39,7 +32,6 @@ interface MonitorStats {
   activePartners: number;
   totalReviews: number;
   totalUsers: number;
-  isLandingPageActive: boolean;
   isHeroMarketingEnabled: boolean;
   poisWithSponsorField: number;
 }
@@ -84,10 +76,9 @@ export default function MonitorPage() {
         if (!isManualRefresh) setLoading(true);
 
         try {
-            const [users, pois, appConfig, marketingConfig] = await Promise.all([
+            const [users, pois, marketingConfig] = await Promise.all([
                 globalRole === 'owner' ? fetchUsers() : Promise.resolve([]),
                 fetchPois(eventId),
-                fetchAppConfig(eventId),
                 fetchMarketingConfig(eventId),
             ]);
 
@@ -100,7 +91,6 @@ export default function MonitorPage() {
                 activePartners,
                 totalReviews,
                 totalUsers: users.length,
-                isLandingPageActive: appConfig.isLandingPageActive,
                 isHeroMarketingEnabled: marketingConfig.heroEnabled,
                 poisWithSponsorField,
             };
@@ -178,15 +168,11 @@ export default function MonitorPage() {
                     <div className="grid gap-6 md:grid-cols-2">
                         <Card className="rounded-3xl border-muted/60 overflow-hidden">
                             <CardHeader className="bg-primary/5">
-                                <CardTitle className="text-lg">Configuration</CardTitle>
+                                <CardTitle className="text-lg">Services</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-3 pt-4">
                                 <div className="flex justify-between items-center p-3 rounded-xl bg-muted/20">
-                                    <span className="text-sm font-bold">Landing Page</span>
-                                    <Badge variant={stats.isLandingPageActive ? "default" : "secondary"}>{stats.isLandingPageActive ? "On" : "Off"}</Badge>
-                                </div>
-                                <div className="flex justify-between items-center p-3 rounded-xl bg-muted/20">
-                                    <span className="text-sm font-bold">Marketing Hero</span>
+                                    <span className="text-sm font-bold">Overlay marketing</span>
                                     <Badge variant={stats.isHeroMarketingEnabled ? "default" : "secondary"}>{stats.isHeroMarketingEnabled ? "On" : "Off"}</Badge>
                                 </div>
                             </CardContent>

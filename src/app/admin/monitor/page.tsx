@@ -1,292 +1,285 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { useAuth } from '@/hooks/use-auth-user';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { fetchUsers, fetchPois, fetchAppConfig, fetchMarketingConfig, DEFAULT_EVENT_ID } from '@/lib/data';
-import type { POI, AppConfig, MarketingConfig } from '@/lib/types';
-import { isSponsorActive } from '@/lib/sponsor-utils';
-import { AppLayout } from '@/components/layout/app-layout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import {
-  Server,
-  Users,
-  MapPin,
-  Star,
-  Handshake,
-  MonitorPlay,
-  Presentation,
-  AlertTriangle,
-  Info,
-  CheckCircle,
-  RefreshCw,
-  Loader2,
-  BarChart3,
-  Activity
-} from 'lucide-react';
-
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { mapsConfig } from '@/lib/firebase-config';
+import {
+  Activity,
+  CalendarClock,
+  CheckCircle,
+  Clock,
+  Loader2,
+  MapPin,
+  RefreshCw,
+  Server,
+  ShieldCheck,
+  Star,
+  Users
+} from 'lucide-react';
+
+import { AppLayout } from '@/components/layout/app-layout';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/hooks/use-auth-user';
+import { fetchPlatformMonitorStats } from '@/lib/data';
+import type { PlatformMonitorStats } from '@/lib/data';
+import { mapsConfig } from '@/lib/firebase-config';
 
-interface MonitorStatsData {
-  totalPois: number;
-  activePartners: number;
-  totalReviews: number;
-  totalUsers: number;
-  isLandingPageActive: boolean;
-  isHeroMarketingEnabled: boolean;
-  poisWithSponsorField: number;
-}
+const StatCard = ({
+  title,
+  value,
+  icon: Icon,
+  loading,
+  delta
+}: {
+  title: string
+  value: string | number
+  icon: React.ElementType
+  loading: boolean
+  delta?: number
+}) => {
+  const deltaBadge = delta && delta !== 0
+    ? (
+      <Badge variant="secondary" className={delta > 0 ? 'text-green-700' : 'text-red-700'}>
+        {delta > 0 ? `+${delta}` : delta}
+      </Badge>
+    )
+    : null;
 
-const StatCard = ({ title, value, icon: Icon, loading, delta }: { title: string; value: string | number; icon: React.ElementType; loading: boolean, delta?: number }) => {
-    const getDeltaBadge = () => {
-        if (delta === undefined || delta === 0) return null;
-        const color = delta > 0 ? 'bg-green-500/20 text-green-700' : 'bg-red-500/20 text-red-700';
-        return <Badge className={`ml-2 text-xs font-mono ${color}`}>{delta > 0 ? `+${delta}`: delta}</Badge>
-    }
+  return (
+    <Card className="rounded-2xl border-muted/60">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <Icon className="h-4 w-4 text-primary" />
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <Skeleton className="h-8 w-20" />
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="text-2xl font-bold">{value}</div>
+            {deltaBadge}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
-    return (
-        <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{title}</CardTitle>
-                <Icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-                {loading ? <Skeleton className="h-8 w-1/2" /> : (
-                    <div className="flex items-center">
-                        <div className="text-2xl font-bold">{value}</div>
-                        {getDeltaBadge()}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-    );
-}
+const MetricRow = ({ label, value }: { label: string; value: string | number }) => (
+  <div className="flex items-center justify-between rounded-xl bg-muted/30 px-3 py-2">
+    <span className="text-sm text-muted-foreground">{label}</span>
+    <span className="text-sm font-bold">{value}</span>
+  </div>
+);
 
 export default function MonitorPage() {
-    const { role, loading: authLoading } = useAuth();
-    const router = useRouter();
-    const [stats, setStats] = useState<MonitorStatsData | null>(null);
-    const [prevStats, setPrevStats] = useState<MonitorStatsData | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-    const isInitialLoad = useRef(true);
-    const [isPageVisible, setIsPageVisible] = useState(true);
+  const { role, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const [stats, setStats] = useState<PlatformMonitorStats | null>(null);
+  const [prevStats, setPrevStats] = useState<PlatformMonitorStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const isInitialLoad = useRef(true);
 
-    const fetchData = useCallback(async (isManualRefresh = false) => {
-        if (!isManualRefresh) setLoading(true);
+  const fetchData = useCallback(async (isManualRefresh = false) => {
+    if (!isManualRefresh) setLoading(true);
 
-        try {
-            const [users, pois, appConfig, marketingConfig] = await Promise.all([
-                fetchUsers(),
-                fetchPois(DEFAULT_EVENT_ID),
-                fetchAppConfig(DEFAULT_EVENT_ID),
-                fetchMarketingConfig(DEFAULT_EVENT_ID),
-            ]);
+    try {
+      const nextStats = await fetchPlatformMonitorStats();
 
-            const totalReviews = pois.reduce((acc, poi) => acc + (poi.reviewCount || 0), 0);
-            const activePartners = pois.filter(isSponsorActive).length;
-            const poisWithSponsorField = pois.filter(p => !!p.sponsor).length;
+      setStats((currentStats) => {
+        if (!isInitialLoad.current) setPrevStats(currentStats);
+        else isInitialLoad.current = false;
+        return nextStats;
+      });
+      setLastRefresh(new Date());
+    } catch (error) {
+      console.error('[MonitorPage] Failed to fetch platform monitoring data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-            const newStats: MonitorStatsData = {
-                totalPois: pois.length,
-                activePartners,
-                totalReviews,
-                totalUsers: users.length,
-                isLandingPageActive: appConfig.isLandingPageActive,
-                isHeroMarketingEnabled: marketingConfig.heroEnabled,
-                poisWithSponsorField,
-            };
+  useEffect(() => {
+    if (authLoading) return;
 
-            setStats(currentStats => {
-                if (!isInitialLoad.current) setPrevStats(currentStats);
-                else isInitialLoad.current = false;
-                return newStats;
-            });
-
-            setLastRefresh(new Date());
-
-        } catch (error) {
-            console.error("Failed to fetch monitoring data:", error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        const handleVisibilityChange = () => setIsPageVisible(document.visibilityState === 'visible');
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-    }, []);
-
-    useEffect(() => {
-        if (authLoading) return;
-
-        // Seul l'owner plateforme a accès au monitoring global
-        if (role && role !== 'owner') {
-            router.replace('/dashboard');
-            return;
-        }
-
-        if (role === 'owner' && isPageVisible) {
-            fetchData();
-            const intervalId = setInterval(() => fetchData(), 30000);
-            return () => clearInterval(intervalId);
-        }
-    }, [role, authLoading, router, fetchData, isPageVisible]);
-
-    const isFestivalMode = stats ? !stats.isLandingPageActive && !stats.isHeroMarketingEnabled : false;
-    const poisDelta = stats && prevStats ? stats.totalPois - prevStats.totalPois : 0;
-    const reviewsDelta = stats && prevStats ? stats.totalReviews - prevStats.totalReviews : 0;
-
-    const isMapApiKeyDefined = !!mapsConfig.apiKey;
-
-    if (authLoading || !stats) {
-        return (
-            <AppLayout>
-                <div className="flex h-full w-full items-center justify-center">
-                    <Server className="h-12 w-12 animate-pulse text-primary" />
-                </div>
-            </AppLayout>
-        );
+    if (role && role !== 'owner') {
+      router.replace('/dashboard');
+      return;
     }
 
+    if (role === 'owner') {
+      fetchData();
+      const intervalId = setInterval(() => fetchData(), 60000);
+      return () => clearInterval(intervalId);
+    }
+  }, [role, authLoading, router, fetchData]);
+
+  const isMapApiKeyDefined = !!mapsConfig.apiKey;
+  const poisDelta = stats && prevStats ? stats.content.totalPois - prevStats.content.totalPois : 0;
+  const reviewsDelta = stats && prevStats ? stats.content.totalReviews - prevStats.content.totalReviews : 0;
+  const usersDelta = stats && prevStats ? stats.users.total - prevStats.users.total : 0;
+  const eventsDelta = stats && prevStats ? stats.events.total - prevStats.events.total : 0;
+
+  if (authLoading || !stats) {
     return (
-        <AppLayout>
-            <div className="h-full overflow-y-auto p-6">
-                <div className="space-y-6">
-
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                           <div>
-                             <h1 className="text-2xl font-bold tracking-tight">Monitoring Plateforme</h1>
-                             <p className="text-muted-foreground">Vue d'ensemble en temps réel de l'activité globale.</p>
-                           </div>
-                           {isFestivalMode && <Badge variant="destructive">Mode Festival Actif</Badge>}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                           <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={loading}>
-                                {loading && !isInitialLoad.current
-                                  ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
-                                  : <RefreshCw className="mr-2 h-4 w-4"/>}
-                                Rafraîchir
-                            </Button>
-
-                            <div className="text-sm text-muted-foreground text-left sm:text-right">
-                               {lastRefresh
-                                ? <>Dernière mise à jour : {format(lastRefresh, 'HH:mm:ss', { locale: fr })}</>
-                                : <Skeleton className="h-5 w-48" />}
-                            </div>
-                        </div>
-                    </div>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Alertes Système</CardTitle>
-                        </CardHeader>
-
-                        <CardContent className="space-y-3">
-
-                            {stats.totalPois === 0 && (
-                                <Alert variant="destructive">
-                                    <AlertTriangle className="h-4 w-4" />
-                                    <AlertTitle>Alerte Critique</AlertTitle>
-                                    <AlertDescription>
-                                        Aucun point d'intérêt (POI) n'est configuré sur l'événement par défaut.
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-
-                            {stats.isLandingPageActive && stats.isHeroMarketingEnabled && (
-                                <Alert variant="destructive">
-                                    <AlertTriangle className="h-4 w-4" />
-                                    <AlertTitle>Alerte de Configuration</AlertTitle>
-                                    <AlertDescription>
-                                        La Landing Page et le Hero Marketing sont activés en même temps sur le portail.
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-
-                            {stats.totalPois > 0 && !(stats.isLandingPageActive && stats.isHeroMarketingEnabled) && !isFestivalMode && (
-                                <Alert>
-                                     <CheckCircle className="h-4 w-4 text-green-500" />
-                                    <AlertTitle>Système Nominal</AlertTitle>
-                                    <AlertDescription>Aucune alerte critique détectée au niveau plateforme.</AlertDescription>
-                                </Alert>
-                             )}
-                        </CardContent>
-                    </Card>
-
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                        <StatCard title="Total Utilisateurs" value={stats.totalUsers} icon={Users} loading={loading} />
-                        <StatCard title="Total POIs (Root)" value={stats.totalPois} icon={MapPin} loading={loading} delta={poisDelta} />
-                        <StatCard title="Total Avis (Root)" value={stats.totalReviews} icon={Star} loading={loading} delta={reviewsDelta} />
-                        <StatCard title="Partenaires Actifs" value={stats.activePartners} icon={Handshake} loading={loading} />
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-2">
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>État du Portail</CardTitle>
-                                <CardDescription>Configuration actuelle du point d'entrée.</CardDescription>
-                            </CardHeader>
-
-                            <CardContent className="space-y-4">
-
-                                <Alert>
-                                    <MonitorPlay className="h-4 w-4" />
-                                    <AlertTitle className="flex items-center justify-between">
-                                        <span>Landing Page Portail</span>
-                                        <Badge variant={stats.isLandingPageActive ? "default" : "secondary"}>
-                                            {stats.isLandingPageActive ? "Activée" : "Désactivée"}
-                                        </Badge>
-                                    </AlertTitle>
-                                </Alert>
-
-                                <Alert>
-                                    <Presentation className="h-4 w-4" />
-                                    <AlertTitle className="flex items-center justify-between">
-                                        <span>Hero Marketing Portail</span>
-                                        <Badge variant={stats.isHeroMarketingEnabled ? "default" : "secondary"}>
-                                            {stats.isHeroMarketingEnabled ? "Activé" : "Désactivé"}
-                                        </Badge>
-                                    </AlertTitle>
-                                </Alert>
-
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Santé Google Maps</CardTitle>
-                                <CardDescription>Vérification configuration.</CardDescription>
-                            </CardHeader>
-
-                            <CardContent className="space-y-4">
-
-                                <Alert>
-                                    <AlertTitle className="flex items-center justify-between">
-                                        <span>Clé API Google Maps</span>
-                                        <Badge variant={isMapApiKeyDefined ? "default" : "destructive"}>
-                                            {isMapApiKeyDefined ? "Présente" : "Absente"}
-                                        </Badge>
-                                    </AlertTitle>
-                                </Alert>
-
-                            </CardContent>
-                        </Card>
-
-                    </div>
-
-                </div>
-            </div>
-        </AppLayout>
+      <AppLayout>
+        <div className="flex h-full w-full items-center justify-center">
+          <Server className="h-12 w-12 animate-pulse text-primary" />
+        </div>
+      </AppLayout>
     );
+  }
+
+  return (
+    <AppLayout>
+      <div className="h-full overflow-y-auto p-6">
+        <div className="space-y-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Monitoring Plateforme</h1>
+              <p className="text-muted-foreground">
+                Vue d'ensemble multi-événements, basée sur les statuts et contenus actifs de la plateforme.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:items-end">
+              <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={loading}>
+                {loading && !isInitialLoad.current ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Rafraîchir
+              </Button>
+              <div className="text-sm text-muted-foreground">
+                {lastRefresh
+                  ? <>Dernière actualisation : {format(lastRefresh, 'HH:mm:ss', { locale: fr })}</>
+                  : <Skeleton className="h-5 w-48" />}
+              </div>
+            </div>
+          </div>
+
+          <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <StatCard title="Utilisateurs" value={stats.users.total} icon={Users} loading={loading} delta={usersDelta} />
+            <StatCard title="Événements" value={stats.events.total} icon={CalendarClock} loading={loading} delta={eventsDelta} />
+            <StatCard title="Points d'intérêt" value={stats.content.totalPois} icon={MapPin} loading={loading} delta={poisDelta} />
+            <StatCard title="Avis" value={stats.content.totalReviews} icon={Star} loading={loading} delta={reviewsDelta} />
+          </section>
+
+          <section className="grid gap-4 lg:grid-cols-3">
+            <Card className="rounded-2xl border-muted/60">
+              <CardHeader>
+                <CardTitle>Utilisateurs</CardTitle>
+                <CardDescription>Comptes plateforme et droits globaux.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <MetricRow label="Approuvés" value={stats.users.approved} />
+                <MetricRow label="Révoqués" value={stats.users.revoked} />
+                <MetricRow label="Owners plateforme" value={stats.users.owners} />
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl border-muted/60">
+              <CardHeader>
+                <CardTitle>Événements</CardTitle>
+                <CardDescription>Cycle de vie piloté par le champ status.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <MetricRow label="Brouillons" value={stats.events.draft} />
+                <MetricRow label="Publiés" value={stats.events.published} />
+                <MetricRow label="En pause" value={stats.events.paused} />
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl border-muted/60">
+              <CardHeader>
+                <CardTitle>Calendrier</CardTitle>
+                <CardDescription>Lecture des dates renseignées sur les événements.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <MetricRow label="En cours" value={stats.events.ongoing} />
+                <MetricRow label="À venir" value={stats.events.upcoming} />
+                <MetricRow label="Terminés" value={stats.events.ended} />
+              </CardContent>
+            </Card>
+          </section>
+
+          <section className="grid gap-4 md:grid-cols-2">
+            <Card className="rounded-2xl border-muted/60">
+              <CardHeader>
+                <CardTitle>Contenus</CardTitle>
+                <CardDescription>Agrégation des POIs de tous les événements.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <MetricRow label="POIs" value={stats.content.totalPois} />
+                <MetricRow label="Avis cumulés" value={stats.content.totalReviews} />
+                <MetricRow label="Sponsors actifs" value={stats.content.activeSponsors} />
+                <MetricRow label="POIs avec sponsor configuré" value={stats.content.poisWithSponsorField} />
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl border-muted/60">
+              <CardHeader>
+                <CardTitle>Services</CardTitle>
+                <CardDescription>Signaux techniques disponibles côté application.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Alert>
+                  <ShieldCheck className="h-4 w-4" />
+                  <AlertTitle className="flex items-center justify-between gap-3">
+                    <span>Clé Google Maps</span>
+                    <Badge variant={isMapApiKeyDefined ? 'default' : 'destructive'}>
+                      {isMapApiKeyDefined ? 'Configurée' : 'Absente'}
+                    </Badge>
+                  </AlertTitle>
+                  <AlertDescription>
+                    Indique uniquement si la clé est présente dans la configuration client.
+                  </AlertDescription>
+                </Alert>
+
+                <Alert>
+                  <Activity className="h-4 w-4" />
+                  <AlertTitle className="flex items-center justify-between gap-3">
+                    <span>Overlay marketing</span>
+                    <Badge variant={stats.marketing.heroEnabledEvents > 0 ? 'default' : 'secondary'}>
+                      {stats.marketing.heroEnabledEvents} événement(s)
+                    </Badge>
+                  </AlertTitle>
+                  <AlertDescription>
+                    Nombre d'événements dont le hero marketing est activé. Ce n'est pas un statut global portail.
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </Card>
+          </section>
+
+          <section>
+            {stats.events.total === 0 ? (
+              <Alert>
+                <Clock className="h-4 w-4" />
+                <AlertTitle>Aucun événement</AlertTitle>
+                <AlertDescription>
+                  La plateforme ne contient encore aucun événement. Les métriques de contenus restent donc à zéro.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <Alert>
+                <CheckCircle className="h-4 w-4 text-green-500" />
+                <AlertTitle>Monitoring cohérent avec le multi-événements</AlertTitle>
+                <AlertDescription>
+                  Les indicateurs de publication utilisent les statuts des événements, sans dépendre des anciens réglages de page d'accueil.
+                </AlertDescription>
+              </Alert>
+            )}
+          </section>
+        </div>
+      </div>
+    </AppLayout>
+  );
 }
