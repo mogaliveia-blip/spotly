@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Star, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { useToast } from '@/hooks/use-toast';
-import { addReview } from '@/lib/data';
+import { addReview, resolveCurrentUserDisplayName } from '@/lib/data';
 import type { Review } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -30,11 +30,14 @@ interface ReviewFormProps {
 }
 
 export function ReviewForm({ poiId, reviewsEnabled, onReviewAdded }: ReviewFormProps) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const { eventId } = useEvent();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileResolved, setProfileResolved] = useState(false);
+  const [resolvedUserName, setResolvedUserName] = useState<string | null>(null);
   const [hoverRating, setHoverRating] = useState(0);
 
   const form = useForm<ReviewFormValues>({
@@ -43,6 +46,44 @@ export function ReviewForm({ poiId, reviewsEnabled, onReviewAdded }: ReviewFormP
   });
 
   const rating = form.watch('rating');
+  const isSubmitDisabled = loading || authLoading || profileLoading || !profileResolved || !reviewsEnabled || !resolvedUserName;
+
+  useEffect(() => {
+    let active = true;
+
+    if (!user) {
+      setResolvedUserName(null);
+      setProfileLoading(false);
+      setProfileResolved(false);
+      return;
+    }
+
+    setProfileResolved(false);
+    setProfileLoading(true);
+    resolveCurrentUserDisplayName(user)
+      .then((name) => {
+        if (active) setResolvedUserName(name);
+      })
+      .catch((error) => {
+        console.error('[ReviewForm] profile resolution failed', {
+          uid: user.uid,
+          authDisplayName: user.displayName,
+          code: error?.code,
+          message: error?.message
+        });
+        if (active) setResolvedUserName(null);
+      })
+      .finally(() => {
+        if (active) {
+          setProfileLoading(false);
+          setProfileResolved(true);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user]);
 
   async function onSubmit(values: ReviewFormValues) {
     if (!user) {
@@ -63,15 +104,30 @@ export function ReviewForm({ poiId, reviewsEnabled, onReviewAdded }: ReviewFormP
       return;
     }
 
+    if (authLoading || profileLoading || !profileResolved) {
+      toast({
+        title: 'Profil en cours de chargement',
+        description: 'Veuillez patienter quelques instants avant de soumettre votre avis.',
+      });
+      return;
+    }
+
+    if (!resolvedUserName) {
+      toast({
+        title: 'Profil incomplet',
+        description: 'Ajoutez un prénom ou un pseudonyme à votre profil avant de laisser un avis.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
-
-    const reviewData = {
-      userId: user.uid,
-      userName: user.displayName || 'Anonyme',
-      ...values
-    };
-
     try {
+      const reviewData = {
+        userId: user.uid,
+        userName: resolvedUserName,
+        ...values
+      };
       const newReview = await addReview(poiId, reviewData, eventId);
 
       onReviewAdded(newReview);
@@ -154,9 +210,17 @@ export function ReviewForm({ poiId, reviewsEnabled, onReviewAdded }: ReviewFormP
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={loading || !reviewsEnabled}>
-          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Soumettre l'avis
+        {profileLoading && (
+          <p className="text-sm text-muted-foreground">Chargement du profil...</p>
+        )}
+        {profileResolved && !resolvedUserName && (
+          <p className="text-sm text-destructive">
+            Ajoutez un prénom ou un pseudonyme à votre profil avant de laisser un avis.
+          </p>
+        )}
+        <Button type="submit" disabled={isSubmitDisabled}>
+          {(loading || profileLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {profileLoading ? 'Chargement du profil...' : "Soumettre l'avis"}
         </Button>
       </form>
     </Form>

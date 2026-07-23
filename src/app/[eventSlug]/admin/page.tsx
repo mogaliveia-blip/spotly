@@ -169,7 +169,7 @@ function AppConfigCard() {
   const { eventId } = useEvent();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [savingKey, setSavingKey] = useState<'landing' | 'reviews' | null>(null);
+  const [savingReviews, setSavingReviews] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -188,29 +188,8 @@ function AppConfigCard() {
       });
   }, [toast, eventId]);
 
-  const handleToggleLandingPage = async (isActive: boolean) => {
-    setSavingKey('landing');
-    try {
-      await updateAppConfig({ isLandingPageActive: isActive }, eventId);
-      setConfig(prev => prev ? { ...prev, isLandingPageActive: isActive } : prev);
-      toast({
-        title: 'Configuration mise à jour',
-        description: `La page d'accueil a été ${isActive ? 'activée' : 'désactivée'}.`
-      });
-    } catch {
-      toast({
-        title: 'Erreur',
-        description: 'Impossible de mettre à jour la configuration.',
-        variant: 'destructive'
-      });
-      setConfig(prev => prev ? { ...prev, isLandingPageActive: !isActive } : prev);
-    } finally {
-      setSavingKey(null);
-    }
-  };
-
   const handleToggleReviews = async (isEnabled: boolean) => {
-    setSavingKey('reviews');
+    setSavingReviews(true);
     try {
       await updateAppConfig({ reviewsEnabled: isEnabled }, eventId);
       setConfig(prev => prev ? { ...prev, reviewsEnabled: isEnabled } : prev);
@@ -226,7 +205,7 @@ function AppConfigCard() {
       });
       setConfig(prev => prev ? { ...prev, reviewsEnabled: !isEnabled } : prev);
     } finally {
-      setSavingKey(null);
+      setSavingReviews(false);
     }
   };
 
@@ -238,26 +217,6 @@ function AppConfigCard() {
     <div className="space-y-4">
       <div className="flex items-center space-x-4 rounded-xl border p-4 bg-muted/10">
         <div className="flex-1 space-y-1">
-          <Label htmlFor="landing-page-switch" className="text-base font-bold">
-            Page d'accueil (Pré-événement)
-          </Label>
-          <p className="text-sm text-muted-foreground">
-            Si activée, les visiteurs verront une page d'attente.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {savingKey === 'landing' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-          <Switch
-            id="landing-page-switch"
-            checked={config?.isLandingPageActive ?? true}
-            onCheckedChange={handleToggleLandingPage}
-            disabled={savingKey !== null}
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center space-x-4 rounded-xl border p-4 bg-muted/10">
-        <div className="flex-1 space-y-1">
           <Label htmlFor="reviews-switch" className="text-base font-bold">
             Avis et Commentaires
           </Label>
@@ -266,12 +225,12 @@ function AppConfigCard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {savingKey === 'reviews' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+          {savingReviews && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
           <Switch
             id="reviews-switch"
             checked={config?.reviewsEnabled ?? true}
             onCheckedChange={handleToggleReviews}
-            disabled={savingKey !== null}
+            disabled={savingReviews}
           />
         </div>
       </div>
@@ -491,7 +450,7 @@ export default function AdminPage() {
           <Card className="rounded-[2rem] border-muted/60 shadow-sm overflow-hidden">
             <CardHeader className="bg-primary/5">
               <CardTitle>Application</CardTitle>
-              <CardDescription>Paramètres globaux pour cet événement.</CardDescription>
+              <CardDescription>Gérez les fonctionnalités disponibles pour les visiteurs.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <AppConfigCard />

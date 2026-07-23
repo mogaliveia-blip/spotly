@@ -554,12 +554,14 @@ export async function deleteFileByPath(filePath: string): Promise<void> {
 
 // --- FIRESTORE FUNCTIONS ---
 
+export const DEFAULT_USER_APPROVAL = true
+
 export async function createUserInFirestore(user: Omit<AppUser, 'role' | 'emailVerified' | 'isApproved'> & { role?: UserRole; isApproved?: boolean }): Promise<void> {
   const userRef = doc(db, 'users', user.uid)
   try {
     const userSnap = await getDoc(userRef)
     if (!userSnap.exists()) {
-      const initialData = { uid: user.uid, email: user.email, displayName: user.displayName, photoURL: user.photoURL || null, role: user.role || 'user', isApproved: user.isApproved ?? false, createdAt: serverTimestamp() }
+      const initialData = { uid: user.uid, email: user.email, displayName: user.displayName, photoURL: user.photoURL || null, role: user.role || 'user', isApproved: user.isApproved ?? DEFAULT_USER_APPROVAL, createdAt: serverTimestamp() }
       await setDoc(userRef, initialData)
     } else {
       const syncData = { email: user.email, displayName: user.displayName, photoURL: user.photoURL || null, lastLogin: serverTimestamp() }
@@ -632,12 +634,42 @@ export async function fetchReviewsByPoiId(poiId: string, eventId: string): Promi
     const reviewList = reviewSnapshot.docs.map((doc) => {
       const data = doc.data()
       const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt)
-      return { id: doc.id, ...data, createdAt } as Review
+      const userName = data.userName || data.userDisplayName || data.displayName || 'Anonyme'
+      return { id: doc.id, ...data, userName, createdAt } as Review
     })
     return reviewList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   } catch {
     return []
   }
+}
+
+export async function fetchUserDisplayName(uid: string): Promise<string | null> {
+  const userRef = doc(db, 'users', uid)
+  try {
+    const userSnap = await getDoc(userRef)
+
+    if (!userSnap.exists()) {
+      return null
+    }
+
+    const displayName = userSnap.data()?.displayName
+    return typeof displayName === 'string' && displayName.trim() ? displayName.trim() : null
+  } catch (error: any) {
+    console.error('[fetchUserDisplayName] failed', {
+      uid,
+      path: userRef.path,
+      code: error?.code,
+      message: error?.message
+    })
+    throw error
+  }
+}
+
+export async function resolveCurrentUserDisplayName(user: Pick<AppUser, 'uid' | 'displayName'>): Promise<string | null> {
+  const firestoreName = await fetchUserDisplayName(user.uid)
+  const authName = user.displayName?.trim()
+
+  return firestoreName?.trim() || authName || null
 }
 
 export async function addReview(poiId: string, reviewData: Omit<Review, 'id' | 'poiId' | 'createdAt'>, eventId: string): Promise<Review> {

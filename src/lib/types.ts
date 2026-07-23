@@ -182,6 +182,8 @@ export interface Review {
   poiId: string
   userId: string
   userName: string
+  userDisplayName?: string | null
+  displayName?: string | null
   rating: number
   comment: string
   createdAt: Date
