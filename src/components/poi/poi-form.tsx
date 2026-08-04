@@ -22,7 +22,7 @@ import { deleteField } from "firebase/firestore";
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
-import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
+import { Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { useState, useEffect } from 'react';
 import { Loader2, MapPin, Crosshair, ImagePlus, X, Calendar as CalendarIcon, AlertTriangle } from 'lucide-react';
 import type { POI, MainCategory, SubCategory, POISponsor } from '@/lib/types';
@@ -338,8 +338,7 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   if (pageIsLoading) return <div className="p-12 text-center animate-pulse">Chargement de l'éditeur...</div>;
 
   return (
-    <APIProvider apiKey={mapsConfig.apiKey}>
-      <Form {...form}>
+    <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -466,7 +465,6 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
           </div>
         </form>
       </Form>
-    </APIProvider>
   );
 
   async function handleRemoveExistingGalleryImage(index: number, path: string) {

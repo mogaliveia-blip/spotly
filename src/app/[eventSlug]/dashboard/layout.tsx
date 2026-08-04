@@ -25,17 +25,41 @@ export default function DashboardLayout({
   const [configLoading, setConfigLoading] = useState(true);
 
   useEffect(() => {
+    const startedAt = performance.now();
+    console.time('[Perf] dashboard-layout')
     if (eventLoading) {
         setConfigLoading(true);
+        console.info('[Perf] dashboard-layout-waiting', {
+          eventLoading,
+          authLoading,
+          eventId,
+        });
+        console.timeEnd('[Perf] dashboard-layout')
         return;
     }
 
     fetchAppConfig(eventId).then(appConfig => {
       setConfig(appConfig);
       setConfigLoading(false);
+      console.info('[Perf] dashboard-layout-ready', {
+        durationMs: Math.round(performance.now() - startedAt),
+        eventId,
+        source: 'config',
+        authLoading,
+        eventLoading,
+      });
+      console.timeEnd('[Perf] dashboard-layout')
     }).catch(() => {
       setConfig({ isLandingPageActive: false });
       setConfigLoading(false);
+      console.info('[Perf] dashboard-layout-ready', {
+        durationMs: Math.round(performance.now() - startedAt),
+        eventId,
+        source: 'config-error-fallback',
+        authLoading,
+        eventLoading,
+      });
+      console.timeEnd('[Perf] dashboard-layout')
     });
   }, [eventId, eventLoading]);
   

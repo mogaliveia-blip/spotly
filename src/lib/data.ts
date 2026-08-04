@@ -50,6 +50,25 @@ import {
 
 export const DEFAULT_EVENT_ID = 'default-event';
 
+function perfNow(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+function estimatePayloadBytes(value: unknown): number {
+  try {
+    return new Blob([JSON.stringify(value)]).size;
+  } catch {
+    return 0;
+  }
+}
+
+function perfLog(label: string, startedAt: number, details: Record<string, unknown> = {}) {
+  console.info(`[Perf] ${label}`, {
+    durationMs: Math.round(perfNow() - startedAt),
+    ...details,
+  });
+}
+
 /**
  * Résout un événement à partir de son slug URL.
  */
@@ -59,17 +78,23 @@ export async function fetchEventBySlug(
 ): Promise<AppEvent | null> {
   if (!slug || slug === 'default' || slug === 'dashboard' || slug === 'admin') return null;
   
+  const startedAt = perfNow();
   const normalizedSlug = slug.toLowerCase().trim();
   
   try {
     const eventsRef = collection(db, 'events');
     const q = query(eventsRef, where('slug', '==', normalizedSlug), where('status', '==', 'published'), limit(1));
     const snap = await getDocs(q);
+    console.info('[Perf] event-public-query', {
+      docsRead: snap.docs.length,
+      empty: snap.empty,
+      slug: normalizedSlug,
+    });
     
     if (!snap.empty) {
       const d = snap.docs[0];
       const data = d.data();
-      return {
+      const event = {
         id: d.id,
         ...data,
         createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
@@ -77,16 +102,31 @@ export async function fetchEventBySlug(
         startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
         endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
       } as AppEvent;
+      perfLog('event', startedAt, {
+        source: 'published-query',
+        slug: normalizedSlug,
+        eventId: event.id,
+        firestoreReads: 1,
+        docsRead: snap.docs.length,
+        payloadBytesApprox: estimatePayloadBytes(event),
+      });
+      return event;
     }
 
     if (options.isOwner) {
+      const ownerStartedAt = perfNow();
       const ownerQuery = query(eventsRef, where('slug', '==', normalizedSlug), limit(1));
       const ownerSnap = await getDocs(ownerQuery);
+      perfLog('event-owner-query', ownerStartedAt, {
+        docsRead: ownerSnap.docs.length,
+        empty: ownerSnap.empty,
+        slug: normalizedSlug,
+      });
 
       if (!ownerSnap.empty) {
         const d = ownerSnap.docs[0];
         const data = d.data();
-        return {
+        const event = {
           id: d.id,
           ...data,
           createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
@@ -94,17 +134,48 @@ export async function fetchEventBySlug(
           startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
           endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
         } as AppEvent;
+        perfLog('event', startedAt, {
+          source: 'owner-query',
+          slug: normalizedSlug,
+          eventId: event.id,
+          firestoreReads: 2,
+          docsRead: snap.docs.length + ownerSnap.docs.length,
+          payloadBytesApprox: estimatePayloadBytes(event),
+        });
+        return event;
       }
     }
 
     if (options.uid) {
+      const userEventsStartedAt = perfNow();
       const userEvents = await fetchUserEvents(options.uid);
-      return userEvents.find((event) => event.slug === normalizedSlug) ?? null;
+      const event = userEvents.find((event) => event.slug === normalizedSlug) ?? null;
+      perfLog('event-user-membership-fallback', userEventsStartedAt, {
+        eventCount: userEvents.length,
+        found: !!event,
+        slug: normalizedSlug,
+      });
+      perfLog('event', startedAt, {
+        source: 'membership-fallback',
+        slug: normalizedSlug,
+        eventId: event?.id ?? null,
+      });
+      return event;
     }
 
+    perfLog('event', startedAt, {
+      source: 'not-found',
+      slug: normalizedSlug,
+      firestoreReads: 1,
+      docsRead: snap.docs.length,
+    });
     return null;
   } catch (error) {
     console.error(`[Data] Erreur lors de la résolution du slug ${slug}:`, error);
+    perfLog('event', startedAt, {
+      source: 'error',
+      slug: normalizedSlug,
+    });
     return null;
   }
 }
@@ -564,6 +635,7 @@ export async function removeEventMember(eventId: string, uid: string): Promise<v
 // --- CONFIG FUNCTIONS ---
 
 export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
+  const startedAt = perfNow();
   const path = dbPaths.config(eventId);
 
   try {
@@ -571,11 +643,29 @@ export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
     const configSnap = await getDoc(configRef)
     
     if (configSnap.exists()) {
-      return configSnap.data() as AppConfig;
+      const config = configSnap.data() as AppConfig;
+      perfLog('config', startedAt, {
+        eventId,
+        path: configRef.path,
+        source: 'firestore',
+        firestoreReads: 1,
+        docsRead: 1,
+        payloadBytesApprox: estimatePayloadBytes(config),
+      });
+      return config;
     }
   } catch (e: any) {}
   
-  return { isLandingPageActive: true, festivalMode: false, reviewsEnabled: true }
+  const fallback = { isLandingPageActive: true, festivalMode: false, reviewsEnabled: true };
+  perfLog('config', startedAt, {
+    eventId,
+    path,
+    source: 'fallback-default',
+    firestoreReads: 1,
+    docsRead: 0,
+    payloadBytesApprox: estimatePayloadBytes(fallback),
+  });
+  return fallback
 }
 
 export async function updateAppConfig(config: Partial<AppConfig>, eventId: string): Promise<void> {
@@ -590,12 +680,24 @@ export async function updateAppConfig(config: Partial<AppConfig>, eventId: strin
 }
 
 export async function fetchMarketingConfig(eventId: string): Promise<MarketingConfig> {
+  const startedAt = perfNow();
   try {
     const configRef = doc(db, dbPaths.config(eventId), 'marketing')
     const configSnap = await getDoc(configRef)
-    if (configSnap.exists()) return configSnap.data() as MarketingConfig
+    if (configSnap.exists()) {
+      const config = configSnap.data() as MarketingConfig
+      perfLog('marketing-config', startedAt, {
+        eventId,
+        path: configRef.path,
+        source: 'firestore',
+        firestoreReads: 1,
+        docsRead: 1,
+        payloadBytesApprox: estimatePayloadBytes(config),
+      });
+      return config
+    }
   } catch {}
-  return {
+  const fallback: MarketingConfig = {
     heroEnabled: false,
     heroTitle: 'Découvrez le festival',
     heroSubtitle: "Connectez-vous pour accéder à toutes les fonctionnalités.",
@@ -603,6 +705,14 @@ export async function fetchMarketingConfig(eventId: string): Promise<MarketingCo
     heroCtaText: '',
     heroCtaMode: 'none'
   }
+  perfLog('marketing-config', startedAt, {
+    eventId,
+    source: 'fallback-default',
+    firestoreReads: 1,
+    docsRead: 0,
+    payloadBytesApprox: estimatePayloadBytes(fallback),
+  });
+  return fallback
 }
 
 export async function updateMarketingConfig(config: Partial<MarketingConfig>, eventId: string): Promise<void> {
@@ -670,44 +780,140 @@ export async function updateUserApproval(uid: string, isApproved: boolean): Prom
 }
 
 export async function fetchPois(eventId: string): Promise<POI[]> {
+  const startedAt = perfNow();
   try {
     const poiCollection = collection(db, dbPaths.pois(eventId))
     const poiSnapshot = await getDocs(poiCollection)
-    return poiSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as POI))
-  } catch {
+    const pois = poiSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as POI))
+    perfLog('pois-private', startedAt, {
+      eventId,
+      path: poiCollection.path,
+      firestoreReads: 1,
+      docsRead: poiSnapshot.docs.length,
+      poiCount: pois.length,
+      payloadBytesApprox: estimatePayloadBytes(pois),
+    });
+    return pois
+  } catch (error) {
+    perfLog('pois-private', startedAt, {
+      eventId,
+      source: 'error',
+      firestoreReads: 1,
+      docsRead: 0,
+      poiCount: 0,
+    });
     return []
   }
 }
 
 export async function fetchPoisLite(eventId: string): Promise<POILite[]> {
+  const startedAt = perfNow();
   const colRef = collection(db, dbPaths.poisPublic(eventId))
 
   const mapSnap = (snap: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) =>
     snap.docs.map((d) => ({ id: d.id, ...d.data() } as POILite))
 
   try {
+    const cacheStartedAt = perfNow();
     const cacheSnap = await getDocsFromCache(colRef).catch(() => null)
+    perfLog('pois-public-cache', cacheStartedAt, {
+      eventId,
+      path: colRef.path,
+      cacheHit: !!cacheSnap && !cacheSnap.empty,
+      docsRead: cacheSnap?.docs.length ?? 0,
+    });
 
     if (cacheSnap && !cacheSnap.empty) {
       const cached = mapSnap(cacheSnap)
       void getDocsFromServer(colRef).catch(() => {})
+      perfLog('pois-public-total', startedAt, {
+        eventId,
+        path: colRef.path,
+        source: 'cache',
+        firestoreReads: 1,
+        docsRead: cacheSnap.docs.length,
+        poiCount: cached.length,
+        payloadBytesApprox: estimatePayloadBytes(cached),
+        backgroundServerRefresh: true,
+      });
       return cached
     }
 
+    const serverStartedAt = perfNow();
     const serverSnap = await getDocsFromServer(colRef)
-    return mapSnap(serverSnap)
+    const pois = mapSnap(serverSnap)
+    perfLog('pois-public-server', serverStartedAt, {
+      eventId,
+      path: colRef.path,
+      firestoreReads: 1,
+      docsRead: serverSnap.docs.length,
+      poiCount: pois.length,
+      payloadBytesApprox: estimatePayloadBytes(pois),
+    });
+    perfLog('pois-public-total', startedAt, {
+      eventId,
+      path: colRef.path,
+      source: 'server',
+      firestoreReads: 2,
+      docsRead: serverSnap.docs.length,
+      poiCount: pois.length,
+      payloadBytesApprox: estimatePayloadBytes(pois),
+    });
+    return pois
   } catch (e: any) {
+    const fallbackStartedAt = perfNow();
     const full = await fetchPois(eventId)
+    perfLog('pois-private-fallback', fallbackStartedAt, {
+      eventId,
+      reasonCode: e?.code ?? null,
+      reasonMessage: e?.message ?? null,
+      poiCount: full.length,
+      payloadBytesApprox: estimatePayloadBytes(full),
+    });
+    perfLog('pois-public-total', startedAt, {
+      eventId,
+      path: colRef.path,
+      source: 'private-fallback',
+      firestoreReads: 3,
+      poiCount: full.length,
+      payloadBytesApprox: estimatePayloadBytes(full),
+    });
     return full as unknown as POILite[]
   }
 }
 
 export async function fetchPoiById(id: string, eventId: string): Promise<POI | undefined> {
+  const startedAt = perfNow();
   try {
     const poiRef = doc(db, dbPaths.pois(eventId), id)
     const poiSnap = await getDoc(poiRef)
-    if (poiSnap.exists()) return { id: poiSnap.id, ...poiSnap.data() } as POI
-  } catch {}
+    if (poiSnap.exists()) {
+      const poi = { id: poiSnap.id, ...poiSnap.data() } as POI
+      perfLog('poi-private-by-id', startedAt, {
+        eventId,
+        poiId: id,
+        path: poiRef.path,
+        firestoreReads: 1,
+        docsRead: 1,
+        payloadBytesApprox: estimatePayloadBytes(poi),
+      });
+      return poi
+    }
+    perfLog('poi-private-by-id', startedAt, {
+      eventId,
+      poiId: id,
+      path: poiRef.path,
+      firestoreReads: 1,
+      docsRead: 0,
+      source: 'not-found',
+    });
+  } catch (error) {
+    perfLog('poi-private-by-id', startedAt, {
+      eventId,
+      poiId: id,
+      source: 'error',
+    });
+  }
   return undefined
 }
 

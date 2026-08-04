@@ -1,10 +1,10 @@
 'use client'
 
 import { POIMapAdapter } from '@/components/poi/poi-map-adapter'
-import type { POI, POILite, MainCategory, MarketingConfig, AppConfig } from '@/lib/types'
+import type { POI, POILite, MainCategory, MarketingConfig } from '@/lib/types'
 import { useSearchParams, usePathname } from 'next/navigation'
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
-import { fetchPoisLite, fetchPoiById, fetchMarketingConfig, fetchAppConfig } from '@/lib/data'
+import { fetchPoisLite, fetchPoiById, fetchMarketingConfig } from '@/lib/data'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth-user'
 import { CategoryFilter } from '@/components/poi/category-filter'
@@ -20,6 +20,10 @@ import { useEvent } from '@/providers/event-provider'
 type AppMode = 'normal' | 'map-fallback' | 'static-fallback'
 
 export default function DashboardPage() {
+  const pageStartedAtRef = useRef<number | null>(null)
+  const firstPoisVisibleRef = useRef(false)
+  const renderCountRef = useRef(0)
+
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
@@ -31,7 +35,6 @@ export default function DashboardPage() {
 
   const [pois, setPois] = useState<POILite[]>([])
   const [marketingConfig, setMarketingConfig] = useState<MarketingConfig | null>(null)
-  const [appConfig, setAppConfig] = useState<AppConfig | null>(null)
   const [activePoi, setActivePoi] = useState<POILite | POI | null>(null)
   const [heroVisible, setHeroVisible] = useState(false)
   const [appMode, setAppMode] = useState<AppMode>('normal')
@@ -40,6 +43,25 @@ export default function DashboardPage() {
   const selectedPoiId = searchParams.get('poi')
   const categoryFilter = searchParams.get('category') || 'all'
   const requestIdRef = useRef(0)
+  renderCountRef.current += 1
+
+  if (pageStartedAtRef.current === null && typeof performance !== 'undefined') {
+    pageStartedAtRef.current = performance.now()
+    console.time('[Perf] dashboard-total')
+  }
+
+  useEffect(() => {
+    console.info('[Perf] dashboard-render', {
+      renderCount: renderCountRef.current,
+      eventId,
+      eventLoading,
+      poiCount: pois.length,
+      activePoiId: activePoi?.id ?? null,
+      appMode,
+      isListVisible,
+      hasUserLocation: !!userLocation,
+    })
+  })
 
   const updateUrl = useCallback(
     (params: URLSearchParams) => {
@@ -51,13 +73,23 @@ export default function DashboardPage() {
 
   const loadFullPoi = useCallback(async (poiId: string) => {
     const requestId = ++requestIdRef.current
+    const startedAt = performance.now()
+    console.time('[Perf] poi-private-click')
     try {
       const full = await fetchPoiById(poiId, eventId)
       if (!full) return
       if (requestId !== requestIdRef.current) return
       setActivePoi(full)
+      console.info('[Perf] poi-private-click-ready', {
+        durationMs: Math.round(performance.now() - startedAt),
+        poiId,
+        eventId,
+        payloadBytesApprox: new Blob([JSON.stringify(full)]).size,
+      })
     } catch {
       // Keep lite if full fetch fails
+    } finally {
+      console.timeEnd('[Perf] poi-private-click')
     }
   }, [eventId])
 
@@ -84,7 +116,6 @@ export default function DashboardPage() {
       setPois([]);
       setActivePoi(null);
       setMarketingConfig(null);
-      setAppConfig(null);
       setHeroVisible(false);
       return;
     }
@@ -92,17 +123,27 @@ export default function DashboardPage() {
     let isMounted = true;
 
     async function init() {
+      const initStartedAt = performance.now()
+      console.time('[Perf] dashboard-init')
       try {
-        const [poiData, marketing, app] = await Promise.all([
-          fetchPoisLite(eventId),
-          fetchMarketingConfig(eventId),
-          fetchAppConfig(eventId)
+        const poiPromise = fetchPoisLite(eventId)
+        const marketingPromise = fetchMarketingConfig(eventId)
+        const [poiData, marketing] = await Promise.all([
+          poiPromise,
+          marketingPromise,
         ])
         
         if (isMounted) {
           setPois(poiData)
           setMarketingConfig(marketing)
-          setAppConfig(app)
+          console.info('[Perf] dashboard-init-ready', {
+            durationMs: Math.round(performance.now() - initStartedAt),
+            eventId,
+            poiCount: poiData.length,
+            payloadBytesApprox: new Blob([JSON.stringify({ poiData, marketing })]).size,
+            parallelSteps: ['pois-public', 'marketing-config'],
+            removedDuplicateSteps: ['app-config'],
+          })
         }
       } catch (error) {
         if (isMounted) {
@@ -113,6 +154,8 @@ export default function DashboardPage() {
             variant: 'destructive'
           })
         }
+      } finally {
+        console.timeEnd('[Perf] dashboard-init')
       }
     }
     init()
@@ -167,6 +210,20 @@ export default function DashboardPage() {
   const visiblePois = useMemo(() => {
     return pois.filter((p) => categoryFilter === 'all' || p.mainCategory === categoryFilter)
   }, [pois, categoryFilter])
+
+  useEffect(() => {
+    if (firstPoisVisibleRef.current || visiblePois.length === 0) return
+    firstPoisVisibleRef.current = true
+    window.requestAnimationFrame(() => {
+      console.timeEnd('[Perf] dashboard-total')
+      console.info('[Perf] pois-visible-ui', {
+        durationMs: pageStartedAtRef.current ? Math.round(performance.now() - pageStartedAtRef.current) : null,
+        eventId,
+        poiCount: visiblePois.length,
+        categoryFilter,
+      })
+    })
+  }, [visiblePois.length, eventId, categoryFilter])
 
   const showHero = heroVisible && !user && marketingConfig?.heroEnabled
 

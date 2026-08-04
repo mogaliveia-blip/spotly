@@ -32,14 +32,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isApproved, setIsApproved] = useState<boolean>(false);
 
   useEffect(() => {
+    const startedAt = performance.now();
+    console.time('[Perf] auth')
+    let hasEndedAuthTimer = false;
+    const finishAuthTimer = () => {
+      if (hasEndedAuthTimer) return;
+      hasEndedAuthTimer = true;
+      console.timeEnd('[Perf] auth')
+    };
+
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
       setLoading(true);
       if (firebaseUser) {
         setFirebaseUser(firebaseUser);
         
         // Fetch user metadata from Firestore
+        const userDocStartedAt = performance.now();
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         const userDoc = await getDoc(userDocRef);
+        console.info('[Perf] auth-user-doc', {
+          durationMs: Math.round(performance.now() - userDocStartedAt),
+          uid: firebaseUser.uid,
+          docsRead: userDoc.exists() ? 1 : 0,
+        });
         const userData = userDoc.data();
         
         const userRole = (userData?.role as UserRole) || 'user';
@@ -65,6 +80,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsApproved(false);
       }
       setLoading(false);
+      console.info('[Perf] auth-ready', {
+        durationMs: Math.round(performance.now() - startedAt),
+        isAuthenticated: !!firebaseUser,
+        uid: firebaseUser?.uid ?? null,
+      });
+      finishAuthTimer()
     });
 
     return () => unsubscribe();

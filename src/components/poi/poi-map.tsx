@@ -2,7 +2,7 @@
 
 import type { POI, POILite } from '@/lib/types';
 import { Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { User, Crosshair, MapPin } from 'lucide-react';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
@@ -94,6 +94,18 @@ function MapController({
   const map = useMap();
   const isMobile = useIsMobile();
   const { toast } = useToast();
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
+
+  useEffect(() => {
+    console.info('[Perf] map-controller-render', {
+      renderCount: renderCountRef.current,
+      poiCount: pois.length,
+      selectedPoiId: selectedPoi?.id ?? null,
+      hasUserLocation: !!userLocation,
+      isListVisible,
+    });
+  });
 
   useEffect(() => {
     if (selectedPoi && map) {
@@ -147,6 +159,39 @@ function MapController({
     }
   };
 
+  const poiMarkers = useMemo(() => {
+    const startedAt = performance.now();
+    const markers = pois.map((poi) => {
+      const isSelected = selectedPoi?.id === poi.id;
+      const sponsorIsActive = isSponsorActive(poi as any);
+      let colorClass = categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
+      if (sponsorIsActive) colorClass = 'text-amber-500';
+      if (isSelected) colorClass = 'text-accent';
+
+      return (
+        <AdvancedMarker key={poi.id} position={poi.location}>
+          <POIMarkerContent
+            poi={poi}
+            colorClass={colorClass}
+            isSelected={isSelected}
+            isMobile={isMobile}
+            sponsorIsActive={sponsorIsActive}
+            onSelect={() => onSelectPoi(poi)}
+          />
+        </AdvancedMarker>
+      );
+    });
+
+    console.info('[Perf] markers-render', {
+      durationMs: Math.round(performance.now() - startedAt),
+      poiCount: pois.length,
+      markerCount: markers.length,
+      selectedPoiId: selectedPoi?.id ?? null,
+    });
+
+    return markers;
+  }, [pois, selectedPoi, isMobile, onSelectPoi]);
+
   return (
     <>
       {userLocation && (
@@ -157,26 +202,7 @@ function MapController({
         </AdvancedMarker>
       )}
 
-      {pois.map((poi) => {
-        const isSelected = selectedPoi?.id === poi.id;
-        const sponsorIsActive = isSponsorActive(poi as any);
-        let colorClass = categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
-        if (sponsorIsActive) colorClass = 'text-amber-500';
-        if (isSelected) colorClass = 'text-accent';
-
-        return (
-          <AdvancedMarker key={poi.id} position={poi.location}>
-            <POIMarkerContent
-              poi={poi}
-              colorClass={colorClass}
-              isSelected={isSelected}
-              isMobile={isMobile}
-              sponsorIsActive={sponsorIsActive}
-              onSelect={() => onSelectPoi(poi)}
-            />
-          </AdvancedMarker>
-        );
-      })}
+      {poiMarkers}
 
       {!isMobile && selectedPoi && (
         <InfoWindow position={selectedPoi.location} onCloseClick={() => onSelectPoi(null)} pixelOffset={[0, -48]} maxWidth={460}>
@@ -211,8 +237,36 @@ export function POIMap({
   isListVisible: boolean;
 }) {
   const { userLocation, loading: geoLoading } = useGeolocation();
+  const renderCountRef = useRef(0);
+  const mapMountedAtRef = useRef<number | null>(null);
+  renderCountRef.current += 1;
 
   const defaultCenter = userLocation || (pois.length > 0 ? pois[0].location : { lat: -21.3393, lng: 55.4781 });
+
+  useEffect(() => {
+    console.info('[Perf] poi-map-render', {
+      renderCount: renderCountRef.current,
+      poiCount: pois.length,
+      selectedPoiId: selectedPoi?.id ?? null,
+      geoLoading,
+      hasUserLocation: !!userLocation,
+    });
+  });
+
+  useEffect(() => {
+    if (mapMountedAtRef.current === null && pois.length > 0) {
+      mapMountedAtRef.current = performance.now();
+      console.time('[Perf] first-usable-ui');
+      window.requestAnimationFrame(() => {
+        console.timeEnd('[Perf] first-usable-ui');
+        console.info('[Perf] first-usable-ui-ready', {
+          poiCount: pois.length,
+          markerInputCount: pois.length,
+          hasUserLocation: !!userLocation,
+        });
+      });
+    }
+  }, [pois.length, userLocation]);
 
   if (geoLoading && pois.length === 0) {
     return <Skeleton className="w-full h-full" />;

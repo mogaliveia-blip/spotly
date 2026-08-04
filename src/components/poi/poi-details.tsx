@@ -33,6 +33,7 @@ function isFullPoi(poi: POIAny): poi is POI {
 }
 
 export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
+  const detailsStartedAtRef = useRef<number | null>(null);
   const [poi, setPoi] = useState<POIAny>(initialPoi);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
@@ -44,6 +45,10 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   const { userLocation } = useGeolocation();
   const { eventId } = useEvent();
   const lastPoiIdRef = useRef<string | null>(null);
+
+  if (detailsStartedAtRef.current === null && typeof performance !== 'undefined') {
+    detailsStartedAtRef.current = performance.now();
+  }
 
   const full = isFullPoi(poi);
 
@@ -120,6 +125,14 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
             className="object-cover cursor-zoom-in transition-transform hover:scale-105 duration-500"
             onClick={() => setSelectedIndex(0)}
             priority
+            onLoad={() => {
+              console.info('[Perf] image-poi-header', {
+                durationMs: detailsStartedAtRef.current ? Math.round(performance.now() - detailsStartedAtRef.current) : null,
+                poiId: poi.id,
+                hasFullPoi: full,
+                urlLength: poi.headerPhotoUrl?.length ?? 0,
+              });
+            }}
           />
         ) : (
           <Skeleton className="w-full h-full" />

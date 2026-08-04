@@ -40,6 +40,8 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
 
     async function resolveEvent() {
+      const startedAt = performance.now();
+      console.time('[Perf] event-provider')
       // Si on est sur une route globale
       if (!eventSlug || ['dashboard', 'admin', 'login', 'signup', 'access-pending'].includes(eventSlug)) {
         if (isMounted) {
@@ -48,6 +50,13 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           setResolvedSlug('global');
           setUserRole(null);
           setLoading(false);
+          console.info('[Perf] event-provider-ready', {
+            durationMs: Math.round(performance.now() - startedAt),
+            routeType: 'global',
+            eventSlug: eventSlug ?? null,
+            eventId: DEFAULT_EVENT_ID,
+          });
+          console.timeEnd('[Perf] event-provider')
         }
         return;
       }
@@ -70,7 +79,14 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
             // Résolution du rôle local si l'utilisateur est connecté
             if (user) {
+              const memberStartedAt = performance.now();
               const memberDoc = await getDoc(doc(db, `events/${resolved.id}/members`, user.uid));
+              console.info('[Perf] event-member-role', {
+                durationMs: Math.round(performance.now() - memberStartedAt),
+                eventId: resolved.id,
+                uid: user.uid,
+                docsRead: memberDoc.exists() ? 1 : 0,
+              });
               if (memberDoc.exists()) {
                 setUserRole(memberDoc.data().role as EventRole);
               } else if (globalRole === 'owner') {
@@ -83,6 +99,15 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           }
           setResolvedSlug(eventSlug);
           setLoading(false);
+          console.info('[Perf] event-provider-ready', {
+            durationMs: Math.round(performance.now() - startedAt),
+            routeType: 'event',
+            eventSlug,
+            eventId: resolved?.id ?? DEFAULT_EVENT_ID,
+            found: !!resolved,
+            authDependent: !!user || globalRole === 'owner',
+          });
+          console.timeEnd('[Perf] event-provider')
         }
       } catch (error) {
         if (isMounted) {
@@ -90,6 +115,15 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           setEvent(null);
           setResolvedSlug(eventSlug);
           setLoading(false);
+          console.info('[Perf] event-provider-ready', {
+            durationMs: Math.round(performance.now() - startedAt),
+            routeType: 'event',
+            eventSlug,
+            eventId: DEFAULT_EVENT_ID,
+            found: false,
+            source: 'error',
+          });
+          console.timeEnd('[Perf] event-provider')
         }
       }
     }
