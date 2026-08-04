@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 import { fetchEventBySlug, DEFAULT_EVENT_ID } from '@/lib/data';
 import type { AppEvent, EventRole } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth-user';
@@ -24,7 +24,8 @@ const EventContext = createContext<EventContextType>({
 
 export function EventProvider({ children }: { children: React.ReactNode }) {
   const params = useParams();
-  const { user, role: globalRole } = useAuth();
+  const pathname = usePathname();
+  const { user, role: globalRole, loading: authLoading, authStateKnown } = useAuth();
   const [event, setEvent] = useState<AppEvent | null>(null);
   const [currentEventId, setInternalEventId] = useState<string>(DEFAULT_EVENT_ID);
   const [userRole, setUserRole] = useState<EventRole | null>(null);
@@ -32,6 +33,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
   const [resolvedSlug, setResolvedSlug] = useState<string | null>(null);
 
   const eventSlug = params?.eventSlug as string;
+  const isPublicDashboard = /^\/[^/]+\/dashboard(?:\/)?$/.test(pathname || '');
 
   // Détection immédiate de changement de route
   const isTransitioning = eventSlug !== (resolvedSlug === 'global' ? undefined : resolvedSlug);
@@ -61,23 +63,78 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      if (!isPublicDashboard && authLoading) {
+        setLoading(true);
+        console.info('[Perf] event-provider-waiting-auth', {
+          eventSlug,
+          pathname,
+          authLoading,
+          isPublicDashboard,
+        });
+        return;
+      }
+
       setLoading(true);
       setInternalEventId(DEFAULT_EVENT_ID);
       setEvent(null);
       setUserRole(null);
 
       try {
-        const resolved = await fetchEventBySlug(eventSlug, {
-          uid: user?.uid,
-          isOwner: globalRole === 'owner'
-        });
+        const publicResolved = await fetchEventBySlug(eventSlug);
+        let resolved = publicResolved;
+        let resolvedVia: 'public' | 'private-fallback' | 'not-found' = publicResolved ? 'public' : 'not-found';
+
+        if (!publicResolved) {
+          const canAttemptPrivateFallback = !!user || globalRole === 'owner';
+          const shouldAttemptPrivateFallback = canAttemptPrivateFallback && (!isPublicDashboard || authStateKnown);
+
+          if (shouldAttemptPrivateFallback) {
+            const fallbackStartedAt = performance.now();
+            resolved = await fetchEventBySlug(eventSlug, {
+              uid: user?.uid,
+              isOwner: globalRole === 'owner',
+              allowPrivateFallback: true,
+            });
+            resolvedVia = resolved ? 'private-fallback' : 'not-found';
+            console.info('[Perf] event-private-fallback', {
+              durationMs: Math.round(performance.now() - fallbackStartedAt),
+              eventSlug,
+              found: !!resolved,
+              isPublicDashboard,
+              authStateKnown,
+            });
+          } else {
+            console.info('[Perf] event-user-membership-fallback-skipped', {
+              eventSlug,
+              isPublicDashboard,
+              authLoading,
+              authStateKnown,
+              hasUser: !!user,
+              isOwner: globalRole === 'owner',
+            });
+          }
+        }
         
         if (isMounted) {
           if (resolved) {
             setEvent(resolved);
             setInternalEventId(resolved.id);
 
-            // Résolution du rôle local si l'utilisateur est connecté
+            if (publicResolved && isPublicDashboard) {
+              setResolvedSlug(eventSlug);
+              setLoading(false);
+              console.info('[Perf] event-provider-ready', {
+                durationMs: Math.round(performance.now() - startedAt),
+                routeType: 'event',
+                eventSlug,
+                eventId: resolved.id,
+                found: true,
+                source: 'public',
+                membershipBlocking: false,
+              });
+              console.timeEnd('[Perf] event-provider')
+            }
+
             if (user) {
               const memberStartedAt = performance.now();
               const memberDoc = await getDoc(doc(db, `events/${resolved.id}/members`, user.uid));
@@ -97,17 +154,21 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
             setInternalEventId(DEFAULT_EVENT_ID);
             setEvent(null);
           }
-          setResolvedSlug(eventSlug);
-          setLoading(false);
-          console.info('[Perf] event-provider-ready', {
-            durationMs: Math.round(performance.now() - startedAt),
-            routeType: 'event',
-            eventSlug,
-            eventId: resolved?.id ?? DEFAULT_EVENT_ID,
-            found: !!resolved,
-            authDependent: !!user || globalRole === 'owner',
-          });
-          console.timeEnd('[Perf] event-provider')
+          if (!(publicResolved && isPublicDashboard)) {
+            setResolvedSlug(eventSlug);
+            setLoading(false);
+            console.info('[Perf] event-provider-ready', {
+              durationMs: Math.round(performance.now() - startedAt),
+              routeType: 'event',
+              eventSlug,
+              eventId: resolved?.id ?? DEFAULT_EVENT_ID,
+              found: !!resolved,
+              source: resolvedVia,
+              authDependent: resolvedVia === 'private-fallback',
+              membershipBlocking: resolvedVia === 'private-fallback',
+            });
+            console.timeEnd('[Perf] event-provider')
+          }
         }
       } catch (error) {
         if (isMounted) {
@@ -133,7 +194,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [eventSlug, user, globalRole]);
+  }, [eventSlug, user, globalRole, authLoading, authStateKnown, isPublicDashboard]);
 
   return (
     <EventContext.Provider value={{ 

@@ -71,14 +71,6 @@ export default function DashboardLayout({
     );
   }
 
-  if (eventSlug && !event && authLoading) {
-    return (
-       <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Mountain className="h-12 w-12 animate-pulse text-primary" />
-      </div>
-    );
-  }
-
   if (eventSlug && !event) {
     return (
       <div className="flex min-h-screen flex-col bg-background p-4 items-center justify-center">

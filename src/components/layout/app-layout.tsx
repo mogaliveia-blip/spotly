@@ -2,11 +2,14 @@
 
 import { Header } from './header';
 import { useAuth } from '@/hooks/use-auth-user';
+import { usePathname } from 'next/navigation';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { loading } = useAuth();
+  const pathname = usePathname();
+  const isPublicEventDashboard = /^\/[^/]+\/dashboard(?:\/)?$/.test(pathname || '');
 
-  if (loading) {
+  if (loading && !isPublicEventDashboard) {
     return null;
   }
 

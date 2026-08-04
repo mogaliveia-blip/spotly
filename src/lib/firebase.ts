@@ -30,8 +30,16 @@ if (isBrowser) {
     db = initializeFirestore(app, {
       localCache: persistentLocalCache()
     });
+    console.info('[Perf] firestore-cache-mode', {
+      mode: 'persistentLocalCache',
+      browser: navigator.userAgent,
+    });
   } catch {
     db = getFirestore(app);
+    console.warn('[Perf] firestore-cache-mode', {
+      mode: 'getFirestore-fallback',
+      browser: navigator.userAgent,
+    });
   }
 } else {
   db = getFirestore(app);

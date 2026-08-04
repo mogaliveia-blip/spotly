@@ -74,7 +74,7 @@ function perfLog(label: string, startedAt: number, details: Record<string, unkno
  */
 export async function fetchEventBySlug(
   slug: string,
-  options: { uid?: string; isOwner?: boolean } = {}
+  options: { uid?: string; isOwner?: boolean; allowPrivateFallback?: boolean } = {}
 ): Promise<AppEvent | null> {
   if (!slug || slug === 'default' || slug === 'dashboard' || slug === 'admin') return null;
   
@@ -84,11 +84,14 @@ export async function fetchEventBySlug(
   try {
     const eventsRef = collection(db, 'events');
     const q = query(eventsRef, where('slug', '==', normalizedSlug), where('status', '==', 'published'), limit(1));
-    const snap = await getDocs(q);
+    const publicQueryStartedAt = perfNow();
+    const snap = await getDocsFromServer(q);
     console.info('[Perf] event-public-query', {
+      durationMs: Math.round(perfNow() - publicQueryStartedAt),
       docsRead: snap.docs.length,
       empty: snap.empty,
       slug: normalizedSlug,
+      source: 'server',
     });
     
     if (!snap.empty) {
@@ -113,7 +116,7 @@ export async function fetchEventBySlug(
       return event;
     }
 
-    if (options.isOwner) {
+    if (options.isOwner && options.allowPrivateFallback) {
       const ownerStartedAt = perfNow();
       const ownerQuery = query(eventsRef, where('slug', '==', normalizedSlug), limit(1));
       const ownerSnap = await getDocs(ownerQuery);
@@ -146,7 +149,7 @@ export async function fetchEventBySlug(
       }
     }
 
-    if (options.uid) {
+    if (options.uid && options.allowPrivateFallback) {
       const userEventsStartedAt = perfNow();
       const userEvents = await fetchUserEvents(options.uid);
       const event = userEvents.find((event) => event.slug === normalizedSlug) ?? null;
@@ -168,6 +171,7 @@ export async function fetchEventBySlug(
       slug: normalizedSlug,
       firestoreReads: 1,
       docsRead: snap.docs.length,
+      privateFallbackSkipped: !options.allowPrivateFallback,
     });
     return null;
   } catch (error) {
