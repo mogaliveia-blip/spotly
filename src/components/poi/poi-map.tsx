@@ -239,6 +239,7 @@ export function POIMap({
   const { userLocation, loading: geoLoading } = useGeolocation();
   const renderCountRef = useRef(0);
   const mapMountedAtRef = useRef<number | null>(null);
+  const firstUsableRequestIdRef = useRef<string | null>(null);
   renderCountRef.current += 1;
 
   const defaultCenter = userLocation || (pois.length > 0 ? pois[0].location : { lat: -21.3393, lng: 55.4781 });
@@ -256,10 +257,18 @@ export function POIMap({
   useEffect(() => {
     if (mapMountedAtRef.current === null && pois.length > 0) {
       mapMountedAtRef.current = performance.now();
-      console.time('[Perf] first-usable-ui');
+      firstUsableRequestIdRef.current = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `first-ui-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      console.info('[Perf] first-usable-ui-start', {
+        requestId: firstUsableRequestIdRef.current,
+        startedAt: Math.round(mapMountedAtRef.current),
+        poiCount: pois.length,
+      });
       window.requestAnimationFrame(() => {
-        console.timeEnd('[Perf] first-usable-ui');
         console.info('[Perf] first-usable-ui-ready', {
+          requestId: firstUsableRequestIdRef.current,
+          durationMs: mapMountedAtRef.current ? Math.round(performance.now() - mapMountedAtRef.current) : null,
           poiCount: pois.length,
           markerInputCount: pois.length,
           hasUserLocation: !!userLocation,

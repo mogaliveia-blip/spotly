@@ -60,6 +60,16 @@ function buildFirestoreSettings() {
   return settings;
 }
 
+function describeFirestoreSettings(settings: Record<string, unknown>) {
+  return {
+    cacheMode: FIRESTORE_CACHE_MODE,
+    transportMode: FIRESTORE_TRANSPORT_MODE,
+    experimentalAutoDetectLongPolling: settings.experimentalAutoDetectLongPolling === true,
+    experimentalForceLongPolling: settings.experimentalForceLongPolling === true,
+    useFetchStreams: settings.useFetchStreams ?? null,
+  };
+}
+
 function logFirestoreInit(mode: string, details: Record<string, unknown> = {}) {
   if (!isBrowser) return;
   console.info('[Perf] firestore-init', {
@@ -78,17 +88,17 @@ if (isBrowser) {
     logFirestoreInit('reuse-existing-instance', globalThis.__spotlyFirestoreConfig || {});
   } else {
     try {
-      db = initializeFirestore(app, buildFirestoreSettings() as any);
+      const firestoreSettings = buildFirestoreSettings();
+      db = initializeFirestore(app, firestoreSettings as any);
       globalThis.__spotlyFirestoreDb = db;
       globalThis.__spotlyFirestoreConfig = {
         cacheMode: FIRESTORE_CACHE_MODE,
         transportMode: FIRESTORE_TRANSPORT_MODE,
         initializedAt: Date.now(),
       };
-      logFirestoreInit('initializeFirestore');
+      logFirestoreInit('initializeFirestore', describeFirestoreSettings(firestoreSettings));
       console.info('[Perf] firestore-cache-mode', {
-        mode: FIRESTORE_CACHE_MODE,
-        transportMode: FIRESTORE_TRANSPORT_MODE,
+        ...describeFirestoreSettings(firestoreSettings),
         browser: navigator.userAgent,
       });
     } catch (error: any) {

@@ -20,15 +20,26 @@ export function POIMapAdapter({
 }) {
   const [canLoadMap, setCanLoadMap] = useState(false)
   const startedAtRef = useRef<number | null>(null)
+  const requestIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     startedAtRef.current = performance.now()
-    console.time('[Perf] maps-api')
+    requestIdRef.current = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `maps-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    console.info('[Perf] maps-api-start', {
+      requestId: requestIdRef.current,
+      startedAt: Math.round(startedAtRef.current),
+    })
     const apiKey = mapsConfig.apiKey
 
     // Si clé absente ou volontairement invalide
     if (!apiKey || apiKey === 'invalid_key') {
-      console.timeEnd('[Perf] maps-api')
+      console.info('[Perf] maps-api-ready', {
+        requestId: requestIdRef.current,
+        durationMs: 0,
+        source: 'invalid-api-key',
+      })
       onCrash?.()
       return
     }
@@ -45,8 +56,8 @@ export function POIMapAdapter({
     const poll = () => {
       pollCount += 1
       if (window.google?.maps) {
-        console.timeEnd('[Perf] maps-api')
         console.info('[Perf] maps-api-ready', {
+          requestId: requestIdRef.current,
           durationMs: startedAtRef.current ? Math.round(performance.now() - startedAtRef.current) : null,
           pollCount,
         })

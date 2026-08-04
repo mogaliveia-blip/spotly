@@ -60,7 +60,11 @@ export default function DashboardPage() {
 
   if (pageStartedAtRef.current === null && typeof performance !== 'undefined') {
     pageStartedAtRef.current = performance.now()
-    console.time('[Perf] dashboard-total')
+    console.info('[Perf] dashboard-total-start', {
+      startedAt: Math.round(pageStartedAtRef.current),
+      eventId,
+      pathname,
+    })
   }
 
   useEffect(() => {
@@ -87,7 +91,12 @@ export default function DashboardPage() {
   const loadFullPoi = useCallback(async (poiId: string) => {
     const requestId = ++requestIdRef.current
     const startedAt = performance.now()
-    console.time('[Perf] poi-private-click')
+    console.info('[Perf] poi-private-click-start', {
+      requestId,
+      poiId,
+      eventId,
+      startedAt: Math.round(startedAt),
+    })
     try {
       const full = await fetchPoiById(poiId, eventId)
       if (!full) return
@@ -102,7 +111,12 @@ export default function DashboardPage() {
     } catch {
       // Keep lite if full fetch fails
     } finally {
-      console.timeEnd('[Perf] poi-private-click')
+      console.info('[Perf] poi-private-click-end', {
+        requestId,
+        poiId,
+        eventId,
+        durationMs: Math.round(performance.now() - startedAt),
+      })
     }
   }, [eventId])
 
@@ -140,7 +154,14 @@ export default function DashboardPage() {
 
     async function init() {
       const initStartedAt = performance.now()
-      console.time('[Perf] dashboard-init')
+      const initRequestId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `dashboard-init-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      console.info('[Perf] dashboard-init-start', {
+        requestId: initRequestId,
+        eventId,
+        startedAt: Math.round(initStartedAt),
+      })
       try {
         const poiData = await fetchPoisLite(eventId)
         
@@ -148,6 +169,7 @@ export default function DashboardPage() {
           setPois(poiData)
           setPoisLoaded(true)
           console.info('[Perf] dashboard-init-ready', {
+            requestId: initRequestId,
             durationMs: Math.round(performance.now() - initStartedAt),
             eventId,
             poiCount: poiData.length,
@@ -168,7 +190,11 @@ export default function DashboardPage() {
           })
         }
       } finally {
-        console.timeEnd('[Perf] dashboard-init')
+        console.info('[Perf] dashboard-init-end', {
+          requestId: initRequestId,
+          eventId,
+          durationMs: Math.round(performance.now() - initStartedAt),
+        })
       }
     }
     init()
@@ -280,7 +306,6 @@ export default function DashboardPage() {
     firstPoisReadyRef.current = true
     if (pois.length === 0) {
       window.requestAnimationFrame(() => {
-        console.timeEnd('[Perf] dashboard-total')
         console.info('[Perf] pois-empty-ui', {
           durationMs: pageStartedAtRef.current ? Math.round(performance.now() - pageStartedAtRef.current) : null,
           eventId,
@@ -302,7 +327,6 @@ export default function DashboardPage() {
     if (firstPoisVisibleRef.current || visiblePois.length === 0) return
     firstPoisVisibleRef.current = true
     window.requestAnimationFrame(() => {
-      console.timeEnd('[Perf] dashboard-total')
       console.info('[Perf] pois-visible-ui', {
         durationMs: pageStartedAtRef.current ? Math.round(performance.now() - pageStartedAtRef.current) : null,
         eventId,

@@ -43,7 +43,18 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
     async function resolveEvent() {
       const startedAt = performance.now();
-      console.time('[Perf] event-provider')
+      const requestId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `event-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      console.info('[Perf] event-provider-start', {
+        requestId,
+        eventSlug: eventSlug ?? null,
+        pathname,
+        isPublicDashboard,
+        authLoading,
+        authStateKnown,
+        hasUser: !!user,
+      });
       // Si on est sur une route globale
       if (!eventSlug || ['dashboard', 'admin', 'login', 'signup', 'access-pending'].includes(eventSlug)) {
         if (isMounted) {
@@ -53,12 +64,12 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           setUserRole(null);
           setLoading(false);
           console.info('[Perf] event-provider-ready', {
+            requestId,
             durationMs: Math.round(performance.now() - startedAt),
             routeType: 'global',
             eventSlug: eventSlug ?? null,
             eventId: DEFAULT_EVENT_ID,
           });
-          console.timeEnd('[Perf] event-provider')
         }
         return;
       }
@@ -124,6 +135,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
               setResolvedSlug(eventSlug);
               setLoading(false);
               console.info('[Perf] event-provider-ready', {
+                requestId,
                 durationMs: Math.round(performance.now() - startedAt),
                 routeType: 'event',
                 eventSlug,
@@ -132,7 +144,6 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
                 source: 'public',
                 membershipBlocking: false,
               });
-              console.timeEnd('[Perf] event-provider')
             }
 
             if (user) {
@@ -158,6 +169,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
             setResolvedSlug(eventSlug);
             setLoading(false);
             console.info('[Perf] event-provider-ready', {
+              requestId,
               durationMs: Math.round(performance.now() - startedAt),
               routeType: 'event',
               eventSlug,
@@ -167,7 +179,6 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
               authDependent: resolvedVia === 'private-fallback',
               membershipBlocking: resolvedVia === 'private-fallback',
             });
-            console.timeEnd('[Perf] event-provider')
           }
         }
       } catch (error) {
@@ -177,6 +188,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           setResolvedSlug(eventSlug);
           setLoading(false);
           console.info('[Perf] event-provider-ready', {
+            requestId,
             durationMs: Math.round(performance.now() - startedAt),
             routeType: 'event',
             eventSlug,
@@ -184,7 +196,6 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
             found: false,
             source: 'error',
           });
-          console.timeEnd('[Perf] event-provider')
         }
       }
     }
