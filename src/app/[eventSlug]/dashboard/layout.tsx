@@ -3,9 +3,7 @@
 import { AppLayout } from "@/components/layout/app-layout";
 import { useAuth } from '@/hooks/use-auth-user';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { fetchAppConfig } from '@/lib/data';
-import type { AppConfig } from '@/lib/types';
+import { useEffect, useRef } from 'react';
 import { Mountain, Clock, Calendar } from 'lucide-react';
 import { useEvent } from '@/providers/event-provider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,51 +19,59 @@ export default function DashboardLayout({
   const { eventId, event, loading: eventLoading, userRole } = useEvent();
   const params = useParams();
   const eventSlug = params.eventSlug as string;
-  const [config, setConfig] = useState<AppConfig | null>(null);
-  const [configLoading, setConfigLoading] = useState(true);
+  const startedAtRef = useRef<number | null>(null);
+  const readyLoggedRef = useRef(false);
+
+  if (startedAtRef.current === null && typeof performance !== 'undefined') {
+    startedAtRef.current = performance.now();
+    console.time('[Perf] dashboard-layout')
+  }
 
   useEffect(() => {
-    const startedAt = performance.now();
-    console.time('[Perf] dashboard-layout')
     if (eventLoading) {
-        setConfigLoading(true);
-        console.info('[Perf] dashboard-layout-waiting', {
-          eventLoading,
-          authLoading,
-          eventId,
-        });
-        console.timeEnd('[Perf] dashboard-layout')
-        return;
+      console.info('[Perf] dashboard-layout-waiting', {
+        eventLoading,
+        authLoading,
+        eventId,
+        waitingFor: ['event'],
+        configMainBlocking: false,
+      });
+      return;
     }
 
-    fetchAppConfig(eventId).then(appConfig => {
-      setConfig(appConfig);
-      setConfigLoading(false);
-      console.info('[Perf] dashboard-layout-ready', {
-        durationMs: Math.round(performance.now() - startedAt),
-        eventId,
-        source: 'config',
-        authLoading,
-        eventLoading,
-      });
-      console.timeEnd('[Perf] dashboard-layout')
-    }).catch(() => {
-      setConfig({ isLandingPageActive: false });
-      setConfigLoading(false);
-      console.info('[Perf] dashboard-layout-ready', {
-        durationMs: Math.round(performance.now() - startedAt),
-        eventId,
-        source: 'config-error-fallback',
-        authLoading,
-        eventLoading,
-      });
-      console.timeEnd('[Perf] dashboard-layout')
+    if (readyLoggedRef.current) return;
+    readyLoggedRef.current = true;
+    console.info('[Perf] dashboard-layout-ready', {
+      durationMs: startedAtRef.current ? Math.round(performance.now() - startedAtRef.current) : null,
+      eventId,
+      source: 'event-status',
+      authLoading,
+      eventLoading,
+      configMainBlocking: false,
     });
-  }, [eventId, eventLoading]);
-  
-  const isLoading = authLoading || configLoading || eventLoading;
+    console.timeEnd('[Perf] dashboard-layout')
+  }, [authLoading, eventId, eventLoading]);
 
-  if (isLoading) {
+  if (typeof performance !== 'undefined') {
+    console.info('[Perf] dashboard-shell-visible', {
+      eventId,
+      eventLoading,
+      authLoading,
+      hasEvent: !!event,
+      eventStatus: event?.status ?? null,
+      configMainBlocking: false,
+    });
+  }
+
+  if (eventLoading) {
+    return (
+       <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Mountain className="h-12 w-12 animate-pulse text-primary" />
+      </div>
+    );
+  }
+
+  if (eventSlug && !event && authLoading) {
     return (
        <div className="flex h-screen w-full items-center justify-center bg-background">
         <Mountain className="h-12 w-12 animate-pulse text-primary" />
@@ -96,11 +102,11 @@ export default function DashboardLayout({
     );
   }
 
-  // Si Landing Page active : seuls les membres de l'équipe (admin/editor) peuvent voir le dashboard
+  // Les événements non publiés restent réservés au staff résolu par EventProvider.
   const isStaff = role === 'owner' || userRole === 'admin' || userRole === 'editor';
-  const isBlockedByLanding = event?.status !== 'published' && config?.isLandingPageActive && !isStaff;
+  const isBlockedByStatus = event?.status !== 'published' && !isStaff;
 
-  if (isBlockedByLanding) {
+  if (isBlockedByStatus) {
     return (
       <div className="flex min-h-screen flex-col bg-background p-4 items-center justify-center">
          <Card className="w-full max-w-md border-muted shadow-2xl rounded-[2.5rem] overflow-hidden">

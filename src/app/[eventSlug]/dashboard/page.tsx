@@ -19,9 +19,21 @@ import { useEvent } from '@/providers/event-provider'
 
 type AppMode = 'normal' | 'map-fallback' | 'static-fallback'
 
+const defaultMarketingConfig: MarketingConfig = {
+  heroEnabled: false,
+  heroTitle: 'Découvrez le festival',
+  heroSubtitle: "Connectez-vous pour accéder à toutes les fonctionnalités.",
+  heroImageUrl: 'https://picsum.photos/seed/marketing/1200/800',
+  heroCtaText: '',
+  heroCtaMode: 'none',
+}
+
+const SECONDARY_CONFIG_TIMEOUT_MS = 3000
+
 export default function DashboardPage() {
   const pageStartedAtRef = useRef<number | null>(null)
   const firstPoisVisibleRef = useRef(false)
+  const firstPoisReadyRef = useRef(false)
   const renderCountRef = useRef(0)
 
   const pathname = usePathname()
@@ -34,6 +46,7 @@ export default function DashboardPage() {
   const isMobile = useIsMobile()
 
   const [pois, setPois] = useState<POILite[]>([])
+  const [poisLoaded, setPoisLoaded] = useState(false)
   const [marketingConfig, setMarketingConfig] = useState<MarketingConfig | null>(null)
   const [activePoi, setActivePoi] = useState<POILite | POI | null>(null)
   const [heroVisible, setHeroVisible] = useState(false)
@@ -114,9 +127,12 @@ export default function DashboardPage() {
   useEffect(() => {
     if (eventLoading) {
       setPois([]);
+      setPoisLoaded(false);
       setActivePoi(null);
       setMarketingConfig(null);
       setHeroVisible(false);
+      firstPoisVisibleRef.current = false;
+      firstPoisReadyRef.current = false;
       return;
     }
 
@@ -126,28 +142,25 @@ export default function DashboardPage() {
       const initStartedAt = performance.now()
       console.time('[Perf] dashboard-init')
       try {
-        const poiPromise = fetchPoisLite(eventId)
-        const marketingPromise = fetchMarketingConfig(eventId)
-        const [poiData, marketing] = await Promise.all([
-          poiPromise,
-          marketingPromise,
-        ])
+        const poiData = await fetchPoisLite(eventId)
         
         if (isMounted) {
           setPois(poiData)
-          setMarketingConfig(marketing)
+          setPoisLoaded(true)
           console.info('[Perf] dashboard-init-ready', {
             durationMs: Math.round(performance.now() - initStartedAt),
             eventId,
             poiCount: poiData.length,
-            payloadBytesApprox: new Blob([JSON.stringify({ poiData, marketing })]).size,
-            parallelSteps: ['pois-public', 'marketing-config'],
+            payloadBytesApprox: new Blob([JSON.stringify({ poiData })]).size,
+            criticalSteps: ['pois-public'],
+            nonblockingSteps: ['marketing-config'],
             removedDuplicateSteps: ['app-config'],
           })
         }
       } catch (error) {
         if (isMounted) {
           setAppMode('static-fallback')
+          setPoisLoaded(true)
           toast({
             title: 'Erreur',
             description: 'Impossible de charger les données de l\'événement.',
@@ -164,6 +177,57 @@ export default function DashboardPage() {
       isMounted = false;
     };
   }, [eventId, eventLoading, toast])
+
+  useEffect(() => {
+    if (eventLoading) return
+
+    let isMounted = true
+    let settled = false
+    const startedAt = performance.now()
+    const timeoutId = window.setTimeout(() => {
+      if (!isMounted || settled) return
+      setMarketingConfig(defaultMarketingConfig)
+      console.warn('[Perf] config-timeout-fallback', {
+        durationMs: Math.round(performance.now() - startedAt),
+        eventId,
+        config: 'marketing',
+        timeoutMs: SECONDARY_CONFIG_TIMEOUT_MS,
+        source: 'fallback-default',
+      })
+    }, SECONDARY_CONFIG_TIMEOUT_MS)
+
+    fetchMarketingConfig(eventId)
+      .then((marketing) => {
+        if (!isMounted) return
+        settled = true
+        window.clearTimeout(timeoutId)
+        setMarketingConfig(marketing)
+        console.info('[Perf] marketing-nonblocking-ready', {
+          durationMs: Math.round(performance.now() - startedAt),
+          eventId,
+          source: 'firestore',
+          heroEnabled: marketing.heroEnabled,
+        })
+      })
+      .catch((error: any) => {
+        if (!isMounted) return
+        settled = true
+        window.clearTimeout(timeoutId)
+        setMarketingConfig(defaultMarketingConfig)
+        console.warn('[Perf] marketing-nonblocking-ready', {
+          durationMs: Math.round(performance.now() - startedAt),
+          eventId,
+          source: 'fallback-default',
+          errorCode: error?.code ?? null,
+          errorMessage: error?.message ?? null,
+        })
+      })
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(timeoutId)
+    }
+  }, [eventId, eventLoading])
 
   useEffect(() => {
     if (!marketingConfig?.heroEnabled || eventLoading) return
@@ -210,6 +274,29 @@ export default function DashboardPage() {
   const visiblePois = useMemo(() => {
     return pois.filter((p) => categoryFilter === 'all' || p.mainCategory === categoryFilter)
   }, [pois, categoryFilter])
+
+  useEffect(() => {
+    if (firstPoisReadyRef.current || eventLoading || !poisLoaded) return
+    firstPoisReadyRef.current = true
+    if (pois.length === 0) {
+      window.requestAnimationFrame(() => {
+        console.timeEnd('[Perf] dashboard-total')
+        console.info('[Perf] pois-empty-ui', {
+          durationMs: pageStartedAtRef.current ? Math.round(performance.now() - pageStartedAtRef.current) : null,
+          eventId,
+          poiCount: 0,
+          categoryFilter,
+        })
+      })
+      return
+    }
+    console.info('[Perf] pois-ready-ui', {
+      durationMs: pageStartedAtRef.current ? Math.round(performance.now() - pageStartedAtRef.current) : null,
+      eventId,
+      poiCount: pois.length,
+      categoryFilter,
+    })
+  }, [pois.length, poisLoaded, eventId, categoryFilter, eventLoading])
 
   useEffect(() => {
     if (firstPoisVisibleRef.current || visiblePois.length === 0) return

@@ -20,6 +20,7 @@ import { isSponsorActive } from '@/lib/sponsor-utils';
 import { useEvent } from '@/providers/event-provider';
 
 type POIAny = POILite | POI;
+const REVIEWS_CONFIG_TIMEOUT_MS = 3000;
 
 interface POIDetailsProps {
   poi: POIAny;
@@ -37,7 +38,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   const [poi, setPoi] = useState<POIAny>(initialPoi);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
-  const [reviewsEnabled, setReviewsEnabled] = useState<boolean | null>(null);
+  const [reviewsEnabled, setReviewsEnabled] = useState(true);
   
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
@@ -62,13 +63,47 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   }, [poi.headerPhotoUrl, full, (poi as any).galleryUrls]);
 
   useEffect(() => {
+    let isMounted = true;
+    let settled = false;
+    const startedAt = performance.now();
+    const timeoutId = window.setTimeout(() => {
+      if (!isMounted || settled) return;
+      setReviewsEnabled(true);
+      console.warn('[Perf] config-timeout-fallback', {
+        durationMs: Math.round(performance.now() - startedAt),
+        eventId,
+        config: 'reviews',
+        timeoutMs: REVIEWS_CONFIG_TIMEOUT_MS,
+        source: 'fallback-default',
+      });
+    }, REVIEWS_CONFIG_TIMEOUT_MS);
+
     fetchAppConfig(eventId)
       .then((config: AppConfig) => {
+        if (!isMounted) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
         setReviewsEnabled(config.reviewsEnabled ?? true);
       })
-      .catch(() => {
+      .catch((error: any) => {
+        if (!isMounted) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        console.warn('[Perf] config-timeout-fallback', {
+          durationMs: Math.round(performance.now() - startedAt),
+          eventId,
+          config: 'reviews',
+          source: 'error-fallback',
+          errorCode: error?.code ?? null,
+          errorMessage: error?.message ?? null,
+        });
         setReviewsEnabled(true);
       });
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timeoutId);
+    };
   }, [eventId]);
 
   useEffect(() => {
@@ -101,18 +136,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   }, []);
 
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${poi.location.lat},${poi.location.lng}&travelmode=walking`;
-
-  if (reviewsEnabled === null) {
-    return (
-      <div className="space-y-6">
-        <div className="relative aspect-video w-full shrink-0">
-          <Skeleton className="w-full h-full rounded-3xl" />
-        </div>
-        <Skeleton className="h-6 w-1/3" />
-        <Skeleton className="h-20 w-full" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6 min-h-[40vh] flex flex-col">

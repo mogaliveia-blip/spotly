@@ -637,6 +637,7 @@ export async function removeEventMember(eventId: string, uid: string): Promise<v
 export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
   const startedAt = perfNow();
   const path = dbPaths.config(eventId);
+  const configPath = `${path}/main`;
 
   try {
     const configRef = doc(db, path, 'main')
@@ -654,12 +655,20 @@ export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
       });
       return config;
     }
-  } catch (e: any) {}
+  } catch (e: any) {
+    console.warn('[Perf] config-error-fallback', {
+      durationMs: Math.round(perfNow() - startedAt),
+      eventId,
+      path: configPath,
+      errorCode: e?.code ?? null,
+      errorMessage: e?.message ?? null,
+    });
+  }
   
   const fallback = { isLandingPageActive: true, festivalMode: false, reviewsEnabled: true };
   perfLog('config', startedAt, {
     eventId,
-    path,
+    path: configPath,
     source: 'fallback-default',
     firestoreReads: 1,
     docsRead: 0,
@@ -681,6 +690,7 @@ export async function updateAppConfig(config: Partial<AppConfig>, eventId: strin
 
 export async function fetchMarketingConfig(eventId: string): Promise<MarketingConfig> {
   const startedAt = perfNow();
+  const path = `${dbPaths.config(eventId)}/marketing`;
   try {
     const configRef = doc(db, dbPaths.config(eventId), 'marketing')
     const configSnap = await getDoc(configRef)
@@ -696,7 +706,15 @@ export async function fetchMarketingConfig(eventId: string): Promise<MarketingCo
       });
       return config
     }
-  } catch {}
+  } catch (e: any) {
+    console.warn('[Perf] marketing-config-error-fallback', {
+      durationMs: Math.round(perfNow() - startedAt),
+      eventId,
+      path,
+      errorCode: e?.code ?? null,
+      errorMessage: e?.message ?? null,
+    });
+  }
   const fallback: MarketingConfig = {
     heroEnabled: false,
     heroTitle: 'Découvrez le festival',
@@ -707,6 +725,7 @@ export async function fetchMarketingConfig(eventId: string): Promise<MarketingCo
   }
   perfLog('marketing-config', startedAt, {
     eventId,
+    path,
     source: 'fallback-default',
     firestoreReads: 1,
     docsRead: 0,
