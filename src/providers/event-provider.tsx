@@ -74,6 +74,24 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      if (
+        isPublicDashboard &&
+        resolvedSlug === eventSlug &&
+        event?.slug === eventSlug &&
+        event.status === 'published'
+      ) {
+        console.info('[Perf] event-provider-public-resolve-skipped', {
+          requestId,
+          eventSlug,
+          eventId: event.id,
+          reason: 'published-event-already-resolved',
+          authLoading,
+          authStateKnown,
+          hasUser: !!user,
+        });
+        return;
+      }
+
       if (!isPublicDashboard && authLoading) {
         setLoading(true);
         console.info('[Perf] event-provider-waiting-auth', {
@@ -146,21 +164,6 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
               });
             }
 
-            if (user) {
-              const memberStartedAt = performance.now();
-              const memberDoc = await getDoc(doc(db, `events/${resolved.id}/members`, user.uid));
-              console.info('[Perf] event-member-role', {
-                durationMs: Math.round(performance.now() - memberStartedAt),
-                eventId: resolved.id,
-                uid: user.uid,
-                docsRead: memberDoc.exists() ? 1 : 0,
-              });
-              if (memberDoc.exists()) {
-                setUserRole(memberDoc.data().role as EventRole);
-              } else if (globalRole === 'owner') {
-                setUserRole('admin'); // Le proprio plateforme est admin partout
-              }
-            }
           } else {
             setInternalEventId(DEFAULT_EVENT_ID);
             setEvent(null);
@@ -205,7 +208,72 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [eventSlug, user, globalRole, authLoading, authStateKnown, isPublicDashboard]);
+  }, [eventSlug, user, globalRole, authLoading, authStateKnown, isPublicDashboard, pathname, resolvedSlug, event?.slug, event?.status, event?.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!event) {
+      setUserRole(null);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    if (!user) {
+      setUserRole(null);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const resolvedEvent = event;
+    const resolvedUser = user;
+
+    async function resolveMembershipRole() {
+      const memberStartedAt = performance.now();
+
+      try {
+        const memberDoc = await getDoc(doc(db, `events/${resolvedEvent.id}/members`, resolvedUser.uid));
+        console.info('[Perf] event-member-role', {
+          durationMs: Math.round(performance.now() - memberStartedAt),
+          eventId: resolvedEvent.id,
+          uid: resolvedUser.uid,
+          docsRead: memberDoc.exists() ? 1 : 0,
+          blockingPublicResolution: false,
+        });
+
+        if (!isMounted) return;
+
+        if (memberDoc.exists()) {
+          setUserRole(memberDoc.data().role as EventRole);
+        } else if (globalRole === 'owner') {
+          setUserRole('admin');
+        } else {
+          setUserRole(null);
+        }
+      } catch (error: any) {
+        console.warn('[Perf] event-member-role-error', {
+          durationMs: Math.round(performance.now() - memberStartedAt),
+          eventId: resolvedEvent.id,
+          uid: resolvedUser.uid,
+          errorCode: error?.code ?? null,
+          errorMessage: error?.message ?? null,
+          blockingPublicResolution: false,
+        });
+
+        if (isMounted) {
+          setUserRole(globalRole === 'owner' ? 'admin' : null);
+        }
+      }
+    }
+
+    resolveMembershipRole();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [event?.id, user?.uid, globalRole]);
 
   return (
     <EventContext.Provider value={{ 

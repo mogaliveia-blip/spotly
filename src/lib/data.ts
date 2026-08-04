@@ -49,8 +49,10 @@ import {
 // --- MULTI-EVENT ENGINE ---
 
 export const DEFAULT_EVENT_ID = 'default-event';
-const FIRESTORE_CACHE_MODE = process.env.NEXT_PUBLIC_FIRESTORE_CACHE_MODE || 'persistent';
-const FIRESTORE_TRANSPORT_MODE = process.env.NEXT_PUBLIC_FIRESTORE_TRANSPORT_MODE || 'default';
+const RAW_FIRESTORE_CACHE_MODE = process.env.NEXT_PUBLIC_FIRESTORE_CACHE_MODE;
+const RAW_FIRESTORE_TRANSPORT_MODE = process.env.NEXT_PUBLIC_FIRESTORE_TRANSPORT_MODE;
+const FIRESTORE_CACHE_MODE = (RAW_FIRESTORE_CACHE_MODE || 'persistent').trim().toLowerCase();
+const FIRESTORE_TRANSPORT_MODE = (RAW_FIRESTORE_TRANSPORT_MODE || 'default').trim().toLowerCase();
 const poisPublicAttemptsByEvent = new Map<string, number>();
 
 function perfNow(): number {
@@ -82,6 +84,8 @@ function getRuntimeDiagnostics() {
     effectiveType: connection?.effectiveType ?? null,
     downlink: connection?.downlink ?? null,
     rtt: connection?.rtt ?? null,
+    rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
+    rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
     cacheMode: FIRESTORE_CACHE_MODE,
     transportMode: FIRESTORE_TRANSPORT_MODE,
   };

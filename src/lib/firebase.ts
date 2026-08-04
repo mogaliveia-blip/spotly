@@ -14,8 +14,10 @@ import { getStorage, type FirebaseStorage } from 'firebase/storage';
 import { firebaseConfig } from './firebase-config';
 
 const isBrowser = typeof window !== 'undefined';
-const FIRESTORE_CACHE_MODE = process.env.NEXT_PUBLIC_FIRESTORE_CACHE_MODE || 'persistent';
-const FIRESTORE_TRANSPORT_MODE = process.env.NEXT_PUBLIC_FIRESTORE_TRANSPORT_MODE || 'default';
+const RAW_FIRESTORE_CACHE_MODE = process.env.NEXT_PUBLIC_FIRESTORE_CACHE_MODE;
+const RAW_FIRESTORE_TRANSPORT_MODE = process.env.NEXT_PUBLIC_FIRESTORE_TRANSPORT_MODE;
+const FIRESTORE_CACHE_MODE = (RAW_FIRESTORE_CACHE_MODE || 'persistent').trim().toLowerCase();
+const FIRESTORE_TRANSPORT_MODE = (RAW_FIRESTORE_TRANSPORT_MODE || 'default').trim().toLowerCase();
 
 // Initialize Firebase app (safe for Next.js HMR)
 const app = !getApps().length 
@@ -29,7 +31,10 @@ declare global {
   var __spotlyFirestoreConfig: {
     cacheMode: string;
     transportMode: string;
+    rawCacheMode: string | null;
+    rawTransportMode: string | null;
     initializedAt: number;
+    initializeFirestoreOptions?: Record<string, unknown>;
   } | undefined;
   var __spotlyFirestoreErrorListenersInstalled: boolean | undefined;
 }
@@ -62,8 +67,16 @@ function buildFirestoreSettings() {
 
 function describeFirestoreSettings(settings: Record<string, unknown>) {
   return {
+    rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
+    rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
     cacheMode: FIRESTORE_CACHE_MODE,
     transportMode: FIRESTORE_TRANSPORT_MODE,
+    initializeFirestoreOptions: {
+      hasLocalCache: Boolean(settings.localCache),
+      experimentalAutoDetectLongPolling: settings.experimentalAutoDetectLongPolling === true,
+      experimentalForceLongPolling: settings.experimentalForceLongPolling === true,
+      useFetchStreams: settings.useFetchStreams ?? null,
+    },
     experimentalAutoDetectLongPolling: settings.experimentalAutoDetectLongPolling === true,
     experimentalForceLongPolling: settings.experimentalForceLongPolling === true,
     useFetchStreams: settings.useFetchStreams ?? null,
@@ -74,6 +87,8 @@ function logFirestoreInit(mode: string, details: Record<string, unknown> = {}) {
   if (!isBrowser) return;
   console.info('[Perf] firestore-init', {
     mode,
+    rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
+    rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
     cacheMode: FIRESTORE_CACHE_MODE,
     transportMode: FIRESTORE_TRANSPORT_MODE,
     browser: navigator.userAgent,
@@ -94,7 +109,10 @@ if (isBrowser) {
       globalThis.__spotlyFirestoreConfig = {
         cacheMode: FIRESTORE_CACHE_MODE,
         transportMode: FIRESTORE_TRANSPORT_MODE,
+        rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
+        rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
         initializedAt: Date.now(),
+        initializeFirestoreOptions: describeFirestoreSettings(firestoreSettings).initializeFirestoreOptions,
       };
       logFirestoreInit('initializeFirestore', describeFirestoreSettings(firestoreSettings));
       console.info('[Perf] firestore-cache-mode', {
@@ -107,9 +125,13 @@ if (isBrowser) {
       globalThis.__spotlyFirestoreConfig = {
         cacheMode: 'getFirestore-fallback',
         transportMode: FIRESTORE_TRANSPORT_MODE,
+        rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
+        rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
         initializedAt: Date.now(),
       };
       console.warn('[Perf] firestore-init-error', {
+        rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
+        rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
         cacheMode: FIRESTORE_CACHE_MODE,
         transportMode: FIRESTORE_TRANSPORT_MODE,
         errorCode: error?.code ?? null,
@@ -118,6 +140,8 @@ if (isBrowser) {
       });
       console.warn('[Perf] firestore-cache-mode', {
         mode: 'getFirestore-fallback',
+        rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
+        rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
         requestedCacheMode: FIRESTORE_CACHE_MODE,
         transportMode: FIRESTORE_TRANSPORT_MODE,
         browser: navigator.userAgent,
