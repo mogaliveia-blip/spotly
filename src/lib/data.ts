@@ -49,6 +49,9 @@ import {
 // --- MULTI-EVENT ENGINE ---
 
 export const DEFAULT_EVENT_ID = 'default-event';
+const FIRESTORE_CACHE_MODE = process.env.NEXT_PUBLIC_FIRESTORE_CACHE_MODE || 'persistent';
+const FIRESTORE_TRANSPORT_MODE = process.env.NEXT_PUBLIC_FIRESTORE_TRANSPORT_MODE || 'default';
+const poisPublicAttemptsByEvent = new Map<string, number>();
 
 function perfNow(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -66,6 +69,50 @@ function perfLog(label: string, startedAt: number, details: Record<string, unkno
   console.info(`[Perf] ${label}`, {
     durationMs: Math.round(perfNow() - startedAt),
     ...details,
+  });
+}
+
+function getRuntimeDiagnostics() {
+  const connection = typeof navigator !== 'undefined' ? (navigator as any).connection : null;
+
+  return {
+    now: Math.round(perfNow()),
+    online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+    visibilityState: typeof document !== 'undefined' ? document.visibilityState : null,
+    effectiveType: connection?.effectiveType ?? null,
+    downlink: connection?.downlink ?? null,
+    rtt: connection?.rtt ?? null,
+    cacheMode: FIRESTORE_CACHE_MODE,
+    transportMode: FIRESTORE_TRANSPORT_MODE,
+  };
+}
+
+function createRequestId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function nextPoisPublicAttempt(eventId: string): number {
+  const next = (poisPublicAttemptsByEvent.get(eventId) ?? 0) + 1;
+  poisPublicAttemptsByEvent.set(eventId, next);
+  return next;
+}
+
+function logFirestoreOperationError(
+  label: string,
+  startedAt: number,
+  details: Record<string, unknown>,
+  error: any
+) {
+  console.warn(`[Perf] ${label}`, {
+    durationMs: Math.round(perfNow() - startedAt),
+    ...getRuntimeDiagnostics(),
+    ...details,
+    errorCode: error?.code ?? null,
+    errorMessage: error?.message ?? null,
   });
 }
 
@@ -830,28 +877,129 @@ export async function fetchPois(eventId: string): Promise<POI[]> {
 }
 
 export async function fetchPoisLite(eventId: string): Promise<POILite[]> {
-  const startedAt = perfNow();
+  const requestId = createRequestId();
+  const attempt = nextPoisPublicAttempt(eventId);
+  const callStartedAt = perfNow();
   const colRef = collection(db, dbPaths.poisPublic(eventId))
+  const path = colRef.path
 
   const mapSnap = (snap: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) =>
     snap.docs.map((d) => ({ id: d.id, ...d.data() } as POILite))
 
+  console.info('[Perf] pois-public-call-start', {
+    requestId,
+    attempt,
+    eventId,
+    path,
+    ...getRuntimeDiagnostics(),
+  });
+
   try {
     const cacheStartedAt = perfNow();
-    const cacheSnap = await getDocsFromCache(colRef).catch(() => null)
-    perfLog('pois-public-cache', cacheStartedAt, {
+    console.info('[Perf] pois-public-cache-start', {
+      requestId,
+      attempt,
       eventId,
-      path: colRef.path,
-      cacheHit: !!cacheSnap && !cacheSnap.empty,
-      docsRead: cacheSnap?.docs.length ?? 0,
+      path,
+      ...getRuntimeDiagnostics(),
     });
+    const cacheSnap = await getDocsFromCache(colRef).catch((error: any) => {
+      logFirestoreOperationError('pois-public-cache-end', cacheStartedAt, {
+        requestId,
+        attempt,
+        eventId,
+        path,
+        source: 'cache',
+      }, error);
+      return null;
+    })
+
+    if (cacheSnap) {
+      console.info('[Perf] pois-public-cache-end', {
+        requestId,
+        attempt,
+        eventId,
+        path,
+        durationMs: Math.round(perfNow() - cacheStartedAt),
+        docsRead: cacheSnap.docs.length,
+        source: 'cache',
+        cacheHit: !cacheSnap.empty,
+        fromCache: cacheSnap.metadata.fromCache,
+        hasPendingWrites: cacheSnap.metadata.hasPendingWrites,
+        ...getRuntimeDiagnostics(),
+      });
+      perfLog('pois-public-cache', cacheStartedAt, {
+        requestId,
+        attempt,
+        eventId,
+        path,
+        cacheHit: !cacheSnap.empty,
+        docsRead: cacheSnap.docs.length,
+      });
+    }
 
     if (cacheSnap && !cacheSnap.empty) {
-      const cached = mapSnap(cacheSnap)
-      void getDocsFromServer(colRef).catch(() => {})
-      perfLog('pois-public-total', startedAt, {
+      const transformStartedAt = perfNow();
+      console.info('[Perf] pois-public-transform-start', {
+        requestId,
+        attempt,
         eventId,
-        path: colRef.path,
+        path,
+        source: 'cache',
+        docsRead: cacheSnap.docs.length,
+        ...getRuntimeDiagnostics(),
+      });
+      const cached = mapSnap(cacheSnap)
+      console.info('[Perf] pois-public-transform-end', {
+        requestId,
+        attempt,
+        eventId,
+        path,
+        source: 'cache',
+        durationMs: Math.round(perfNow() - transformStartedAt),
+        poiCount: cached.length,
+        payloadBytesApprox: estimatePayloadBytes(cached),
+        ...getRuntimeDiagnostics(),
+      });
+
+      const backgroundServerStartedAt = perfNow();
+      console.info('[Perf] pois-public-server-start', {
+        requestId,
+        attempt,
+        eventId,
+        path,
+        source: 'background-refresh',
+        ...getRuntimeDiagnostics(),
+      });
+      void getDocsFromServer(colRef)
+        .then((serverSnap) => {
+          console.info('[Perf] pois-public-server-resolved', {
+            requestId,
+            attempt,
+            eventId,
+            path,
+            source: 'background-refresh',
+            durationMs: Math.round(perfNow() - backgroundServerStartedAt),
+            docsRead: serverSnap.docs.length,
+            fromCache: serverSnap.metadata.fromCache,
+            hasPendingWrites: serverSnap.metadata.hasPendingWrites,
+            ...getRuntimeDiagnostics(),
+          });
+        })
+        .catch((error: any) => {
+          logFirestoreOperationError('pois-public-server-resolved', backgroundServerStartedAt, {
+            requestId,
+            attempt,
+            eventId,
+            path,
+            source: 'background-refresh',
+          }, error);
+        })
+      perfLog('pois-public-total', callStartedAt, {
+        requestId,
+        attempt,
+        eventId,
+        path,
         source: 'cache',
         firestoreReads: 1,
         docsRead: cacheSnap.docs.length,
@@ -859,43 +1007,121 @@ export async function fetchPoisLite(eventId: string): Promise<POILite[]> {
         payloadBytesApprox: estimatePayloadBytes(cached),
         backgroundServerRefresh: true,
       });
+      console.info('[Perf] pois-public-call-end', {
+        requestId,
+        attempt,
+        eventId,
+        path,
+        durationMs: Math.round(perfNow() - callStartedAt),
+        source: 'cache',
+        docsRead: cacheSnap.docs.length,
+        poiCount: cached.length,
+        ...getRuntimeDiagnostics(),
+      });
       return cached
     }
 
     const serverStartedAt = perfNow();
-    const serverSnap = await getDocsFromServer(colRef)
-    const pois = mapSnap(serverSnap)
-    perfLog('pois-public-server', serverStartedAt, {
+    console.info('[Perf] pois-public-server-start', {
+      requestId,
+      attempt,
       eventId,
-      path: colRef.path,
+      path,
+      source: 'server',
+      ...getRuntimeDiagnostics(),
+    });
+    const serverSnap = await getDocsFromServer(colRef)
+    console.info('[Perf] pois-public-server-resolved', {
+      requestId,
+      attempt,
+      eventId,
+      path,
+      source: 'server',
+      durationMs: Math.round(perfNow() - serverStartedAt),
+      docsRead: serverSnap.docs.length,
+      fromCache: serverSnap.metadata.fromCache,
+      hasPendingWrites: serverSnap.metadata.hasPendingWrites,
+      ...getRuntimeDiagnostics(),
+    });
+    const transformStartedAt = perfNow();
+    console.info('[Perf] pois-public-transform-start', {
+      requestId,
+      attempt,
+      eventId,
+      path,
+      source: 'server',
+      docsRead: serverSnap.docs.length,
+      ...getRuntimeDiagnostics(),
+    });
+    const pois = mapSnap(serverSnap)
+    console.info('[Perf] pois-public-transform-end', {
+      requestId,
+      attempt,
+      eventId,
+      path,
+      source: 'server',
+      durationMs: Math.round(perfNow() - transformStartedAt),
+      poiCount: pois.length,
+      payloadBytesApprox: estimatePayloadBytes(pois),
+      ...getRuntimeDiagnostics(),
+    });
+    perfLog('pois-public-server', serverStartedAt, {
+      requestId,
+      attempt,
+      eventId,
+      path,
       firestoreReads: 1,
       docsRead: serverSnap.docs.length,
       poiCount: pois.length,
       payloadBytesApprox: estimatePayloadBytes(pois),
     });
-    perfLog('pois-public-total', startedAt, {
+    perfLog('pois-public-total', callStartedAt, {
+      requestId,
+      attempt,
       eventId,
-      path: colRef.path,
+      path,
       source: 'server',
       firestoreReads: 2,
       docsRead: serverSnap.docs.length,
       poiCount: pois.length,
       payloadBytesApprox: estimatePayloadBytes(pois),
     });
+    console.info('[Perf] pois-public-call-end', {
+      requestId,
+      attempt,
+      eventId,
+      path,
+      durationMs: Math.round(perfNow() - callStartedAt),
+      source: 'server',
+      docsRead: serverSnap.docs.length,
+      poiCount: pois.length,
+      ...getRuntimeDiagnostics(),
+    });
     return pois
   } catch (e: any) {
     const fallbackStartedAt = perfNow();
+    logFirestoreOperationError('pois-public-call-end', callStartedAt, {
+      requestId,
+      attempt,
+      eventId,
+      path,
+      source: 'public-read-error',
+    }, e);
     const full = await fetchPois(eventId)
     perfLog('pois-private-fallback', fallbackStartedAt, {
+      requestId,
+      attempt,
       eventId,
       reasonCode: e?.code ?? null,
       reasonMessage: e?.message ?? null,
       poiCount: full.length,
       payloadBytesApprox: estimatePayloadBytes(full),
     });
-    perfLog('pois-public-total', startedAt, {
+    perfLog('pois-public-total', callStartedAt, {
+      requestId,
+      attempt,
       eventId,
-      path: colRef.path,
+      path,
       source: 'private-fallback',
       firestoreReads: 3,
       poiCount: full.length,
