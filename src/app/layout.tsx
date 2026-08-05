@@ -12,6 +12,9 @@ import { EventProvider } from '@/providers/event-provider'
 export const metadata: Metadata = {
   title: 'Spotly',
   description: "Votre guide pour les points d'intérêt de l'événement.",
+  icons: {
+    icon: '/icon/favicon.ico',
+  },
 }
 
 export default function RootLayout({

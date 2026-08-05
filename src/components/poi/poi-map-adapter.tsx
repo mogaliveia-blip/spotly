@@ -10,18 +10,13 @@ export function POIMapAdapter({
   onSelectPoi,
   pois,
   onCrash,
-  isListVisible,
-  mapsDiagnostics
+  isListVisible
 }: {
   selectedPoi: POILite | POI | null
   onSelectPoi: (poi: POILite | null) => void
   pois: POILite[]
   onCrash?: () => void
   isListVisible: boolean
-  mapsDiagnostics?: {
-    eventId: string
-    poisReadyAt: number | null
-  }
 }) {
   const [canLoadMap, setCanLoadMap] = useState(false)
 
@@ -48,7 +43,6 @@ export function POIMapAdapter({
         onSelectPoi={onSelectPoi as any}
         pois={pois as any}
         isListVisible={isListVisible}
-        mapsDiagnostics={mapsDiagnostics}
       />
     </div>
   )

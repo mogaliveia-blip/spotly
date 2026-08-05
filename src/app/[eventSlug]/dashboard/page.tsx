@@ -28,8 +28,6 @@ const defaultMarketingConfig: MarketingConfig = {
 }
 
 const SECONDARY_CONFIG_TIMEOUT_MS = 3000
-const MAPS_DIAGNOSTICS_ENABLED =
-  process.env.NEXT_PUBLIC_MAPS_DIAGNOSTICS?.trim().toLowerCase() === 'true'
 
 export default function DashboardPage() {
   const pathname = usePathname()
@@ -50,8 +48,6 @@ export default function DashboardPage() {
   const selectedPoiId = searchParams.get('poi')
   const categoryFilter = searchParams.get('category') || 'all'
   const fullPoiRequestSeqRef = useRef(0)
-  const mapsPoisReadyAtRef = useRef<number | null>(null)
-  const mapsPoisReadyEventIdRef = useRef<string | null>(null)
 
   const updateUrl = useCallback(
     (params: URLSearchParams) => {
@@ -209,28 +205,7 @@ export default function DashboardPage() {
     return pois.filter((p) => categoryFilter === 'all' || p.mainCategory === categoryFilter)
   }, [pois, categoryFilter])
 
-  useEffect(() => {
-    if (!MAPS_DIAGNOSTICS_ENABLED) return
-    if (eventLoading || !eventId || visiblePois.length === 0) return
-    if (mapsPoisReadyEventIdRef.current === eventId) return
-
-    const timestamp = performance.now()
-    mapsPoisReadyAtRef.current = timestamp
-    mapsPoisReadyEventIdRef.current = eventId
-    console.info('[Maps Diagnostic] pois-ready', {
-      eventId,
-      poiCount: visiblePois.length,
-      timestamp,
-    })
-  }, [eventId, eventLoading, visiblePois.length])
-
   const showHero = heroVisible && !user && marketingConfig?.heroEnabled
-  const mapsDiagnostics = MAPS_DIAGNOSTICS_ENABLED
-    ? {
-        eventId,
-        poisReadyAt: mapsPoisReadyEventIdRef.current === eventId ? mapsPoisReadyAtRef.current : null,
-      }
-    : undefined
 
   if (eventLoading) {
     return (
@@ -264,7 +239,6 @@ export default function DashboardPage() {
             pois={visiblePois}
             onCrash={() => setAppMode('map-fallback')}
             isListVisible={isListVisible}
-            mapsDiagnostics={mapsDiagnostics}
           />
         )}
 
