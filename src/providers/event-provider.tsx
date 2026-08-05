@@ -45,19 +45,6 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
 
     async function resolveEvent() {
-      const startedAt = performance.now();
-      const requestId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `event-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      console.info('[Perf] event-provider-start', {
-        requestId,
-        eventSlug: eventSlug ?? null,
-        pathname,
-        isPublicDashboard,
-        authLoading,
-        authStateKnown,
-        hasUser: !!user,
-      });
       // Si on est sur une route globale
       if (!eventSlug || ['dashboard', 'admin', 'login', 'signup', 'access-pending'].includes(eventSlug)) {
         if (isMounted) {
@@ -67,13 +54,6 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           setUserRole(null);
           setRoleLoading(false);
           setLoading(false);
-          console.info('[Perf] event-provider-ready', {
-            requestId,
-            durationMs: Math.round(performance.now() - startedAt),
-            routeType: 'global',
-            eventSlug: eventSlug ?? null,
-            eventId: DEFAULT_EVENT_ID,
-          });
         }
         return;
       }
@@ -84,26 +64,11 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         event?.slug === eventSlug &&
         event.status === 'published'
       ) {
-        console.info('[Perf] event-provider-public-resolve-skipped', {
-          requestId,
-          eventSlug,
-          eventId: event.id,
-          reason: 'published-event-already-resolved',
-          authLoading,
-          authStateKnown,
-          hasUser: !!user,
-        });
         return;
       }
 
       if (!isPublicDashboard && authLoading) {
         setLoading(true);
-        console.info('[Perf] event-provider-waiting-auth', {
-          eventSlug,
-          pathname,
-          authLoading,
-          isPublicDashboard,
-        });
         return;
       }
 
@@ -116,35 +81,16 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       try {
         const publicResolved = await fetchEventBySlug(eventSlug);
         let resolved = publicResolved;
-        let resolvedVia: 'public' | 'private-fallback' | 'not-found' = publicResolved ? 'public' : 'not-found';
 
         if (!publicResolved) {
           const canAttemptPrivateFallback = !!user || globalRole === 'owner';
           const shouldAttemptPrivateFallback = canAttemptPrivateFallback && (!isPublicDashboard || authStateKnown);
 
           if (shouldAttemptPrivateFallback) {
-            const fallbackStartedAt = performance.now();
             resolved = await fetchEventBySlug(eventSlug, {
               uid: user?.uid,
               isOwner: globalRole === 'owner',
               allowPrivateFallback: true,
-            });
-            resolvedVia = resolved ? 'private-fallback' : 'not-found';
-            console.info('[Perf] event-private-fallback', {
-              durationMs: Math.round(performance.now() - fallbackStartedAt),
-              eventSlug,
-              found: !!resolved,
-              isPublicDashboard,
-              authStateKnown,
-            });
-          } else {
-            console.info('[Perf] event-user-membership-fallback-skipped', {
-              eventSlug,
-              isPublicDashboard,
-              authLoading,
-              authStateKnown,
-              hasUser: !!user,
-              isOwner: globalRole === 'owner',
             });
           }
         }
@@ -158,16 +104,6 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
             if (publicResolved && isPublicDashboard) {
               setResolvedSlug(eventSlug);
               setLoading(false);
-              console.info('[Perf] event-provider-ready', {
-                requestId,
-                durationMs: Math.round(performance.now() - startedAt),
-                routeType: 'event',
-                eventSlug,
-                eventId: resolved.id,
-                found: true,
-                source: 'public',
-                membershipBlocking: false,
-              });
             }
 
           } else {
@@ -177,35 +113,20 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           if (!(publicResolved && isPublicDashboard)) {
             setResolvedSlug(eventSlug);
             setLoading(false);
-            console.info('[Perf] event-provider-ready', {
-              requestId,
-              durationMs: Math.round(performance.now() - startedAt),
-              routeType: 'event',
-              eventSlug,
-              eventId: resolved?.id ?? DEFAULT_EVENT_ID,
-              found: !!resolved,
-              source: resolvedVia,
-              authDependent: resolvedVia === 'private-fallback',
-              membershipBlocking: resolvedVia === 'private-fallback',
-            });
           }
         }
       } catch (error) {
+        console.error('[EventProvider] event resolution failed', {
+          eventSlug,
+          errorCode: (error as any)?.code ?? null,
+          errorMessage: (error as any)?.message ?? null,
+        });
         if (isMounted) {
           setInternalEventId(DEFAULT_EVENT_ID);
           setEvent(null);
           setResolvedSlug(eventSlug);
           setRoleLoading(false);
           setLoading(false);
-          console.info('[Perf] event-provider-ready', {
-            requestId,
-            durationMs: Math.round(performance.now() - startedAt),
-            routeType: 'event',
-            eventSlug,
-            eventId: DEFAULT_EVENT_ID,
-            found: false,
-            source: 'error',
-          });
         }
       }
     }
@@ -240,18 +161,10 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     const resolvedUser = user;
 
     async function resolveMembershipRole() {
-      const memberStartedAt = performance.now();
       setRoleLoading(true);
 
       try {
         const memberDoc = await getDoc(doc(db, `events/${resolvedEvent.id}/members`, resolvedUser.uid));
-        console.info('[Perf] event-member-role', {
-          durationMs: Math.round(performance.now() - memberStartedAt),
-          eventId: resolvedEvent.id,
-          uid: resolvedUser.uid,
-          docsRead: memberDoc.exists() ? 1 : 0,
-          blockingPublicResolution: false,
-        });
 
         if (!isMounted) return;
 
@@ -263,13 +176,10 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           setUserRole(null);
         }
       } catch (error: any) {
-        console.warn('[Perf] event-member-role-error', {
-          durationMs: Math.round(performance.now() - memberStartedAt),
+        console.error('[EventProvider] member role fetch failed', {
           eventId: resolvedEvent.id,
-          uid: resolvedUser.uid,
           errorCode: error?.code ?? null,
           errorMessage: error?.message ?? null,
-          blockingPublicResolution: false,
         });
 
         if (isMounted) {

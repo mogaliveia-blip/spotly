@@ -2,7 +2,7 @@
 
 import type { POI, POILite } from '@/lib/types';
 import { Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { User, Crosshair, MapPin } from 'lucide-react';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
@@ -94,18 +94,6 @@ function MapController({
   const map = useMap();
   const isMobile = useIsMobile();
   const { toast } = useToast();
-  const renderCountRef = useRef(0);
-  renderCountRef.current += 1;
-
-  useEffect(() => {
-    console.info('[Perf] map-controller-render', {
-      renderCount: renderCountRef.current,
-      poiCount: pois.length,
-      selectedPoiId: selectedPoi?.id ?? null,
-      hasUserLocation: !!userLocation,
-      isListVisible,
-    });
-  });
 
   useEffect(() => {
     if (selectedPoi && map) {
@@ -160,8 +148,7 @@ function MapController({
   };
 
   const poiMarkers = useMemo(() => {
-    const startedAt = performance.now();
-    const markers = pois.map((poi) => {
+    return pois.map((poi) => {
       const isSelected = selectedPoi?.id === poi.id;
       const sponsorIsActive = isSponsorActive(poi as any);
       let colorClass = categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
@@ -181,15 +168,6 @@ function MapController({
         </AdvancedMarker>
       );
     });
-
-    console.info('[Perf] markers-render', {
-      durationMs: Math.round(performance.now() - startedAt),
-      poiCount: pois.length,
-      markerCount: markers.length,
-      selectedPoiId: selectedPoi?.id ?? null,
-    });
-
-    return markers;
   }, [pois, selectedPoi, isMobile, onSelectPoi]);
 
   return (
@@ -237,45 +215,8 @@ export function POIMap({
   isListVisible: boolean;
 }) {
   const { userLocation, loading: geoLoading } = useGeolocation();
-  const renderCountRef = useRef(0);
-  const mapMountedAtRef = useRef<number | null>(null);
-  const firstUsableRequestIdRef = useRef<string | null>(null);
-  renderCountRef.current += 1;
 
   const defaultCenter = userLocation || (pois.length > 0 ? pois[0].location : { lat: -21.3393, lng: 55.4781 });
-
-  useEffect(() => {
-    console.info('[Perf] poi-map-render', {
-      renderCount: renderCountRef.current,
-      poiCount: pois.length,
-      selectedPoiId: selectedPoi?.id ?? null,
-      geoLoading,
-      hasUserLocation: !!userLocation,
-    });
-  });
-
-  useEffect(() => {
-    if (mapMountedAtRef.current === null && pois.length > 0) {
-      mapMountedAtRef.current = performance.now();
-      firstUsableRequestIdRef.current = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `first-ui-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      console.info('[Perf] first-usable-ui-start', {
-        requestId: firstUsableRequestIdRef.current,
-        startedAt: Math.round(mapMountedAtRef.current),
-        poiCount: pois.length,
-      });
-      window.requestAnimationFrame(() => {
-        console.info('[Perf] first-usable-ui-ready', {
-          requestId: firstUsableRequestIdRef.current,
-          durationMs: mapMountedAtRef.current ? Math.round(performance.now() - mapMountedAtRef.current) : null,
-          poiCount: pois.length,
-          markerInputCount: pois.length,
-          hasUserLocation: !!userLocation,
-        });
-      });
-    }
-  }, [pois.length, userLocation]);
 
   if (geoLoading && pois.length === 0) {
     return <Skeleton className="w-full h-full" />;

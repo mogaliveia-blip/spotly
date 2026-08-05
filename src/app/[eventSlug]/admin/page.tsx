@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
-import { useParams, usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   fetchAppConfig,
   updateAppConfig,
@@ -412,50 +412,20 @@ function MarketingConfigCard() {
 }
 
 export default function AdminPage() {
-  const { firebaseUser, role, loading: authLoading, authStateKnown, profileLoading, isApproved } = useAuth();
-  const { event, eventId, loading: eventLoading, userRole, roleLoading } = useEvent();
-  const params = useParams();
-  const pathname = usePathname();
+  const { firebaseUser, role, loading: authLoading, profileLoading } = useAuth();
+  const { event, loading: eventLoading, userRole, roleLoading } = useEvent();
   const router = useRouter();
-  const eventSlug = params.eventSlug as string;
 
   // Autorisation : Admin local ou Owner global
   const isAuthorized = role === 'owner' || userRole === 'admin';
   const authOrProfileLoading = authLoading || (!!firebaseUser && profileLoading);
   const accessLoading = authOrProfileLoading || eventLoading || roleLoading;
-  const loadingReason = authLoading
-    ? 'authLoading'
-    : firebaseUser && profileLoading
-      ? 'profileLoading'
-      : eventLoading
-        ? 'eventLoading'
-        : roleLoading
-          ? 'eventRoleLoading'
-          : null;
 
   useEffect(() => {
-    console.info('[Admin Route Diagnostic]', {
-      pathname,
-      uidPresent: !!firebaseUser,
-      authLoading,
-      authStateKnown,
-      profileLoading,
-      globalRole: role,
-      isApproved,
-      eventSlug,
-      eventId,
-      eventLoading,
-      eventStatus: event?.status ?? null,
-      userRole,
-      membershipLoading: roleLoading,
-      accessAllowed: isAuthorized,
-      loadingReason,
-    });
-
     if (!accessLoading && !isAuthorized) {
         router.replace('/dashboard');
     }
-  }, [accessLoading, authLoading, authStateKnown, event, eventId, eventLoading, eventSlug, firebaseUser, isApproved, isAuthorized, loadingReason, pathname, profileLoading, role, roleLoading, router, userRole]);
+  }, [accessLoading, isAuthorized, router]);
 
   if (accessLoading) return <div className="p-12 text-center text-muted-foreground animate-pulse">Chargement de l'administration...</div>;
   if (!isAuthorized) return null;

@@ -3,7 +3,6 @@
 import { AppLayout } from "@/components/layout/app-layout";
 import { useAuth } from '@/hooks/use-auth-user';
 import { useParams } from 'next/navigation';
-import { useEffect, useRef } from 'react';
 import { Mountain, Clock, Calendar } from 'lucide-react';
 import { useEvent } from '@/providers/event-provider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,53 +14,10 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { firebaseUser, role, loading: authLoading, profileLoading } = useAuth();
-  const { eventId, event, loading: eventLoading, userRole, roleLoading } = useEvent();
+  const { firebaseUser, role, profileLoading } = useAuth();
+  const { event, loading: eventLoading, userRole, roleLoading } = useEvent();
   const params = useParams();
   const eventSlug = params.eventSlug as string;
-  const startedAtRef = useRef<number | null>(null);
-  const readyLoggedRef = useRef(false);
-
-  if (startedAtRef.current === null && typeof performance !== 'undefined') {
-    startedAtRef.current = performance.now();
-    console.time('[Perf] dashboard-layout')
-  }
-
-  useEffect(() => {
-    if (eventLoading) {
-      console.info('[Perf] dashboard-layout-waiting', {
-        eventLoading,
-        authLoading,
-        eventId,
-        waitingFor: ['event'],
-        configMainBlocking: false,
-      });
-      return;
-    }
-
-    if (readyLoggedRef.current) return;
-    readyLoggedRef.current = true;
-    console.info('[Perf] dashboard-layout-ready', {
-      durationMs: startedAtRef.current ? Math.round(performance.now() - startedAtRef.current) : null,
-      eventId,
-      source: 'event-status',
-      authLoading,
-      eventLoading,
-      configMainBlocking: false,
-    });
-    console.timeEnd('[Perf] dashboard-layout')
-  }, [authLoading, eventId, eventLoading]);
-
-  if (typeof performance !== 'undefined') {
-    console.info('[Perf] dashboard-shell-visible', {
-      eventId,
-      eventLoading,
-      authLoading,
-      hasEvent: !!event,
-      eventStatus: event?.status ?? null,
-      configMainBlocking: false,
-    });
-  }
 
   if (eventLoading) {
     return (

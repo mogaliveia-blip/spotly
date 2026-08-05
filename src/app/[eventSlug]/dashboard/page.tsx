@@ -14,7 +14,6 @@ import { useGeolocation } from '@/providers/geolocation-provider'
 import { Button } from '@/components/ui/button'
 import { List, Loader2 } from 'lucide-react'
 import { MobilePOIBottomSheet } from '@/components/poi/mobile-poi-bottom-sheet'
-import { useIsMobile } from '@/hooks/use-mobile'
 import { useEvent } from '@/providers/event-provider'
 
 type AppMode = 'normal' | 'map-fallback' | 'static-fallback'
@@ -31,11 +30,6 @@ const defaultMarketingConfig: MarketingConfig = {
 const SECONDARY_CONFIG_TIMEOUT_MS = 3000
 
 export default function DashboardPage() {
-  const pageStartedAtRef = useRef<number | null>(null)
-  const firstPoisVisibleRef = useRef(false)
-  const firstPoisReadyRef = useRef(false)
-  const renderCountRef = useRef(0)
-
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
@@ -43,10 +37,8 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const { userLocation } = useGeolocation()
   const { eventId, loading: eventLoading } = useEvent()
-  const isMobile = useIsMobile()
 
   const [pois, setPois] = useState<POILite[]>([])
-  const [poisLoaded, setPoisLoaded] = useState(false)
   const [marketingConfig, setMarketingConfig] = useState<MarketingConfig | null>(null)
   const [activePoi, setActivePoi] = useState<POILite | POI | null>(null)
   const [heroVisible, setHeroVisible] = useState(false)
@@ -55,30 +47,7 @@ export default function DashboardPage() {
 
   const selectedPoiId = searchParams.get('poi')
   const categoryFilter = searchParams.get('category') || 'all'
-  const requestIdRef = useRef(0)
-  renderCountRef.current += 1
-
-  if (pageStartedAtRef.current === null && typeof performance !== 'undefined') {
-    pageStartedAtRef.current = performance.now()
-    console.info('[Perf] dashboard-total-start', {
-      startedAt: Math.round(pageStartedAtRef.current),
-      eventId,
-      pathname,
-    })
-  }
-
-  useEffect(() => {
-    console.info('[Perf] dashboard-render', {
-      renderCount: renderCountRef.current,
-      eventId,
-      eventLoading,
-      poiCount: pois.length,
-      activePoiId: activePoi?.id ?? null,
-      appMode,
-      isListVisible,
-      hasUserLocation: !!userLocation,
-    })
-  })
+  const fullPoiRequestSeqRef = useRef(0)
 
   const updateUrl = useCallback(
     (params: URLSearchParams) => {
@@ -89,34 +58,14 @@ export default function DashboardPage() {
   )
 
   const loadFullPoi = useCallback(async (poiId: string) => {
-    const requestId = ++requestIdRef.current
-    const startedAt = performance.now()
-    console.info('[Perf] poi-private-click-start', {
-      requestId,
-      poiId,
-      eventId,
-      startedAt: Math.round(startedAt),
-    })
+    const requestSeq = ++fullPoiRequestSeqRef.current
     try {
       const full = await fetchPoiById(poiId, eventId)
       if (!full) return
-      if (requestId !== requestIdRef.current) return
+      if (requestSeq !== fullPoiRequestSeqRef.current) return
       setActivePoi(full)
-      console.info('[Perf] poi-private-click-ready', {
-        durationMs: Math.round(performance.now() - startedAt),
-        poiId,
-        eventId,
-        payloadBytesApprox: new Blob([JSON.stringify(full)]).size,
-      })
     } catch {
       // Keep lite if full fetch fails
-    } finally {
-      console.info('[Perf] poi-private-click-end', {
-        requestId,
-        poiId,
-        eventId,
-        durationMs: Math.round(performance.now() - startedAt),
-      })
     }
   }, [eventId])
 
@@ -141,60 +90,30 @@ export default function DashboardPage() {
   useEffect(() => {
     if (eventLoading) {
       setPois([]);
-      setPoisLoaded(false);
       setActivePoi(null);
       setMarketingConfig(null);
       setHeroVisible(false);
-      firstPoisVisibleRef.current = false;
-      firstPoisReadyRef.current = false;
       return;
     }
 
     let isMounted = true;
 
     async function init() {
-      const initStartedAt = performance.now()
-      const initRequestId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `dashboard-init-${Date.now()}-${Math.random().toString(36).slice(2)}`
-      console.info('[Perf] dashboard-init-start', {
-        requestId: initRequestId,
-        eventId,
-        startedAt: Math.round(initStartedAt),
-      })
       try {
         const poiData = await fetchPoisLite(eventId)
         
         if (isMounted) {
           setPois(poiData)
-          setPoisLoaded(true)
-          console.info('[Perf] dashboard-init-ready', {
-            requestId: initRequestId,
-            durationMs: Math.round(performance.now() - initStartedAt),
-            eventId,
-            poiCount: poiData.length,
-            payloadBytesApprox: new Blob([JSON.stringify({ poiData })]).size,
-            criticalSteps: ['pois-public'],
-            nonblockingSteps: ['marketing-config'],
-            removedDuplicateSteps: ['app-config'],
-          })
         }
       } catch (error) {
         if (isMounted) {
           setAppMode('static-fallback')
-          setPoisLoaded(true)
           toast({
             title: 'Erreur',
             description: 'Impossible de charger les données de l\'événement.',
             variant: 'destructive'
           })
         }
-      } finally {
-        console.info('[Perf] dashboard-init-end', {
-          requestId: initRequestId,
-          eventId,
-          durationMs: Math.round(performance.now() - initStartedAt),
-        })
       }
     }
     init()
@@ -209,17 +128,10 @@ export default function DashboardPage() {
 
     let isMounted = true
     let settled = false
-    const startedAt = performance.now()
     const timeoutId = window.setTimeout(() => {
       if (!isMounted || settled) return
       setMarketingConfig(defaultMarketingConfig)
-      console.warn('[Perf] config-timeout-fallback', {
-        durationMs: Math.round(performance.now() - startedAt),
-        eventId,
-        config: 'marketing',
-        timeoutMs: SECONDARY_CONFIG_TIMEOUT_MS,
-        source: 'fallback-default',
-      })
+      console.warn('[Marketing Config] Timeout, fallback applied')
     }, SECONDARY_CONFIG_TIMEOUT_MS)
 
     fetchMarketingConfig(eventId)
@@ -228,22 +140,14 @@ export default function DashboardPage() {
         settled = true
         window.clearTimeout(timeoutId)
         setMarketingConfig(marketing)
-        console.info('[Perf] marketing-nonblocking-ready', {
-          durationMs: Math.round(performance.now() - startedAt),
-          eventId,
-          source: 'firestore',
-          heroEnabled: marketing.heroEnabled,
-        })
       })
       .catch((error: any) => {
         if (!isMounted) return
         settled = true
         window.clearTimeout(timeoutId)
         setMarketingConfig(defaultMarketingConfig)
-        console.warn('[Perf] marketing-nonblocking-ready', {
-          durationMs: Math.round(performance.now() - startedAt),
+        console.warn('[Marketing Config] Read failed, fallback applied', {
           eventId,
-          source: 'fallback-default',
           errorCode: error?.code ?? null,
           errorMessage: error?.message ?? null,
         })
@@ -300,41 +204,6 @@ export default function DashboardPage() {
   const visiblePois = useMemo(() => {
     return pois.filter((p) => categoryFilter === 'all' || p.mainCategory === categoryFilter)
   }, [pois, categoryFilter])
-
-  useEffect(() => {
-    if (firstPoisReadyRef.current || eventLoading || !poisLoaded) return
-    firstPoisReadyRef.current = true
-    if (pois.length === 0) {
-      window.requestAnimationFrame(() => {
-        console.info('[Perf] pois-empty-ui', {
-          durationMs: pageStartedAtRef.current ? Math.round(performance.now() - pageStartedAtRef.current) : null,
-          eventId,
-          poiCount: 0,
-          categoryFilter,
-        })
-      })
-      return
-    }
-    console.info('[Perf] pois-ready-ui', {
-      durationMs: pageStartedAtRef.current ? Math.round(performance.now() - pageStartedAtRef.current) : null,
-      eventId,
-      poiCount: pois.length,
-      categoryFilter,
-    })
-  }, [pois.length, poisLoaded, eventId, categoryFilter, eventLoading])
-
-  useEffect(() => {
-    if (firstPoisVisibleRef.current || visiblePois.length === 0) return
-    firstPoisVisibleRef.current = true
-    window.requestAnimationFrame(() => {
-      console.info('[Perf] pois-visible-ui', {
-        durationMs: pageStartedAtRef.current ? Math.round(performance.now() - pageStartedAtRef.current) : null,
-        eventId,
-        poiCount: visiblePois.length,
-        categoryFilter,
-      })
-    })
-  }, [visiblePois.length, eventId, categoryFilter])
 
   const showHero = heroVisible && !user && marketingConfig?.heroEnabled
 

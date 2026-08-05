@@ -34,7 +34,6 @@ function isFullPoi(poi: POIAny): poi is POI {
 }
 
 export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
-  const detailsStartedAtRef = useRef<number | null>(null);
   const [poi, setPoi] = useState<POIAny>(initialPoi);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
@@ -46,10 +45,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   const { userLocation } = useGeolocation();
   const { eventId } = useEvent();
   const lastPoiIdRef = useRef<string | null>(null);
-
-  if (detailsStartedAtRef.current === null && typeof performance !== 'undefined') {
-    detailsStartedAtRef.current = performance.now();
-  }
 
   const full = isFullPoi(poi);
 
@@ -65,17 +60,10 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   useEffect(() => {
     let isMounted = true;
     let settled = false;
-    const startedAt = performance.now();
     const timeoutId = window.setTimeout(() => {
       if (!isMounted || settled) return;
       setReviewsEnabled(true);
-      console.warn('[Perf] config-timeout-fallback', {
-        durationMs: Math.round(performance.now() - startedAt),
-        eventId,
-        config: 'reviews',
-        timeoutMs: REVIEWS_CONFIG_TIMEOUT_MS,
-        source: 'fallback-default',
-      });
+      console.warn('[Reviews Config] Timeout, fallback applied');
     }, REVIEWS_CONFIG_TIMEOUT_MS);
 
     fetchAppConfig(eventId)
@@ -89,11 +77,8 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
         if (!isMounted) return;
         settled = true;
         window.clearTimeout(timeoutId);
-        console.warn('[Perf] config-timeout-fallback', {
-          durationMs: Math.round(performance.now() - startedAt),
+        console.warn('[Reviews Config] Read failed, fallback applied', {
           eventId,
-          config: 'reviews',
-          source: 'error-fallback',
           errorCode: error?.code ?? null,
           errorMessage: error?.message ?? null,
         });
@@ -148,14 +133,6 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
             className="object-cover cursor-zoom-in transition-transform hover:scale-105 duration-500"
             onClick={() => setSelectedIndex(0)}
             priority
-            onLoad={() => {
-              console.info('[Perf] image-poi-header', {
-                durationMs: detailsStartedAtRef.current ? Math.round(performance.now() - detailsStartedAtRef.current) : null,
-                poiId: poi.id,
-                hasFullPoi: full,
-                urlLength: poi.headerPhotoUrl?.length ?? 0,
-              });
-            }}
           />
         ) : (
           <Skeleton className="w-full h-full" />

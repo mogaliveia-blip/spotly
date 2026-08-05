@@ -49,76 +49,6 @@ import {
 // --- MULTI-EVENT ENGINE ---
 
 export const DEFAULT_EVENT_ID = 'default-event';
-const RAW_FIRESTORE_CACHE_MODE = process.env.NEXT_PUBLIC_FIRESTORE_CACHE_MODE;
-const RAW_FIRESTORE_TRANSPORT_MODE = process.env.NEXT_PUBLIC_FIRESTORE_TRANSPORT_MODE;
-const FIRESTORE_CACHE_MODE = (RAW_FIRESTORE_CACHE_MODE || 'persistent').trim().toLowerCase();
-const FIRESTORE_TRANSPORT_MODE = (RAW_FIRESTORE_TRANSPORT_MODE || 'default').trim().toLowerCase();
-const poisPublicAttemptsByEvent = new Map<string, number>();
-
-function perfNow(): number {
-  return typeof performance !== 'undefined' ? performance.now() : Date.now();
-}
-
-function estimatePayloadBytes(value: unknown): number {
-  try {
-    return new Blob([JSON.stringify(value)]).size;
-  } catch {
-    return 0;
-  }
-}
-
-function perfLog(label: string, startedAt: number, details: Record<string, unknown> = {}) {
-  console.info(`[Perf] ${label}`, {
-    durationMs: Math.round(perfNow() - startedAt),
-    ...details,
-  });
-}
-
-function getRuntimeDiagnostics() {
-  const connection = typeof navigator !== 'undefined' ? (navigator as any).connection : null;
-
-  return {
-    now: Math.round(perfNow()),
-    online: typeof navigator !== 'undefined' ? navigator.onLine : null,
-    visibilityState: typeof document !== 'undefined' ? document.visibilityState : null,
-    effectiveType: connection?.effectiveType ?? null,
-    downlink: connection?.downlink ?? null,
-    rtt: connection?.rtt ?? null,
-    rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
-    rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
-    cacheMode: FIRESTORE_CACHE_MODE,
-    transportMode: FIRESTORE_TRANSPORT_MODE,
-  };
-}
-
-function createRequestId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-
-  return `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function nextPoisPublicAttempt(eventId: string): number {
-  const next = (poisPublicAttemptsByEvent.get(eventId) ?? 0) + 1;
-  poisPublicAttemptsByEvent.set(eventId, next);
-  return next;
-}
-
-function logFirestoreOperationError(
-  label: string,
-  startedAt: number,
-  details: Record<string, unknown>,
-  error: any
-) {
-  console.warn(`[Perf] ${label}`, {
-    durationMs: Math.round(perfNow() - startedAt),
-    ...getRuntimeDiagnostics(),
-    ...details,
-    errorCode: error?.code ?? null,
-    errorMessage: error?.message ?? null,
-  });
-}
 
 /**
  * Résout un événement à partir de son slug URL.
@@ -129,21 +59,12 @@ export async function fetchEventBySlug(
 ): Promise<AppEvent | null> {
   if (!slug || slug === 'default' || slug === 'dashboard' || slug === 'admin') return null;
   
-  const startedAt = perfNow();
   const normalizedSlug = slug.toLowerCase().trim();
   
   try {
     const eventsRef = collection(db, 'events');
     const q = query(eventsRef, where('slug', '==', normalizedSlug), where('status', '==', 'published'), limit(1));
-    const publicQueryStartedAt = perfNow();
     const snap = await getDocsFromServer(q);
-    console.info('[Perf] event-public-query', {
-      durationMs: Math.round(perfNow() - publicQueryStartedAt),
-      docsRead: snap.docs.length,
-      empty: snap.empty,
-      slug: normalizedSlug,
-      source: 'server',
-    });
     
     if (!snap.empty) {
       const d = snap.docs[0];
@@ -156,26 +77,12 @@ export async function fetchEventBySlug(
         startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
         endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
       } as AppEvent;
-      perfLog('event', startedAt, {
-        source: 'published-query',
-        slug: normalizedSlug,
-        eventId: event.id,
-        firestoreReads: 1,
-        docsRead: snap.docs.length,
-        payloadBytesApprox: estimatePayloadBytes(event),
-      });
       return event;
     }
 
     if (options.isOwner && options.allowPrivateFallback) {
-      const ownerStartedAt = perfNow();
       const ownerQuery = query(eventsRef, where('slug', '==', normalizedSlug), limit(1));
       const ownerSnap = await getDocs(ownerQuery);
-      perfLog('event-owner-query', ownerStartedAt, {
-        docsRead: ownerSnap.docs.length,
-        empty: ownerSnap.empty,
-        slug: normalizedSlug,
-      });
 
       if (!ownerSnap.empty) {
         const d = ownerSnap.docs[0];
@@ -188,49 +95,19 @@ export async function fetchEventBySlug(
           startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
           endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
         } as AppEvent;
-        perfLog('event', startedAt, {
-          source: 'owner-query',
-          slug: normalizedSlug,
-          eventId: event.id,
-          firestoreReads: 2,
-          docsRead: snap.docs.length + ownerSnap.docs.length,
-          payloadBytesApprox: estimatePayloadBytes(event),
-        });
         return event;
       }
     }
 
     if (options.uid && options.allowPrivateFallback) {
-      const userEventsStartedAt = perfNow();
       const userEvents = await fetchUserEvents(options.uid);
       const event = userEvents.find((event) => event.slug === normalizedSlug) ?? null;
-      perfLog('event-user-membership-fallback', userEventsStartedAt, {
-        eventCount: userEvents.length,
-        found: !!event,
-        slug: normalizedSlug,
-      });
-      perfLog('event', startedAt, {
-        source: 'membership-fallback',
-        slug: normalizedSlug,
-        eventId: event?.id ?? null,
-      });
       return event;
     }
 
-    perfLog('event', startedAt, {
-      source: 'not-found',
-      slug: normalizedSlug,
-      firestoreReads: 1,
-      docsRead: snap.docs.length,
-      privateFallbackSkipped: !options.allowPrivateFallback,
-    });
     return null;
   } catch (error) {
     console.error(`[Data] Erreur lors de la résolution du slug ${slug}:`, error);
-    perfLog('event', startedAt, {
-      source: 'error',
-      slug: normalizedSlug,
-    });
     return null;
   }
 }
@@ -247,10 +124,12 @@ export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRo
     try {
       membersSnap = await getDocsFromServer(membersQuery);
     } catch (e: any) {
-      console.error('[Data] fetchUserEvents members collectionGroup server query failed');
-      console.error('[Data] Firestore raw error code:', e?.code);
-      console.error('[Data] Firestore raw error message:', e?.message);
-      console.error('[Data] Firestore raw error object:', e);
+      console.error('[Data] fetchUserEvents members collectionGroup server query failed', {
+        operation: 'fetchUserEvents',
+        path: '{path}/members/{uid}',
+        code: e?.code ?? null,
+        message: e?.message ?? null,
+      });
 
       if (e?.code !== 'unavailable') {
         throw e;
@@ -648,7 +527,7 @@ export async function fetchEventMembers(eventId: string): Promise<EventMemberWit
       } as EventMemberWithProfile;
     });
   } catch (error: any) {
-    console.warn('[Admin Firestore Error]', {
+    console.error('[Admin Firestore Error]', {
       operation: 'fetchEventMembers',
       path: `events/${eventId}/members`,
       code: error?.code ?? null,
@@ -695,7 +574,6 @@ export async function removeEventMember(eventId: string, uid: string): Promise<v
 // --- CONFIG FUNCTIONS ---
 
 export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
-  const startedAt = perfNow();
   const path = dbPaths.config(eventId);
   const configPath = `${path}/main`;
 
@@ -704,20 +582,10 @@ export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
     const configSnap = await getDoc(configRef)
     
     if (configSnap.exists()) {
-      const config = configSnap.data() as AppConfig;
-      perfLog('config', startedAt, {
-        eventId,
-        path: configRef.path,
-        source: 'firestore',
-        firestoreReads: 1,
-        docsRead: 1,
-        payloadBytesApprox: estimatePayloadBytes(config),
-      });
-      return config;
+      return configSnap.data() as AppConfig;
     }
   } catch (e: any) {
-    console.warn('[Perf] config-error-fallback', {
-      durationMs: Math.round(perfNow() - startedAt),
+    console.warn('[Config] Read failed, fallback applied', {
       eventId,
       path: configPath,
       errorCode: e?.code ?? null,
@@ -725,16 +593,7 @@ export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
     });
   }
   
-  const fallback = { isLandingPageActive: true, festivalMode: false, reviewsEnabled: true };
-  perfLog('config', startedAt, {
-    eventId,
-    path: configPath,
-    source: 'fallback-default',
-    firestoreReads: 1,
-    docsRead: 0,
-    payloadBytesApprox: estimatePayloadBytes(fallback),
-  });
-  return fallback
+  return { isLandingPageActive: true, festivalMode: false, reviewsEnabled: true }
 }
 
 export async function updateAppConfig(config: Partial<AppConfig>, eventId: string): Promise<void> {
@@ -749,26 +608,15 @@ export async function updateAppConfig(config: Partial<AppConfig>, eventId: strin
 }
 
 export async function fetchMarketingConfig(eventId: string): Promise<MarketingConfig> {
-  const startedAt = perfNow();
   const path = `${dbPaths.config(eventId)}/marketing`;
   try {
     const configRef = doc(db, dbPaths.config(eventId), 'marketing')
     const configSnap = await getDoc(configRef)
     if (configSnap.exists()) {
-      const config = configSnap.data() as MarketingConfig
-      perfLog('marketing-config', startedAt, {
-        eventId,
-        path: configRef.path,
-        source: 'firestore',
-        firestoreReads: 1,
-        docsRead: 1,
-        payloadBytesApprox: estimatePayloadBytes(config),
-      });
-      return config
+      return configSnap.data() as MarketingConfig
     }
   } catch (e: any) {
-    console.warn('[Perf] marketing-config-error-fallback', {
-      durationMs: Math.round(perfNow() - startedAt),
+    console.warn('[Marketing Config] Read failed, fallback applied', {
       eventId,
       path,
       errorCode: e?.code ?? null,
@@ -783,14 +631,6 @@ export async function fetchMarketingConfig(eventId: string): Promise<MarketingCo
     heroCtaText: '',
     heroCtaMode: 'none'
   }
-  perfLog('marketing-config', startedAt, {
-    eventId,
-    path,
-    source: 'fallback-default',
-    firestoreReads: 1,
-    docsRead: 0,
-    payloadBytesApprox: estimatePayloadBytes(fallback),
-  });
   return fallback
 }
 
@@ -859,318 +699,70 @@ export async function updateUserApproval(uid: string, isApproved: boolean): Prom
 }
 
 export async function fetchPois(eventId: string): Promise<POI[]> {
-  const startedAt = perfNow();
   try {
     const poiCollection = collection(db, dbPaths.pois(eventId))
     const poiSnapshot = await getDocs(poiCollection)
-    const pois = poiSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as POI))
-    perfLog('pois-private', startedAt, {
+    return poiSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as POI))
+  } catch (error: any) {
+    console.error('[Data] fetchPois failed', {
       eventId,
-      path: poiCollection.path,
-      firestoreReads: 1,
-      docsRead: poiSnapshot.docs.length,
-      poiCount: pois.length,
-      payloadBytesApprox: estimatePayloadBytes(pois),
-    });
-    return pois
-  } catch (error) {
-    perfLog('pois-private', startedAt, {
-      eventId,
-      source: 'error',
-      firestoreReads: 1,
-      docsRead: 0,
-      poiCount: 0,
-    });
+      code: error?.code ?? null,
+      message: error?.message ?? null,
+    })
     return []
   }
 }
 
 export async function fetchPoisLite(eventId: string): Promise<POILite[]> {
-  const requestId = createRequestId();
-  const attempt = nextPoisPublicAttempt(eventId);
-  const callStartedAt = perfNow();
   const colRef = collection(db, dbPaths.poisPublic(eventId))
-  const path = colRef.path
 
   const mapSnap = (snap: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) =>
     snap.docs.map((d) => ({ id: d.id, ...d.data() } as POILite))
 
-  console.info('[Perf] pois-public-call-start', {
-    requestId,
-    attempt,
-    eventId,
-    path,
-    ...getRuntimeDiagnostics(),
-  });
-
   try {
-    const cacheStartedAt = perfNow();
-    console.info('[Perf] pois-public-cache-start', {
-      requestId,
-      attempt,
-      eventId,
-      path,
-      ...getRuntimeDiagnostics(),
-    });
-    const cacheSnap = await getDocsFromCache(colRef).catch((error: any) => {
-      logFirestoreOperationError('pois-public-cache-end', cacheStartedAt, {
-        requestId,
-        attempt,
-        eventId,
-        path,
-        source: 'cache',
-      }, error);
-      return null;
-    })
-
-    if (cacheSnap) {
-      console.info('[Perf] pois-public-cache-end', {
-        requestId,
-        attempt,
-        eventId,
-        path,
-        durationMs: Math.round(perfNow() - cacheStartedAt),
-        docsRead: cacheSnap.docs.length,
-        source: 'cache',
-        cacheHit: !cacheSnap.empty,
-        fromCache: cacheSnap.metadata.fromCache,
-        hasPendingWrites: cacheSnap.metadata.hasPendingWrites,
-        ...getRuntimeDiagnostics(),
-      });
-      perfLog('pois-public-cache', cacheStartedAt, {
-        requestId,
-        attempt,
-        eventId,
-        path,
-        cacheHit: !cacheSnap.empty,
-        docsRead: cacheSnap.docs.length,
-      });
-    }
+    const cacheSnap = await getDocsFromCache(colRef).catch(() => null)
 
     if (cacheSnap && !cacheSnap.empty) {
-      const transformStartedAt = perfNow();
-      console.info('[Perf] pois-public-transform-start', {
-        requestId,
-        attempt,
-        eventId,
-        path,
-        source: 'cache',
-        docsRead: cacheSnap.docs.length,
-        ...getRuntimeDiagnostics(),
-      });
       const cached = mapSnap(cacheSnap)
-      console.info('[Perf] pois-public-transform-end', {
-        requestId,
-        attempt,
-        eventId,
-        path,
-        source: 'cache',
-        durationMs: Math.round(perfNow() - transformStartedAt),
-        poiCount: cached.length,
-        payloadBytesApprox: estimatePayloadBytes(cached),
-        ...getRuntimeDiagnostics(),
-      });
-
-      const backgroundServerStartedAt = perfNow();
-      console.info('[Perf] pois-public-server-start', {
-        requestId,
-        attempt,
-        eventId,
-        path,
-        source: 'background-refresh',
-        ...getRuntimeDiagnostics(),
-      });
-      void getDocsFromServer(colRef)
-        .then((serverSnap) => {
-          console.info('[Perf] pois-public-server-resolved', {
-            requestId,
-            attempt,
+      void getDocsFromServer(colRef).catch((error: any) => {
+          console.warn('[Data] fetchPoisLite background refresh failed', {
             eventId,
-            path,
-            source: 'background-refresh',
-            durationMs: Math.round(perfNow() - backgroundServerStartedAt),
-            docsRead: serverSnap.docs.length,
-            fromCache: serverSnap.metadata.fromCache,
-            hasPendingWrites: serverSnap.metadata.hasPendingWrites,
-            ...getRuntimeDiagnostics(),
-          });
+            path: colRef.path,
+            code: error?.code ?? null,
+            message: error?.message ?? null,
+          })
         })
-        .catch((error: any) => {
-          logFirestoreOperationError('pois-public-server-resolved', backgroundServerStartedAt, {
-            requestId,
-            attempt,
-            eventId,
-            path,
-            source: 'background-refresh',
-          }, error);
-        })
-      perfLog('pois-public-total', callStartedAt, {
-        requestId,
-        attempt,
-        eventId,
-        path,
-        source: 'cache',
-        firestoreReads: 1,
-        docsRead: cacheSnap.docs.length,
-        poiCount: cached.length,
-        payloadBytesApprox: estimatePayloadBytes(cached),
-        backgroundServerRefresh: true,
-      });
-      console.info('[Perf] pois-public-call-end', {
-        requestId,
-        attempt,
-        eventId,
-        path,
-        durationMs: Math.round(perfNow() - callStartedAt),
-        source: 'cache',
-        docsRead: cacheSnap.docs.length,
-        poiCount: cached.length,
-        ...getRuntimeDiagnostics(),
-      });
       return cached
     }
 
-    const serverStartedAt = perfNow();
-    console.info('[Perf] pois-public-server-start', {
-      requestId,
-      attempt,
-      eventId,
-      path,
-      source: 'server',
-      ...getRuntimeDiagnostics(),
-    });
     const serverSnap = await getDocsFromServer(colRef)
-    console.info('[Perf] pois-public-server-resolved', {
-      requestId,
-      attempt,
-      eventId,
-      path,
-      source: 'server',
-      durationMs: Math.round(perfNow() - serverStartedAt),
-      docsRead: serverSnap.docs.length,
-      fromCache: serverSnap.metadata.fromCache,
-      hasPendingWrites: serverSnap.metadata.hasPendingWrites,
-      ...getRuntimeDiagnostics(),
-    });
-    const transformStartedAt = perfNow();
-    console.info('[Perf] pois-public-transform-start', {
-      requestId,
-      attempt,
-      eventId,
-      path,
-      source: 'server',
-      docsRead: serverSnap.docs.length,
-      ...getRuntimeDiagnostics(),
-    });
-    const pois = mapSnap(serverSnap)
-    console.info('[Perf] pois-public-transform-end', {
-      requestId,
-      attempt,
-      eventId,
-      path,
-      source: 'server',
-      durationMs: Math.round(perfNow() - transformStartedAt),
-      poiCount: pois.length,
-      payloadBytesApprox: estimatePayloadBytes(pois),
-      ...getRuntimeDiagnostics(),
-    });
-    perfLog('pois-public-server', serverStartedAt, {
-      requestId,
-      attempt,
-      eventId,
-      path,
-      firestoreReads: 1,
-      docsRead: serverSnap.docs.length,
-      poiCount: pois.length,
-      payloadBytesApprox: estimatePayloadBytes(pois),
-    });
-    perfLog('pois-public-total', callStartedAt, {
-      requestId,
-      attempt,
-      eventId,
-      path,
-      source: 'server',
-      firestoreReads: 2,
-      docsRead: serverSnap.docs.length,
-      poiCount: pois.length,
-      payloadBytesApprox: estimatePayloadBytes(pois),
-    });
-    console.info('[Perf] pois-public-call-end', {
-      requestId,
-      attempt,
-      eventId,
-      path,
-      durationMs: Math.round(perfNow() - callStartedAt),
-      source: 'server',
-      docsRead: serverSnap.docs.length,
-      poiCount: pois.length,
-      ...getRuntimeDiagnostics(),
-    });
-    return pois
+    return mapSnap(serverSnap)
   } catch (e: any) {
-    const fallbackStartedAt = perfNow();
-    logFirestoreOperationError('pois-public-call-end', callStartedAt, {
-      requestId,
-      attempt,
+    console.error('[Data] fetchPoisLite failed, falling back to private POI read', {
       eventId,
-      path,
-      source: 'public-read-error',
-    }, e);
+      path: colRef.path,
+      code: e?.code ?? null,
+      message: e?.message ?? null,
+    })
     const full = await fetchPois(eventId)
-    perfLog('pois-private-fallback', fallbackStartedAt, {
-      requestId,
-      attempt,
-      eventId,
-      reasonCode: e?.code ?? null,
-      reasonMessage: e?.message ?? null,
-      poiCount: full.length,
-      payloadBytesApprox: estimatePayloadBytes(full),
-    });
-    perfLog('pois-public-total', callStartedAt, {
-      requestId,
-      attempt,
-      eventId,
-      path,
-      source: 'private-fallback',
-      firestoreReads: 3,
-      poiCount: full.length,
-      payloadBytesApprox: estimatePayloadBytes(full),
-    });
     return full as unknown as POILite[]
   }
 }
 
 export async function fetchPoiById(id: string, eventId: string): Promise<POI | undefined> {
-  const startedAt = perfNow();
   try {
     const poiRef = doc(db, dbPaths.pois(eventId), id)
     const poiSnap = await getDoc(poiRef)
     if (poiSnap.exists()) {
-      const poi = { id: poiSnap.id, ...poiSnap.data() } as POI
-      perfLog('poi-private-by-id', startedAt, {
-        eventId,
-        poiId: id,
-        path: poiRef.path,
-        firestoreReads: 1,
-        docsRead: 1,
-        payloadBytesApprox: estimatePayloadBytes(poi),
-      });
-      return poi
+      return { id: poiSnap.id, ...poiSnap.data() } as POI
     }
-    perfLog('poi-private-by-id', startedAt, {
+  } catch (error: any) {
+    console.error('[Data] fetchPoiById failed', {
       eventId,
       poiId: id,
-      path: poiRef.path,
-      firestoreReads: 1,
-      docsRead: 0,
-      source: 'not-found',
-    });
-  } catch (error) {
-    perfLog('poi-private-by-id', startedAt, {
-      eventId,
-      poiId: id,
-      source: 'error',
-    });
+      code: error?.code ?? null,
+      message: error?.message ?? null,
+    })
   }
   return undefined
 }
@@ -1204,8 +796,8 @@ export async function fetchUserDisplayName(uid: string): Promise<string | null> 
     return typeof displayName === 'string' && displayName.trim() ? displayName.trim() : null
   } catch (error: any) {
     console.error('[fetchUserDisplayName] failed', {
-      uid,
-      path: userRef.path,
+      operation: 'fetchUserDisplayName',
+      path: 'users/{uid}',
       code: error?.code,
       message: error?.message
     })
@@ -1244,7 +836,7 @@ export async function fetchUsers(): Promise<AppUser[]> {
     const userSnapshot = await getDocs(userCollection)
     return userSnapshot.docs.map((doc) => doc.data() as AppUser)
   } catch (error: any) {
-    console.warn('[Admin Firestore Error]', {
+    console.error('[Admin Firestore Error]', {
       operation: 'fetchUsers',
       path: 'users',
       code: error?.code ?? null,

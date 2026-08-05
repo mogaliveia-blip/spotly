@@ -6,8 +6,6 @@ import {
   initializeFirestore, 
   memoryLocalCache,
   persistentLocalCache,
-  persistentMultipleTabManager,
-  persistentSingleTabManager,
   type Firestore
 } from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
@@ -31,14 +29,9 @@ declare global {
   var __spotlyFirestoreConfig: {
     cacheMode: string;
     transportMode: string;
-    rawCacheMode: string | null;
-    rawTransportMode: string | null;
     initializedAt: number;
-    initializeFirestoreOptions?: Record<string, unknown>;
   } | undefined;
   var __spotlyFirestoreErrorListenersInstalled: boolean | undefined;
-  var __spotlyFirestoreDiagnosticsLogged: boolean | undefined;
-  var __spotlyFirestoreDiagnosticsListenersInstalled: boolean | undefined;
 }
 
 function buildFirestoreSettings() {
@@ -46,95 +39,21 @@ function buildFirestoreSettings() {
 
   if (FIRESTORE_CACHE_MODE === 'memory') {
     settings.localCache = memoryLocalCache();
-  } else if (FIRESTORE_CACHE_MODE === 'persistent-multi-tab') {
-    settings.localCache = persistentLocalCache({
-      tabManager: persistentMultipleTabManager(),
-    });
-  } else if (FIRESTORE_CACHE_MODE === 'persistent-single-tab') {
-    settings.localCache = persistentLocalCache({
-      tabManager: persistentSingleTabManager({}),
-    });
   } else {
     settings.localCache = persistentLocalCache();
   }
 
   if (FIRESTORE_TRANSPORT_MODE === 'auto-long-polling') {
     settings.experimentalAutoDetectLongPolling = true;
-  } else if (FIRESTORE_TRANSPORT_MODE === 'force-long-polling') {
-    settings.experimentalForceLongPolling = true;
   }
 
   return settings;
-}
-
-function describeFirestoreSettings(settings: Record<string, unknown>) {
-  return {
-    rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
-    rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
-    cacheMode: FIRESTORE_CACHE_MODE,
-    transportMode: FIRESTORE_TRANSPORT_MODE,
-    initializeFirestoreOptions: {
-      hasLocalCache: Boolean(settings.localCache),
-      experimentalAutoDetectLongPolling: settings.experimentalAutoDetectLongPolling === true,
-      experimentalForceLongPolling: settings.experimentalForceLongPolling === true,
-      useFetchStreams: settings.useFetchStreams ?? null,
-    },
-    experimentalAutoDetectLongPolling: settings.experimentalAutoDetectLongPolling === true,
-    experimentalForceLongPolling: settings.experimentalForceLongPolling === true,
-    useFetchStreams: settings.useFetchStreams ?? null,
-  };
-}
-
-function getInitializeFirestoreOptions(settings?: Record<string, unknown>) {
-  return {
-    experimentalAutoDetectLongPolling: settings?.experimentalAutoDetectLongPolling === true,
-    experimentalForceLongPolling: settings?.experimentalForceLongPolling === true,
-    useFetchStreams: settings?.useFetchStreams ?? null,
-  };
-}
-
-function logFirestoreInit(mode: string, details: Record<string, unknown> = {}) {
-  if (!isBrowser) return;
-  console.info('[Perf] firestore-init', {
-    mode,
-    rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
-    rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
-    cacheMode: FIRESTORE_CACHE_MODE,
-    transportMode: FIRESTORE_TRANSPORT_MODE,
-    browser: navigator.userAgent,
-    ...details,
-  });
-}
-
-// Diagnostic temporaire Safari iOS.
-// À retirer après validation cache/transport Firestore.
-function logFirestoreDiagnostics(initializationMode: string, settings?: Record<string, unknown>) {
-  if (!isBrowser || globalThis.__spotlyFirestoreDiagnosticsLogged) return;
-
-  globalThis.__spotlyFirestoreDiagnosticsLogged = true;
-
-  console.groupCollapsed('[Firestore Diagnostic]');
-  console.info({
-    rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
-    cacheMode: FIRESTORE_CACHE_MODE,
-    rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
-    transportMode: FIRESTORE_TRANSPORT_MODE,
-    initializeFirestoreOptions: getInitializeFirestoreOptions(settings),
-    initializationMode,
-    online: navigator.onLine,
-    visibilityState: document.visibilityState,
-    userAgent: navigator.userAgent,
-    timestamp: new Date().toISOString(),
-  });
-  console.groupEnd();
 }
 
 let db: Firestore;
 if (isBrowser) {
   if (globalThis.__spotlyFirestoreDb) {
     db = globalThis.__spotlyFirestoreDb;
-    logFirestoreInit('reuse-existing-instance', globalThis.__spotlyFirestoreConfig || {});
-    logFirestoreDiagnostics('reuse-existing-instance', globalThis.__spotlyFirestoreConfig?.initializeFirestoreOptions);
   } else {
     try {
       const firestoreSettings = buildFirestoreSettings();
@@ -143,73 +62,24 @@ if (isBrowser) {
       globalThis.__spotlyFirestoreConfig = {
         cacheMode: FIRESTORE_CACHE_MODE,
         transportMode: FIRESTORE_TRANSPORT_MODE,
-        rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
-        rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
         initializedAt: Date.now(),
-        initializeFirestoreOptions: describeFirestoreSettings(firestoreSettings).initializeFirestoreOptions,
       };
-      logFirestoreInit('initializeFirestore', describeFirestoreSettings(firestoreSettings));
-      logFirestoreDiagnostics('initializeFirestore', firestoreSettings);
     } catch (error: any) {
       db = getFirestore(app);
       globalThis.__spotlyFirestoreDb = db;
       globalThis.__spotlyFirestoreConfig = {
         cacheMode: 'getFirestore-fallback',
         transportMode: FIRESTORE_TRANSPORT_MODE,
-        rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
-        rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
         initializedAt: Date.now(),
       };
-      console.warn('[Perf] firestore-init-error', {
-        rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
-        rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
-        cacheMode: FIRESTORE_CACHE_MODE,
-        transportMode: FIRESTORE_TRANSPORT_MODE,
+      console.error('[Firestore] initialization failed, using getFirestore fallback', {
         errorCode: error?.code ?? null,
         errorMessage: error?.message ?? null,
-        browser: navigator.userAgent,
       });
-      console.warn('[Perf] firestore-cache-mode', {
-        mode: 'getFirestore-fallback',
-        rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
-        rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
-        requestedCacheMode: FIRESTORE_CACHE_MODE,
-        transportMode: FIRESTORE_TRANSPORT_MODE,
-        browser: navigator.userAgent,
-      });
-      logFirestoreDiagnostics('getFirestore-fallback');
     }
   }
 } else {
   db = getFirestore(app);
-}
-
-if (isBrowser && !globalThis.__spotlyFirestoreDiagnosticsListenersInstalled) {
-  globalThis.__spotlyFirestoreDiagnosticsListenersInstalled = true;
-
-  window.addEventListener('online', () => {
-    console.info('[Firestore Network] online', {
-      timestamp: new Date().toISOString(),
-      visibilityState: document.visibilityState,
-      online: navigator.onLine,
-    });
-  });
-
-  window.addEventListener('offline', () => {
-    console.info('[Firestore Network] offline', {
-      timestamp: new Date().toISOString(),
-      visibilityState: document.visibilityState,
-      online: navigator.onLine,
-    });
-  });
-
-  document.addEventListener('visibilitychange', () => {
-    console.info('[Firestore Visibility]', {
-      state: document.hidden ? 'hidden' : 'visible',
-      timestamp: new Date().toISOString(),
-      online: navigator.onLine,
-    });
-  });
 }
 
 if (isBrowser && !globalThis.__spotlyFirestoreErrorListenersInstalled) {
@@ -221,13 +91,9 @@ if (isBrowser && !globalThis.__spotlyFirestoreErrorListenersInstalled) {
     if (!message.includes('Firestore') && !message.includes('Listen/channel') && !message.includes('BloomFilter')) {
       return;
     }
-    console.warn('[Perf] firestore-unhandled-rejection', {
-      cacheMode: FIRESTORE_CACHE_MODE,
-      transportMode: FIRESTORE_TRANSPORT_MODE,
+    console.warn('[Firestore] unhandled rejection', {
       errorCode: reason?.code ?? null,
       errorMessage: message,
-      online: navigator.onLine,
-      visibilityState: document.visibilityState,
     });
   });
 
@@ -236,12 +102,8 @@ if (isBrowser && !globalThis.__spotlyFirestoreErrorListenersInstalled) {
     if (!message.includes('Firestore') && !message.includes('Listen/channel') && !message.includes('BloomFilter')) {
       return;
     }
-    console.warn('[Perf] firestore-window-error', {
-      cacheMode: FIRESTORE_CACHE_MODE,
-      transportMode: FIRESTORE_TRANSPORT_MODE,
+    console.warn('[Firestore] window error', {
       errorMessage: message,
-      online: navigator.onLine,
-      visibilityState: document.visibilityState,
     });
   });
 }

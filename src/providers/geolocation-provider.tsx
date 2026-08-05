@@ -33,23 +33,8 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
   const hasLoggedErrorRef = useRef(false);
 
   useEffect(() => {
-    const startedAt = performance.now();
-    console.time('[Perf] geolocation')
-    let hasEndedGeolocationTimer = false;
-    const finishGeolocationTimer = () => {
-      if (hasEndedGeolocationTimer) return;
-      hasEndedGeolocationTimer = true;
-      console.timeEnd('[Perf] geolocation')
-    };
-
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setState(prev => ({ ...prev, loading: false }));
-      console.info('[Perf] geolocation-ready', {
-        durationMs: Math.round(performance.now() - startedAt),
-        source: 'unsupported',
-        hasLocation: false,
-      });
-      finishGeolocationTimer()
       return;
     }
 
@@ -66,13 +51,6 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
         loading: false,
         error: null,
       });
-      console.info('[Perf] geolocation-ready', {
-        durationMs: Math.round(performance.now() - startedAt),
-        source: 'position',
-        accuracy: position.coords.accuracy,
-        hasLocation: true,
-      });
-      finishGeolocationTimer()
     };
 
     const handleError = (error: GeolocationPositionError) => {
@@ -93,13 +71,6 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
         loading: false,
         error,
       }));
-      console.info('[Perf] geolocation-ready', {
-        durationMs: Math.round(performance.now() - startedAt),
-        source: 'error',
-        code: error.code,
-        hasLocation: false,
-      });
-      finishGeolocationTimer()
     };
 
     const startWatching = () => {
@@ -128,12 +99,6 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
               loading: false, 
               error: { code: 1, message: "Permission denied" } as GeolocationPositionError 
             }));
-            console.info('[Perf] geolocation-ready', {
-              durationMs: Math.round(performance.now() - startedAt),
-              source: 'permission-denied',
-              hasLocation: false,
-            });
-            finishGeolocationTimer()
             return;
           }
         }
@@ -154,22 +119,12 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
           ...prev,
           loading: false
         }));
-        console.info('[Perf] geolocation-nonblocking', {
-          durationMs: Math.round(performance.now() - startedAt),
-          source: 'ui-unblocked-before-position',
-        });
 
         // ensuite suivi précis
         startWatching();
     
       } catch {
         setState(prev => ({ ...prev, loading: false }));
-        console.info('[Perf] geolocation-ready', {
-          durationMs: Math.round(performance.now() - startedAt),
-          source: 'exception',
-          hasLocation: false,
-        });
-        finishGeolocationTimer()
       }
     };
     

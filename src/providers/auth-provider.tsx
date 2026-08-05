@@ -1,7 +1,7 @@
 'use client';
 
 import type { User as FirebaseUser } from 'firebase/auth';
-import { onAuthStateChanged, onIdTokenChanged } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import { createContext, useEffect, useRef, useState, useContext, ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
@@ -43,57 +43,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [authTimedOut, setAuthTimedOut] = useState(false);
   const [role, setRole] = useState<UserRole | null>(null);
   const [isApproved, setIsApproved] = useState<boolean>(false);
-  const authStartedAtRef = useRef<number | null>(null);
   const authRequestIdRef = useRef(0);
 
   const isPublicEventDashboard = /^\/[^/]+\/dashboard(?:\/)?$/.test(pathname || '');
 
   useEffect(() => {
-    authStartedAtRef.current = performance.now();
-    const startedAt = performance.now();
-    console.info('[Perf] auth-sdk-init', {
-      durationMs: 0,
-      pathname,
-      isPublicEventDashboard,
-      hasCurrentUser: !!auth.currentUser,
-      browser: typeof navigator !== 'undefined' ? navigator.userAgent : null,
-    });
-    console.time('[Perf] auth')
-    let hasEndedAuthTimer = false;
-    const finishAuthTimer = () => {
-      if (hasEndedAuthTimer) return;
-      hasEndedAuthTimer = true;
-      console.timeEnd('[Perf] auth')
-    };
-
     const publicTimeoutId = window.setTimeout(() => {
       if (!isPublicEventDashboard) return;
       setAuthTimedOut(true);
       setAuthStateKnown(true);
       setLoading(false);
-      console.warn('[Perf] auth-context-ready', {
-        durationMs: Math.round(performance.now() - startedAt),
-        source: 'public-timeout-guest',
-        timeoutMs: PUBLIC_AUTH_TIMEOUT_MS,
-        uid: null,
-        pathname,
-      });
-      finishAuthTimer();
     }, PUBLIC_AUTH_TIMEOUT_MS);
 
     const loadUserProfile = async (currentUser: FirebaseUser, requestId: number) => {
       setProfileLoading(true);
       try {
-        const userDocStartedAt = performance.now();
         const userDocRef = doc(db, 'users', currentUser.uid);
         const userDoc = await getDoc(userDocRef);
-        console.info('[Perf] auth-profile-fetch', {
-          durationMs: Math.round(performance.now() - userDocStartedAt),
-          uid: currentUser.uid,
-          path: userDocRef.path,
-          docsRead: userDoc.exists() ? 1 : 0,
-          source: 'firestore',
-        });
         if (requestId !== authRequestIdRef.current) return;
 
         const userData = userDoc.data();
@@ -115,10 +81,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setRole(userRole);
         setIsApproved(approved);
       } catch (error: any) {
-        console.warn('[Perf] auth-profile-fetch', {
-          durationMs: authStartedAtRef.current ? Math.round(performance.now() - authStartedAtRef.current) : null,
-          uid: currentUser.uid,
-          source: 'error',
+        console.error('[Auth] profile fetch failed', {
+          operation: 'fetchCurrentUserProfile',
+          path: 'users/{uid}',
           errorCode: error?.code ?? null,
           errorMessage: error?.message ?? null,
         });
@@ -134,17 +99,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setAuthStateKnown(true);
       setLoading(false);
       setFirebaseUser(currentUser);
-      console.info('[Perf] auth-listener-fired', {
-        durationMs: Math.round(performance.now() - startedAt),
-        listener: 'onAuthStateChanged',
-        uid: currentUser?.uid ?? null,
-        pathname,
-      });
-      console.info('[Perf] auth-current-user-known', {
-        durationMs: Math.round(performance.now() - startedAt),
-        uid: currentUser?.uid ?? null,
-        source: 'onAuthStateChanged',
-      });
 
       if (currentUser) {
         setUser({
@@ -164,34 +118,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsApproved(false);
         setProfileLoading(false);
       }
-
-      console.info('[Perf] auth-context-ready', {
-        durationMs: Math.round(performance.now() - startedAt),
-        isAuthenticated: !!currentUser,
-        uid: currentUser?.uid ?? null,
-        profileBlocking: false,
-      });
-      finishAuthTimer()
-    });
-
-    const unsubscribeIdToken = onIdTokenChanged(auth, (currentUser) => {
-      console.info('[Perf] auth-token-ready', {
-        durationMs: Math.round(performance.now() - startedAt),
-        listener: 'onIdTokenChanged',
-        uid: currentUser?.uid ?? null,
-      });
-      console.info('[Perf] auth-ready', {
-        durationMs: Math.round(performance.now() - startedAt),
-        isAuthenticated: !!currentUser,
-        uid: currentUser?.uid ?? null,
-        source: 'token-listener',
-      });
     });
 
     return () => {
       window.clearTimeout(publicTimeoutId);
       unsubscribeAuthState();
-      unsubscribeIdToken();
     };
   }, [isPublicEventDashboard, pathname]);
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
-import { useParams, usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { 
   fetchEventMembers, 
   inviteMemberToEvent, 
@@ -35,9 +35,8 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function EventMembersPage() {
-  const { user, firebaseUser, role: globalRole, loading: authLoading, authStateKnown, profileLoading, isApproved } = useAuth();
+  const { user, firebaseUser, role: globalRole, loading: authLoading, profileLoading } = useAuth();
   const { eventId, event, loading: eventLoading, userRole, roleLoading } = useEvent();
-  const params = useParams();
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
@@ -48,45 +47,14 @@ export default function EventMembersPage() {
   const [inviteRole, setInviteRole] = useState<EventRole>('editor');
   const [inviting, setInviting] = useState(false);
 
-  const eventSlug = params.eventSlug as string;
-  
   // Permission : Admin local ou Owner global
   const currentUserMembership = members.find(m => m.uid === user?.uid);
   const canManage = currentUserMembership?.role === 'admin' || userRole === 'admin' || globalRole === 'owner';
   const isAuthorized = globalRole === 'owner' || userRole === 'admin';
   const authOrProfileLoading = authLoading || (!!firebaseUser && profileLoading);
   const accessLoading = authOrProfileLoading || eventLoading || roleLoading;
-  const loadingReason = authLoading
-    ? 'authLoading'
-    : firebaseUser && profileLoading
-      ? 'profileLoading'
-      : eventLoading
-        ? 'eventLoading'
-        : roleLoading
-          ? 'eventRoleLoading'
-          : loading
-            ? 'membersLoading'
-            : null;
 
   useEffect(() => {
-    console.info('[Admin Route Diagnostic]', {
-      pathname,
-      uidPresent: !!firebaseUser,
-      authLoading,
-      authStateKnown,
-      profileLoading,
-      globalRole,
-      isApproved,
-      eventSlug,
-      eventId,
-      eventLoading,
-      eventStatus: event?.status ?? null,
-      userRole,
-      membershipLoading: roleLoading || loading,
-      accessAllowed: isAuthorized,
-      loadingReason,
-    });
-
     if (accessLoading) return;
     if (!isAuthorized) {
       setLoading(false);
@@ -100,7 +68,7 @@ export default function EventMembersPage() {
         const data = await fetchEventMembers(eventId);
         setMembers(data);
       } catch (error: any) {
-        console.warn('[Admin Firestore Error]', {
+        console.error('[Admin Firestore Error]', {
           pathname,
           operation: 'fetchEventMembers',
           path: `events/${eventId}/members`,
@@ -113,7 +81,7 @@ export default function EventMembersPage() {
       }
     }
     loadMembers();
-  }, [accessLoading, authLoading, authStateKnown, event, eventId, eventLoading, eventSlug, firebaseUser, globalRole, isApproved, isAuthorized, pathname, profileLoading, roleLoading, router, toast, userRole]);
+  }, [accessLoading, eventId, isAuthorized, pathname, router, toast]);
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();

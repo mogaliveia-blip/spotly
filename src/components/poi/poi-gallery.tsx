@@ -15,8 +15,6 @@ function hasGallery(poi: POIAny): poi is POI {
 }
 
 export function POIGallery({ poi, onImageClick }: POIGalleryProps) {
-  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-
   if (!hasGallery(poi) || !poi.galleryUrls || poi.galleryUrls.length === 0) {
     return null;
   }
@@ -35,16 +33,6 @@ export function POIGallery({ poi, onImageClick }: POIGalleryProps) {
             fill
             className="object-cover"
             sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 25vw"
-            onLoad={() => {
-              const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-              console.info('[Perf] image-poi-gallery', {
-                durationMs: Math.round(now - startedAt),
-                poiId: poi.id,
-                imageIndex: index,
-                galleryCount: hasGallery(poi) ? poi.galleryUrls.length : 0,
-                urlLength: photo.url.length,
-              });
-            }}
           />
         </div>
       ))}
