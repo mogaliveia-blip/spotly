@@ -2,7 +2,7 @@
 
 import type { POI, POILite } from '@/lib/types';
 import { Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { User, Crosshair, MapPin } from 'lucide-react';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
@@ -16,6 +16,13 @@ import { isSponsorActive } from '@/lib/sponsor-utils';
 import { useToast } from '@/hooks/use-toast';
 
 type POIAny = POILite | POI;
+type MapsDiagnostics = {
+  eventId: string;
+  poisReadyAt: number | null;
+};
+
+const MAPS_DIAGNOSTICS_ENABLED =
+  process.env.NEXT_PUBLIC_MAPS_DIAGNOSTICS?.trim().toLowerCase() === 'true';
 
 function POIMarkerContent({
   poi,
@@ -83,17 +90,90 @@ function MapController({
   pois,
   onSelectPoi,
   selectedPoi,
-  isListVisible
+  isListVisible,
+  mapsDiagnostics
 }: {
   pois: POIAny[];
   onSelectPoi: (poi: POIAny | null) => void;
   selectedPoi: POIAny | null;
   isListVisible: boolean;
+  mapsDiagnostics?: MapsDiagnostics;
 }) {
   const { userLocation, error: geoError } = useGeolocation();
   const map = useMap();
   const isMobile = useIsMobile();
   const { toast } = useToast();
+  const diagnosticEventIdRef = useRef<string | null>(null);
+  const mapInstanceReadyAtRef = useRef<number | null>(null);
+  const mapInstanceLoggedRef = useRef(false);
+  const firstIdleLoggedRef = useRef(false);
+  const idleListenerRef = useRef<google.maps.MapsEventListener | null>(null);
+
+  useEffect(() => {
+    if (!MAPS_DIAGNOSTICS_ENABLED) return;
+
+    const eventId = mapsDiagnostics?.eventId ?? null;
+    if (diagnosticEventIdRef.current !== eventId) {
+      if (idleListenerRef.current) {
+        idleListenerRef.current.remove();
+        idleListenerRef.current = null;
+      }
+      diagnosticEventIdRef.current = eventId;
+      mapInstanceReadyAtRef.current = null;
+      mapInstanceLoggedRef.current = false;
+      firstIdleLoggedRef.current = false;
+    }
+  }, [mapsDiagnostics?.eventId]);
+
+  useEffect(() => {
+    if (!MAPS_DIAGNOSTICS_ENABLED) return;
+    if (!map || !mapsDiagnostics?.poisReadyAt || pois.length === 0) return;
+    if (firstIdleLoggedRef.current) return;
+
+    const poisReadyAt = mapsDiagnostics.poisReadyAt;
+    const mapInstanceReadyAt = mapInstanceReadyAtRef.current ?? performance.now();
+    mapInstanceReadyAtRef.current = mapInstanceReadyAt;
+
+    if (!mapInstanceLoggedRef.current) {
+      mapInstanceLoggedRef.current = true;
+      console.info('[Maps Diagnostic] map-instance-ready', {
+        durationSincePoisReadyMs: Math.round(mapInstanceReadyAt - poisReadyAt),
+        poiCount: pois.length,
+        timestamp: mapInstanceReadyAt,
+      });
+    }
+
+    if (idleListenerRef.current || typeof window === 'undefined' || !window.google?.maps?.event) return;
+
+    idleListenerRef.current = window.google.maps.event.addListenerOnce(map, 'idle', () => {
+      const firstIdleAt = performance.now();
+      firstIdleLoggedRef.current = true;
+      idleListenerRef.current = null;
+
+      const poisToMapInstanceMs = Math.round(mapInstanceReadyAt - poisReadyAt);
+      const mapInstanceToIdleMs = Math.round(firstIdleAt - mapInstanceReadyAt);
+      const poisToIdleMs = Math.round(firstIdleAt - poisReadyAt);
+
+      console.info('[Maps Diagnostic] first-idle', {
+        durationSincePoisReadyMs: poisToIdleMs,
+        durationSinceMapInstanceReadyMs: mapInstanceToIdleMs,
+        poiCount: pois.length,
+      });
+      console.info('[Maps Diagnostic] map-ready-summary', {
+        poiCount: pois.length,
+        poisToMapInstanceMs,
+        mapInstanceToIdleMs,
+        poisToIdleMs,
+      });
+    });
+
+    return () => {
+      if (!firstIdleLoggedRef.current && idleListenerRef.current) {
+        idleListenerRef.current.remove();
+        idleListenerRef.current = null;
+      }
+    };
+  }, [map, mapsDiagnostics?.poisReadyAt, pois.length]);
 
   useEffect(() => {
     if (selectedPoi && map) {
@@ -207,12 +287,14 @@ export function POIMap({
   selectedPoi,
   onSelectPoi,
   pois,
-  isListVisible
+  isListVisible,
+  mapsDiagnostics
 }: {
   selectedPoi: POIAny | null;
   onSelectPoi: (poi: POIAny | null) => void;
   pois: POIAny[];
   isListVisible: boolean;
+  mapsDiagnostics?: MapsDiagnostics;
 }) {
   const { userLocation, loading: geoLoading } = useGeolocation();
 
@@ -236,7 +318,13 @@ export function POIMap({
         className="w-full h-full"
         onClick={() => onSelectPoi(null)}
       >
-        <MapController pois={pois} onSelectPoi={onSelectPoi} selectedPoi={selectedPoi} isListVisible={isListVisible} />
+        <MapController
+          pois={pois}
+          onSelectPoi={onSelectPoi}
+          selectedPoi={selectedPoi}
+          isListVisible={isListVisible}
+          mapsDiagnostics={mapsDiagnostics}
+        />
       </Map>
     </div>
   );
