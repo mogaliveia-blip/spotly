@@ -37,6 +37,8 @@ declare global {
     initializeFirestoreOptions?: Record<string, unknown>;
   } | undefined;
   var __spotlyFirestoreErrorListenersInstalled: boolean | undefined;
+  var __spotlyFirestoreDiagnosticsLogged: boolean | undefined;
+  var __spotlyFirestoreDiagnosticsListenersInstalled: boolean | undefined;
 }
 
 function buildFirestoreSettings() {
@@ -83,6 +85,14 @@ function describeFirestoreSettings(settings: Record<string, unknown>) {
   };
 }
 
+function getInitializeFirestoreOptions(settings?: Record<string, unknown>) {
+  return {
+    experimentalAutoDetectLongPolling: settings?.experimentalAutoDetectLongPolling === true,
+    experimentalForceLongPolling: settings?.experimentalForceLongPolling === true,
+    useFetchStreams: settings?.useFetchStreams ?? null,
+  };
+}
+
 function logFirestoreInit(mode: string, details: Record<string, unknown> = {}) {
   if (!isBrowser) return;
   console.info('[Perf] firestore-init', {
@@ -96,11 +106,35 @@ function logFirestoreInit(mode: string, details: Record<string, unknown> = {}) {
   });
 }
 
+// Diagnostic temporaire Safari iOS.
+// À retirer après validation cache/transport Firestore.
+function logFirestoreDiagnostics(initializationMode: string, settings?: Record<string, unknown>) {
+  if (!isBrowser || globalThis.__spotlyFirestoreDiagnosticsLogged) return;
+
+  globalThis.__spotlyFirestoreDiagnosticsLogged = true;
+
+  console.groupCollapsed('[Firestore Diagnostic]');
+  console.info({
+    rawCacheMode: RAW_FIRESTORE_CACHE_MODE ?? null,
+    cacheMode: FIRESTORE_CACHE_MODE,
+    rawTransportMode: RAW_FIRESTORE_TRANSPORT_MODE ?? null,
+    transportMode: FIRESTORE_TRANSPORT_MODE,
+    initializeFirestoreOptions: getInitializeFirestoreOptions(settings),
+    initializationMode,
+    online: navigator.onLine,
+    visibilityState: document.visibilityState,
+    userAgent: navigator.userAgent,
+    timestamp: new Date().toISOString(),
+  });
+  console.groupEnd();
+}
+
 let db: Firestore;
 if (isBrowser) {
   if (globalThis.__spotlyFirestoreDb) {
     db = globalThis.__spotlyFirestoreDb;
     logFirestoreInit('reuse-existing-instance', globalThis.__spotlyFirestoreConfig || {});
+    logFirestoreDiagnostics('reuse-existing-instance', globalThis.__spotlyFirestoreConfig?.initializeFirestoreOptions);
   } else {
     try {
       const firestoreSettings = buildFirestoreSettings();
@@ -115,10 +149,7 @@ if (isBrowser) {
         initializeFirestoreOptions: describeFirestoreSettings(firestoreSettings).initializeFirestoreOptions,
       };
       logFirestoreInit('initializeFirestore', describeFirestoreSettings(firestoreSettings));
-      console.info('[Perf] firestore-cache-mode', {
-        ...describeFirestoreSettings(firestoreSettings),
-        browser: navigator.userAgent,
-      });
+      logFirestoreDiagnostics('initializeFirestore', firestoreSettings);
     } catch (error: any) {
       db = getFirestore(app);
       globalThis.__spotlyFirestoreDb = db;
@@ -146,10 +177,39 @@ if (isBrowser) {
         transportMode: FIRESTORE_TRANSPORT_MODE,
         browser: navigator.userAgent,
       });
+      logFirestoreDiagnostics('getFirestore-fallback');
     }
   }
 } else {
   db = getFirestore(app);
+}
+
+if (isBrowser && !globalThis.__spotlyFirestoreDiagnosticsListenersInstalled) {
+  globalThis.__spotlyFirestoreDiagnosticsListenersInstalled = true;
+
+  window.addEventListener('online', () => {
+    console.info('[Firestore Network] online', {
+      timestamp: new Date().toISOString(),
+      visibilityState: document.visibilityState,
+      online: navigator.onLine,
+    });
+  });
+
+  window.addEventListener('offline', () => {
+    console.info('[Firestore Network] offline', {
+      timestamp: new Date().toISOString(),
+      visibilityState: document.visibilityState,
+      online: navigator.onLine,
+    });
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    console.info('[Firestore Visibility]', {
+      state: document.hidden ? 'hidden' : 'visible',
+      timestamp: new Date().toISOString(),
+      online: navigator.onLine,
+    });
+  });
 }
 
 if (isBrowser && !globalThis.__spotlyFirestoreErrorListenersInstalled) {
