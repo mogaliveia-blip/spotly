@@ -55,6 +55,11 @@ function formatEventDateRange(event: AppEvent): string {
     .join(' - ');
 }
 
+function getValidEventSlug(event: AppEvent): string | null {
+  const slug = event.slug?.trim();
+  return slug && /^[a-z0-9-]+$/.test(slug) ? slug : null;
+}
+
 export default function MyEventsPage() {
   const { user, loading: authLoading, isApproved, role: globalRole } = useAuth();
   const { toast } = useToast();
@@ -292,103 +297,130 @@ export default function MyEventsPage() {
           </Card>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {events.map((e) => (
-              <Card key={e.id} className="group hover:shadow-xl transition-all overflow-hidden border-muted rounded-[2rem]">
-                <CardHeader className="bg-muted/30 pb-6">
-                  <div className="flex items-center justify-between mb-2">
-                     <CardTitle className="text-xl font-bold line-clamp-1">{e.name}</CardTitle>
-                     <Badge variant={e.status === 'published' ? "default" : "outline"} className={cn(
-                        "text-[10px] uppercase font-bold",
-                        e.status === 'published' && "bg-green-500/10 text-green-600 border-none",
-                        e.status === 'paused' && "bg-amber-500/10 text-amber-600 border-none",
-                        e.status === 'draft' && "text-muted-foreground"
-                     )}>
-                        {getStatusLabel(e.status)}
-                     </Badge>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-2">
-                     <Badge className="bg-primary/10 text-primary hover:bg-primary/10 border-none flex gap-1 items-center text-[10px] uppercase font-bold">
-                        <ShieldCheck className="h-3 w-3" />
-                        {isPlatformOwner ? 'Owner plateforme' : e.userRole || 'Admin'}
-                     </Badge>
-                     {e.adminId === user?.uid && (
-                        <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 flex gap-1 items-center text-[10px] uppercase font-bold">
-                            <UserCheck className="h-3 w-3" />
-                            Créateur
-                        </Badge>
-                     )}
-                  </div>
-                  <p className="mt-4 text-xs font-semibold text-muted-foreground">
-                    {formatEventDateRange(e)}
-                    {e.timezone ? ` · ${e.timezone}` : ''}
-                  </p>
-                  {isPlatformOwner && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Créateur : <span className="font-semibold text-foreground">{getEventOwnerLabel(e)}</span>
+            {events.map((e) => {
+              const eventSlug = getValidEventSlug(e);
+              const canOpenSettings = isPlatformOwner || e.userRole === 'admin';
+              const settingsDisabledReason = !eventSlug
+                ? 'Slug événement manquant ou invalide.'
+                : !canOpenSettings
+                  ? "Réservé aux administrateurs de l'événement."
+                  : null;
+
+              return (
+                <Card key={e.id} className="group hover:shadow-xl transition-all overflow-hidden border-muted rounded-[2rem]">
+                  <CardHeader className="bg-muted/30 pb-6">
+                    <div className="flex items-center justify-between mb-2">
+                       <CardTitle className="text-xl font-bold line-clamp-1">{e.name}</CardTitle>
+                       <Badge variant={e.status === 'published' ? "default" : "outline"} className={cn(
+                          "text-[10px] uppercase font-bold",
+                          e.status === 'published' && "bg-green-500/10 text-green-600 border-none",
+                          e.status === 'paused' && "bg-amber-500/10 text-amber-600 border-none",
+                          e.status === 'draft' && "text-muted-foreground"
+                       )}>
+                          {getStatusLabel(e.status)}
+                       </Badge>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                       <Badge className="bg-primary/10 text-primary hover:bg-primary/10 border-none flex gap-1 items-center text-[10px] uppercase font-bold">
+                          <ShieldCheck className="h-3 w-3" />
+                          {isPlatformOwner ? 'Owner plateforme' : e.userRole || 'Admin'}
+                       </Badge>
+                       {e.adminId === user?.uid && (
+                          <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 flex gap-1 items-center text-[10px] uppercase font-bold">
+                              <UserCheck className="h-3 w-3" />
+                              Créateur
+                          </Badge>
+                       )}
+                    </div>
+                    <p className="mt-4 text-xs font-semibold text-muted-foreground">
+                      {formatEventDateRange(e)}
+                      {e.timezone ? ` · ${e.timezone}` : ''}
                     </p>
-                  )}
-                </CardHeader>
-                <CardContent className="pt-6 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <Button variant="default" size="sm" asChild className="rounded-xl h-12 gap-2 font-bold shadow-md">
-                       <Link href={`/${e.slug}/dashboard`}>
+                    {isPlatformOwner && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Créateur : <span className="font-semibold text-foreground">{getEventOwnerLabel(e)}</span>
+                      </p>
+                    )}
+                  </CardHeader>
+                  <CardContent className="pt-6 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {eventSlug ? (
+                        <Button variant="default" size="sm" asChild className="rounded-xl h-12 gap-2 font-bold shadow-md">
+                           <Link href={`/${eventSlug}/dashboard`}>
+                              <LayoutDashboard className="h-4 w-4" />
+                              Dashboard
+                           </Link>
+                        </Button>
+                      ) : (
+                        <Button variant="default" size="sm" disabled className="rounded-xl h-12 gap-2 font-bold shadow-md" title="Slug événement manquant ou invalide.">
                           <LayoutDashboard className="h-4 w-4" />
                           Dashboard
-                       </Link>
-                    </Button>
-                    <Button variant="secondary" size="sm" asChild className="rounded-xl h-12 gap-2 font-bold">
-                       <Link href={`/${e.slug}/admin`}>
+                        </Button>
+                      )}
+                      {eventSlug && canOpenSettings ? (
+                        <Button variant="secondary" size="sm" asChild className="rounded-xl h-12 gap-2 font-bold">
+                           <Link href={`/${eventSlug}/admin`}>
+                              <Settings className="h-4 w-4" />
+                              Modifier
+                           </Link>
+                        </Button>
+                      ) : (
+                        <Button variant="secondary" size="sm" disabled className="rounded-xl h-12 gap-2 font-bold" title={settingsDisabledReason ?? undefined}>
                           <Settings className="h-4 w-4" />
                           Modifier
-                       </Link>
-                    </Button>
-                    {isPlatformOwner && (
-                      <Button variant="outline" size="sm" asChild className="rounded-xl h-12 gap-2 font-bold">
-                        <Link href={`/${e.slug}/admin/members`}>
-                          <UserCheck className="h-4 w-4" />
-                          Équipe
-                        </Link>
-                      </Button>
-                    )}
-                    {(globalRole === 'owner' || e.userRole === 'admin') && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleStatusChange(e)}
-                          disabled={updatingEventId === e.id || deletingEventId === e.id}
-                          className="rounded-xl h-12 font-bold"
-                        >
-                          {updatingEventId === e.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                          {getStatusAction(e.status).label}
                         </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => {
-                            setEventToDelete(e);
-                            setDeleteConfirmation('');
-                          }}
-                          disabled={deletingEventId === e.id || updatingEventId === e.id}
-                          className="rounded-xl h-12 font-bold"
-                        >
-                          {deletingEventId === e.id ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4 mr-2" />
-                          )}
-                          Supprimer
+                      )}
+                      {isPlatformOwner && eventSlug && (
+                        <Button variant="outline" size="sm" asChild className="rounded-xl h-12 gap-2 font-bold">
+                          <Link href={`/${eventSlug}/admin/members`}>
+                            <UserCheck className="h-4 w-4" />
+                            Équipe
+                          </Link>
                         </Button>
-                      </>
+                      )}
+                      {(globalRole === 'owner' || e.userRole === 'admin') && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleStatusChange(e)}
+                            disabled={updatingEventId === e.id || deletingEventId === e.id}
+                            className="rounded-xl h-12 font-bold"
+                          >
+                            {updatingEventId === e.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            {getStatusAction(e.status).label}
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              setEventToDelete(e);
+                              setDeleteConfirmation('');
+                            }}
+                            disabled={deletingEventId === e.id || updatingEventId === e.id}
+                            className="rounded-xl h-12 font-bold"
+                          >
+                            {deletingEventId === e.id ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4 mr-2" />
+                            )}
+                            Supprimer
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    {settingsDisabledReason && (
+                      <p className="text-xs text-muted-foreground text-center">{settingsDisabledReason}</p>
                     )}
-                  </div>
-                  <div className="text-[10px] font-mono text-muted-foreground text-center">
-                    ID: {e.id} | /{e.slug}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                    <div className="text-[10px] font-mono text-muted-foreground text-center">
+                      ID: {e.id} | /{eventSlug ?? 'slug-invalide'}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
         <AlertDialog
