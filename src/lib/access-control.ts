@@ -2,7 +2,6 @@ import type { EventRole, UserRole } from './types'
 
 type MyEventsAccessInput = {
   globalRole: UserRole | null
-  isApproved?: boolean
   eventRole?: EventRole | null
   hasEventMembership?: boolean
 }
@@ -15,11 +14,14 @@ export function canManageEvent(globalRole: UserRole | null, eventRole?: EventRol
   return canAccessPlatformAdmin(globalRole) || eventRole === 'admin' || eventRole === 'editor'
 }
 
+export function canCreateEvent(globalRole: UserRole | null): boolean {
+  return canAccessPlatformAdmin(globalRole)
+}
+
 export function canAccessMyEvents({
   globalRole,
-  isApproved = false,
   eventRole,
   hasEventMembership = false,
 }: MyEventsAccessInput): boolean {
-  return canAccessPlatformAdmin(globalRole) || isApproved || eventRole === 'admin' || eventRole === 'editor' || hasEventMembership
+  return canAccessPlatformAdmin(globalRole) || eventRole === 'admin' || eventRole === 'editor' || hasEventMembership
 }

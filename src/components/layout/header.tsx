@@ -18,7 +18,7 @@ import { auth } from '@/lib/firebase';
 import { useEffect, useState } from 'react';
 
 export function Header() {
-  const { user, role: globalRole, isApproved } = useAuth();
+  const { user, role: globalRole } = useAuth();
   const { userRole } = useEvent();
   const pathname = usePathname();
   const params = useParams();
@@ -31,7 +31,7 @@ export function Header() {
   useEffect(() => {
     let isMounted = true;
 
-    if (!user || canAccessPlatformAdmin(globalRole) || isApproved) {
+    if (!user || canAccessPlatformAdmin(globalRole)) {
       setHasEventMembership(false);
       return;
     }
@@ -47,12 +47,11 @@ export function Header() {
     return () => {
       isMounted = false;
     };
-  }, [user, globalRole, isApproved]);
+  }, [user, globalRole]);
 
   const canManageCurrentEvent = canManageEvent(globalRole, userRole);
   const showMyEvents = !!user && canAccessMyEvents({
     globalRole,
-    isApproved,
     eventRole: userRole,
     hasEventMembership,
   });

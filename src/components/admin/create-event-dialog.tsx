@@ -27,7 +27,8 @@ import { createEvent } from '@/lib/data';
 import { useAuth } from '@/hooks/use-auth-user';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, PlusCircle, Lock } from 'lucide-react';
+import { Loader2, PlusCircle } from 'lucide-react';
+import { canCreateEvent } from '@/lib/access-control';
 
 const formSchema = z.object({
   name: z.string().min(3, 'Le nom doit faire au moins 3 caractères'),
@@ -62,9 +63,10 @@ interface CreateEventDialogProps {
 export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { user, isApproved } = useAuth();
+  const { user, role: globalRole } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const canCreate = canCreateEvent(globalRole);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -93,7 +95,7 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
   };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!user || !isApproved) return;
+    if (!user || !canCreate) return;
     setLoading(true);
     try {
       const event = await createEvent({
@@ -119,14 +121,7 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
     }
   }
 
-  if (!isApproved) {
-    return (
-        <Button disabled className="gap-2 rounded-2xl font-bold opacity-60">
-            <Lock className="h-4 w-4" />
-            Créer un événement
-        </Button>
-    );
-  }
+  if (!canCreate) return null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -136,7 +131,7 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
           Créer un événement
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[640px] rounded-[2rem]">
+      <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden rounded-[2rem] sm:max-w-[640px]">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">Nouvel Événement</DialogTitle>
           <DialogDescription>
@@ -144,46 +139,16 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nom de l'événement</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ex: Festival Leu Tempo 2025" {...field} onChange={onNameChange} className="rounded-xl" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="slug"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Slug (URL)</FormLabel>
-                  <FormControl>
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground bg-muted/50 p-2 rounded-xl border border-input">
-                      <span className="shrink-0">/</span>
-                      <Input className="h-7 border-none bg-transparent focus-visible:ring-0 p-0 font-mono" {...field} />
-                    </div>
-                  </FormControl>
-                  <FormDescription>Identifiant unique dans l'adresse web.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-4">
               <FormField
                 control={form.control}
-                name="startDate"
+                name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Date de début</FormLabel>
+                    <FormLabel>Nom de l'événement</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} className="rounded-xl" />
+                      <Input placeholder="Ex: Festival Leu Tempo 2025" {...field} onChange={onNameChange} className="rounded-xl" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -191,87 +156,119 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
               />
               <FormField
                 control={form.control}
-                name="endDate"
+                name="slug"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Date de fin</FormLabel>
+                    <FormLabel>Slug (URL)</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} className="rounded-xl" />
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground bg-muted/50 p-2 rounded-xl border border-input">
+                        <span className="shrink-0">/</span>
+                        <Input className="h-7 border-none bg-transparent focus-visible:ring-0 p-0 font-mono" {...field} />
+                      </div>
                     </FormControl>
+                    <FormDescription>Identifiant unique dans l'adresse web.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="startDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Date de début</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} className="rounded-xl" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="endDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Date de fin</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} className="rounded-xl" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={form.control}
+                name="timezone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Fuseau horaire</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Europe/Paris" {...field} className="rounded-xl" />
+                    </FormControl>
+                    <FormDescription>Utilisé pour classer l'événement dans les vues publiques.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="city"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ville</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Lorient" {...field} className="rounded-xl" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="departmentName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Département</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Morbihan" {...field} className="rounded-xl" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="region"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Région</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Bretagne" {...field} className="rounded-xl" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="country"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Pays</FormLabel>
+                      <FormControl>
+                        <Input placeholder="France" {...field} className="rounded-xl" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </div>
-            <FormField
-              control={form.control}
-              name="timezone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Fuseau horaire</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Europe/Paris" {...field} className="rounded-xl" />
-                  </FormControl>
-                  <FormDescription>Utilisé pour classer l'événement dans les vues publiques.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="city"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Ville</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Lorient" {...field} className="rounded-xl" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="departmentName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Département</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Morbihan" {...field} className="rounded-xl" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="region"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Région</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Bretagne" {...field} className="rounded-xl" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="country"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Pays</FormLabel>
-                    <FormControl>
-                      <Input placeholder="France" {...field} className="rounded-xl" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="flex justify-end pt-4">
+            <div className="flex shrink-0 justify-end border-t bg-background pt-4">
               <Button type="submit" disabled={loading} className="w-full sm:w-auto font-bold rounded-xl h-11 px-8">
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Créer l'événement

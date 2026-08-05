@@ -26,7 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { canAccessMyEvents, canAccessPlatformAdmin } from '@/lib/access-control';
+import { canAccessMyEvents, canAccessPlatformAdmin, canCreateEvent } from '@/lib/access-control';
 
 type AppEventWithRole = AppEvent & { userRole?: EventRole };
 
@@ -61,7 +61,7 @@ function getValidEventSlug(event: AppEvent): string | null {
 }
 
 export default function MyEventsPage() {
-  const { user, loading: authLoading, isApproved, role: globalRole } = useAuth();
+  const { user, loading: authLoading, role: globalRole } = useAuth();
   const { toast } = useToast();
   const [events, setEvents] = useState<AppEventWithRole[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,7 +73,8 @@ export default function MyEventsPage() {
   const [hasEventMembership, setHasEventMembership] = useState(false);
   const [accessLoading, setAccessLoading] = useState(true);
   const isPlatformOwner = canAccessPlatformAdmin(globalRole);
-  const canAccessEvents = canAccessMyEvents({ globalRole, isApproved, hasEventMembership });
+  const canAccessEvents = canAccessMyEvents({ globalRole, hasEventMembership });
+  const canCreateEvents = canCreateEvent(globalRole);
 
   const loadEvents = useCallback(async (isManual = false) => {
     if (!user || !canAccessEvents) return;
@@ -169,7 +170,7 @@ export default function MyEventsPage() {
       return;
     }
 
-    if (isPlatformOwner || isApproved) {
+    if (isPlatformOwner) {
       setHasEventMembership(false);
       setAccessLoading(false);
       return;
@@ -192,7 +193,7 @@ export default function MyEventsPage() {
     return () => {
       isMounted = false;
     };
-  }, [authLoading, user, isPlatformOwner, isApproved]);
+  }, [authLoading, user, isPlatformOwner]);
 
   useEffect(() => {
     if (user && canAccessEvents && !accessLoading) {
@@ -227,7 +228,7 @@ export default function MyEventsPage() {
                     </div>
                     <CardTitle className="text-3xl font-bold">Accès restreint</CardTitle>
                     <CardDescription className="text-lg mt-4 max-w-md mx-auto">
-                        Votre compte n'est pas encore validé. Seuls les organisateurs approuvés peuvent créer et gérer des événements.
+                        Aucun accès organisateur n'est associé à ce compte.
                     </CardDescription>
                     <div className="mt-8">
                         <Button asChild variant="outline" className="rounded-xl px-8 h-12">
@@ -265,7 +266,7 @@ export default function MyEventsPage() {
                 <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
                 Actualiser
             </Button>
-            <CreateEventDialog onEventCreated={() => loadEvents(true)} />
+            {canCreateEvents && <CreateEventDialog onEventCreated={() => loadEvents(true)} />}
           </div>
         </div>
 
@@ -289,11 +290,11 @@ export default function MyEventsPage() {
             <CardDescription className="mt-2 max-w-sm">
                {isPlatformOwner
                  ? "Aucun événement n'existe encore sur la plateforme."
-                 : "Vous n'avez pas encore créé d'événement ou vous n'êtes membre d'aucun espace."}
+                 : "Vous n'êtes membre d'aucun espace événement."}
             </CardDescription>
-            <div className="mt-8">
+            {canCreateEvents && <div className="mt-8">
               <CreateEventDialog onEventCreated={() => loadEvents(true)} />
-            </div>
+            </div>}
           </Card>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

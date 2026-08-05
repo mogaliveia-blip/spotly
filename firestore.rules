@@ -148,6 +148,10 @@ service cloud.firestore {
       return role == "admin" || role == "editor";
     }
 
+    function canCreateEvent() {
+      return isOwner();
+    }
+
     /* =========================
        EVENTS ROOT
     ========================= */
@@ -162,11 +166,8 @@ service cloud.firestore {
         resource.data.status == "published";
 
       allow create: if
-        isApproved() &&
-        (
-          isOwner() ||
-          request.resource.data.adminId == getUserId()
-        ) &&
+        canCreateEvent() &&
+        request.resource.data.adminId == getUserId() &&
         request.resource.data.status == "draft";
 
       allow update, delete: if isEventAdmin(eventId);
@@ -180,15 +181,8 @@ service cloud.firestore {
       // lecture équipe
       allow read: if isEventMember(eventId);
 
-      // IMPORTANT :
-      // permet la création initiale du créateur après création du document event
       allow create: if isAuthenticated() &&
         (
-          (
-            request.auth.uid == userId &&
-            request.resource.data.uid == userId &&
-            request.resource.data.role == "admin"
-          ) ||
           isOwner() ||
           isEventAdmin(eventId)
         ) &&

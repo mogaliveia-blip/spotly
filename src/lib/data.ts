@@ -336,6 +336,10 @@ export async function createEvent(data: {
   const userDoc = await getDoc(doc(db, 'users', data.adminId));
   const userData = userDoc.data();
 
+  if (userData?.role !== 'owner') {
+    throw new Error('EVENT_CREATE_FORBIDDEN');
+  }
+
   const eventData: {
     name: string;
     slug: string;

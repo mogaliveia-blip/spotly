@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { canAccessMyEvents, canAccessPlatformAdmin } from './access-control'
+import { canAccessMyEvents, canAccessPlatformAdmin, canCreateEvent } from './access-control'
 
 describe('access-control', () => {
   it('allows platform owners to access admin and my events', () => {
     assert.equal(canAccessPlatformAdmin('owner'), true)
     assert.equal(canAccessMyEvents({ globalRole: 'owner' }), true)
+    assert.equal(canCreateEvent('owner'), true)
   })
 
   it('allows event admins and editors to access my events', () => {
@@ -15,8 +16,9 @@ describe('access-control', () => {
     assert.equal(canAccessMyEvents({ globalRole: 'user', hasEventMembership: true }), true)
   })
 
-  it('allows approved users without event membership to access my events', () => {
-    assert.equal(canAccessMyEvents({ globalRole: 'user', isApproved: true }), true)
+  it('does not treat account approval as an event management permission', () => {
+    assert.equal(canAccessMyEvents({ globalRole: 'user' }), false)
+    assert.equal(canCreateEvent('user'), false)
   })
 
   it('denies simple users without approval or event membership', () => {

@@ -10,15 +10,17 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 export default function AccessPendingPage() {
-    const { user, isApproved, loading } = useAuth();
+    const { user, role, loading } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
-        // Redirection si l'utilisateur est soudainement approuvé
-        if (!loading && user && isApproved) {
+        if (!loading && user && role === 'owner') {
             router.replace('/admin/events');
         }
-    }, [user, isApproved, loading, router]);
+        if (!loading && user && role === 'user') {
+            router.replace('/');
+        }
+    }, [user, role, loading, router]);
 
     const handleSignOut = async () => {
         await signOut(auth);

@@ -231,7 +231,7 @@ function POISidebarList() {
 }
 
 export function SidebarNav() {
-  const { user, role: globalRole, isApproved } = useAuth();
+  const { user, role: globalRole } = useAuth();
   const { userRole } = useEvent();
   const pathname = usePathname();
   const params = useParams();
@@ -240,7 +240,7 @@ export function SidebarNav() {
   const prefix = eventSlug ? `/${eventSlug}` : '';
 
   const canManageCurrentEvent = canManageEvent(globalRole, userRole);
-  const showMyEvents = canAccessMyEvents({ globalRole, isApproved, eventRole: userRole });
+  const showMyEvents = canAccessMyEvents({ globalRole, eventRole: userRole });
 
   const navItems = [
     {

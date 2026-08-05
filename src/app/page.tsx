@@ -63,10 +63,10 @@ export default function PortalPage() {
   const [hasEventMembership, setHasEventMembership] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState(ALL_DEPARTMENTS_VALUE);
-  const { user, loading: authLoading, role: globalRole, isApproved } = useAuth();
+  const { user, loading: authLoading, role: globalRole } = useAuth();
 
   const isLoading = authLoading || !config;
-  const showMyEvents = !!user && canAccessMyEvents({ globalRole, isApproved, hasEventMembership });
+  const showMyEvents = !!user && canAccessMyEvents({ globalRole, hasEventMembership });
   const showPlatformAdmin = canAccessPlatformAdmin(globalRole);
 
   const departments = useMemo(() => {
@@ -148,7 +148,7 @@ export default function PortalPage() {
   useEffect(() => {
     let isMounted = true;
 
-    if (!user || showPlatformAdmin || isApproved) {
+    if (!user || showPlatformAdmin) {
       setHasEventMembership(false);
       return;
     }
@@ -164,7 +164,7 @@ export default function PortalPage() {
     return () => {
       isMounted = false;
     };
-  }, [user, showPlatformAdmin, isApproved]);
+  }, [user, showPlatformAdmin]);
 
   const renderEventCard = (event: AppEvent) => {
     const departmentLabel = getEventDepartmentLabel(event);
