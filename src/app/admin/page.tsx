@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   fetchUsers,
   updateUserRole,
@@ -462,17 +462,36 @@ function UserTable() {
 }
 
 export default function AdminPage() {
-  const { role, loading } = useAuth();
+  const { firebaseUser, role, loading, authStateKnown, profileLoading, isApproved } = useAuth();
+  const pathname = usePathname();
   const router = useRouter();
 
   // Seul le rôle global 'owner' peut désormais accéder à l'administration de la plateforme
   const canAccess = role === 'owner';
+  const authOrProfileLoading = loading || (!!firebaseUser && profileLoading);
+  const loadingReason = loading
+    ? 'authLoading'
+    : firebaseUser && profileLoading
+      ? 'profileLoading'
+      : null;
 
   useEffect(() => {
-    if (!loading && !canAccess) router.replace('/dashboard');
-  }, [role, loading, router, canAccess]);
+    console.info('[Admin Route Diagnostic]', {
+      pathname,
+      uidPresent: !!firebaseUser,
+      authLoading: loading,
+      authStateKnown,
+      profileLoading,
+      globalRole: role,
+      isApproved,
+      accessAllowed: canAccess,
+      loadingReason,
+    });
 
-  if (loading) return <div className="p-12 text-center text-muted-foreground animate-pulse">Chargement de l'administration...</div>;
+    if (!authOrProfileLoading && !canAccess) router.replace('/dashboard');
+  }, [authOrProfileLoading, authStateKnown, canAccess, firebaseUser, isApproved, loading, loadingReason, pathname, profileLoading, role, router]);
+
+  if (authOrProfileLoading) return <div className="p-12 text-center text-muted-foreground animate-pulse">Chargement de l'administration...</div>;
   if (!canAccess) return null;
 
   return (

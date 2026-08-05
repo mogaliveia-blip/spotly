@@ -13,6 +13,7 @@ interface EventContextType {
   eventId: string;
   loading: boolean;
   userRole: EventRole | null; // Ajout du rôle local de l'utilisateur
+  roleLoading: boolean;
 }
 
 const EventContext = createContext<EventContextType>({
@@ -20,6 +21,7 @@ const EventContext = createContext<EventContextType>({
   eventId: DEFAULT_EVENT_ID,
   loading: true,
   userRole: null,
+  roleLoading: false,
 });
 
 export function EventProvider({ children }: { children: React.ReactNode }) {
@@ -29,6 +31,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
   const [event, setEvent] = useState<AppEvent | null>(null);
   const [currentEventId, setInternalEventId] = useState<string>(DEFAULT_EVENT_ID);
   const [userRole, setUserRole] = useState<EventRole | null>(null);
+  const [roleLoading, setRoleLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [resolvedSlug, setResolvedSlug] = useState<string | null>(null);
 
@@ -62,6 +65,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           setInternalEventId(DEFAULT_EVENT_ID);
           setResolvedSlug('global');
           setUserRole(null);
+          setRoleLoading(false);
           setLoading(false);
           console.info('[Perf] event-provider-ready', {
             requestId,
@@ -107,6 +111,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       setInternalEventId(DEFAULT_EVENT_ID);
       setEvent(null);
       setUserRole(null);
+      setRoleLoading(false);
 
       try {
         const publicResolved = await fetchEventBySlug(eventSlug);
@@ -146,6 +151,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         
         if (isMounted) {
           if (resolved) {
+            setRoleLoading(!!user);
             setEvent(resolved);
             setInternalEventId(resolved.id);
 
@@ -189,6 +195,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           setInternalEventId(DEFAULT_EVENT_ID);
           setEvent(null);
           setResolvedSlug(eventSlug);
+          setRoleLoading(false);
           setLoading(false);
           console.info('[Perf] event-provider-ready', {
             requestId,
@@ -208,13 +215,14 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [eventSlug, user, globalRole, authLoading, authStateKnown, isPublicDashboard, pathname, resolvedSlug, event?.slug, event?.status, event?.id]);
+  }, [eventSlug, user?.uid, globalRole, authLoading, authStateKnown, isPublicDashboard, pathname]);
 
   useEffect(() => {
     let isMounted = true;
 
     if (!event) {
       setUserRole(null);
+      setRoleLoading(false);
       return () => {
         isMounted = false;
       };
@@ -222,6 +230,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
     if (!user) {
       setUserRole(null);
+      setRoleLoading(false);
       return () => {
         isMounted = false;
       };
@@ -232,6 +241,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
     async function resolveMembershipRole() {
       const memberStartedAt = performance.now();
+      setRoleLoading(true);
 
       try {
         const memberDoc = await getDoc(doc(db, `events/${resolvedEvent.id}/members`, resolvedUser.uid));
@@ -265,6 +275,10 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         if (isMounted) {
           setUserRole(globalRole === 'owner' ? 'admin' : null);
         }
+      } finally {
+        if (isMounted) {
+          setRoleLoading(false);
+        }
       }
     }
 
@@ -280,7 +294,8 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       event, 
       eventId: currentEventId, 
       loading: loading || isTransitioning,
-      userRole
+      userRole,
+      roleLoading
     }}>
       {children}
     </EventContext.Provider>

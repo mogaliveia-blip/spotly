@@ -647,9 +647,14 @@ export async function fetchEventMembers(eventId: string): Promise<EventMemberWit
         joinedAt: (data.joinedAt as any)?.toDate?.() || new Date(data.joinedAt)
       } as EventMemberWithProfile;
     });
-  } catch (error) {
-    console.error("[Data] fetchEventMembers failed:", error);
-    return [];
+  } catch (error: any) {
+    console.warn('[Admin Firestore Error]', {
+      operation: 'fetchEventMembers',
+      path: `events/${eventId}/members`,
+      code: error?.code ?? null,
+      message: error?.message ?? null,
+    });
+    throw error;
   }
 }
 
@@ -1238,7 +1243,13 @@ export async function fetchUsers(): Promise<AppUser[]> {
     const userCollection = collection(db, 'users')
     const userSnapshot = await getDocs(userCollection)
     return userSnapshot.docs.map((doc) => doc.data() as AppUser)
-  } catch (error) {
+  } catch (error: any) {
+    console.warn('[Admin Firestore Error]', {
+      operation: 'fetchUsers',
+      path: 'users',
+      code: error?.code ?? null,
+      message: error?.message ?? null,
+    });
     return [];
   }
 }

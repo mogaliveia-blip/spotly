@@ -15,8 +15,8 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { role, loading: authLoading } = useAuth();
-  const { eventId, event, loading: eventLoading, userRole } = useEvent();
+  const { firebaseUser, role, loading: authLoading, profileLoading } = useAuth();
+  const { eventId, event, loading: eventLoading, userRole, roleLoading } = useEvent();
   const params = useParams();
   const eventSlug = params.eventSlug as string;
   const startedAtRef = useRef<number | null>(null);
@@ -96,7 +96,16 @@ export default function DashboardLayout({
 
   // Les événements non publiés restent réservés au staff résolu par EventProvider.
   const isStaff = role === 'owner' || userRole === 'admin' || userRole === 'editor';
+  const staffAccessLoading = event?.status !== 'published' && !!firebaseUser && (profileLoading || roleLoading);
   const isBlockedByStatus = event?.status !== 'published' && !isStaff;
+
+  if (staffAccessLoading) {
+    return (
+       <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Mountain className="h-12 w-12 animate-pulse text-primary" />
+      </div>
+    );
+  }
 
   if (isBlockedByStatus) {
     return (
