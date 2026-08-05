@@ -13,7 +13,15 @@ export const metadata: Metadata = {
   title: 'Spotly',
   description: "Votre guide pour les points d'intérêt de l'événement.",
   icons: {
-    icon: '/icon/favicon.ico',
+    icon: [
+      {
+        url: '/icon/favicon.svg',
+        type: 'image/svg+xml',
+      },
+      {
+        url: '/icon/favicon.ico',
+      },
+    ],
   },
 }
 
