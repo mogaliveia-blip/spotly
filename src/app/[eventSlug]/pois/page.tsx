@@ -126,67 +126,61 @@ function POIsTable() {
               </SelectContent>
           </Select>
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-[80px]">Image</TableHead>
-            <TableHead>Titre</TableHead>
-            <TableHead>Catégorie</TableHead>
-            <TableHead>Partenariat</TableHead>
-            <TableHead className="hidden md:table-cell">Description</TableHead>
-            <TableHead className="hidden sm:table-cell">Avis</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filteredPois.map((poi) => (
-            <TableRow key={poi.id}>
-              <TableCell>
-                <div className="relative h-12 w-12 rounded-md overflow-hidden border">
-                  {poi.headerPhotoUrl ? (
-                    <Image src={poi.headerPhotoUrl} alt={poi.title} fill className="object-cover" />
-                  ) : (
-                    <div className="h-full w-full bg-muted flex items-center justify-center text-muted-foreground">
-                      <MapPin className="h-6 w-6"/>
+      <div className="md:hidden">
+        {filteredPois.length === 0 ? (
+          <div className="rounded-3xl border border-dashed bg-muted/20 px-4 py-12 text-center text-sm font-medium text-muted-foreground">
+            Aucun point d'intérêt trouvé.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredPois.map((poi) => (
+              <div key={poi.id} className="rounded-2xl border bg-background p-3 shadow-sm">
+                <div className="flex gap-3">
+                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border bg-muted">
+                    {poi.headerPhotoUrl ? (
+                      <Image src={poi.headerPhotoUrl} alt={poi.title} fill sizes="80px" className="object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                        <MapPin className="h-6 w-6"/>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <h3 className="break-words text-base font-bold leading-snug">{poi.title}</h3>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <Badge variant="secondary" className="max-w-full truncate">
+                        {poi.mainCategory && categoriesMap[poi.mainCategory] ? categoriesMap[poi.mainCategory].label : 'N/A'}
+                      </Badge>
+                      {isSponsorActive(poi) && (
+                        <Badge className="bg-amber-500 hover:bg-amber-500">
+                          Partenariat actif
+                        </Badge>
+                      )}
+                      <Badge variant={poi.reviewCount > 0 ? "default" : "secondary"}>
+                        {poi.reviewCount} avis
+                      </Badge>
                     </div>
-                  )}
+                  </div>
                 </div>
-              </TableCell>
-              <TableCell className="font-medium">{poi.title}</TableCell>
-              <TableCell>
-                <Badge variant="secondary">{poi.mainCategory && categoriesMap[poi.mainCategory] ? categoriesMap[poi.mainCategory].label : 'N/A'}</Badge>
-              </TableCell>
-              <TableCell>
-                {isSponsorActive(poi) ? (
-                  <Badge className="bg-amber-500 hover:bg-amber-500">
-                    Actif
-                  </Badge>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </TableCell>
-              <TableCell className="hidden md:table-cell truncate max-w-sm">{poi.description}</TableCell>
-              <TableCell className="hidden sm:table-cell">
-                  <Badge variant={poi.reviewCount > 0 ? "default" : "secondary"}>
-                      {poi.reviewCount} avis
-                  </Badge>
-              </TableCell>
-              <TableCell className="flex gap-2 justify-end">
-                <Button variant="outline" size="icon" onClick={() => handleViewClick(poi.id)}>
-                  <Eye className="h-4 w-4" />
-                  <span className="sr-only">Voir</span>
-                </Button>
-                {canManagePois && (
-                  <>
-                    <Button variant="outline" size="icon" onClick={() => handleEditClick(poi.id)}>
-                      <Edit className="h-4 w-4" />
-                      <span className="sr-only">Modifier</span>
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button variant="outline" className="min-h-11 rounded-xl" onClick={() => handleViewClick(poi.id)}>
+                    <Eye className="mr-2 h-4 w-4" />
+                    Voir
+                  </Button>
+                  {canManagePois && (
+                    <Button variant="outline" className="min-h-11 rounded-xl" onClick={() => handleEditClick(poi.id)}>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Modifier
                     </Button>
+                  )}
+                  {canManagePois && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="icon">
-                          <Trash2 className="h-4 w-4" />
-                          <span className="sr-only">Supprimer</span>
+                        <Button variant="destructive" className="col-span-2 min-h-11 rounded-xl">
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Supprimer
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
@@ -202,20 +196,103 @@ function POIsTable() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
-                  </>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-          {filteredPois.length === 0 && (
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                Aucun point d'intérêt trouvé.
-              </TableCell>
+              <TableHead className="w-[80px]">Image</TableHead>
+              <TableHead>Titre</TableHead>
+              <TableHead>Catégorie</TableHead>
+              <TableHead>Partenariat</TableHead>
+              <TableHead className="hidden md:table-cell">Description</TableHead>
+              <TableHead className="hidden sm:table-cell">Avis</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-          )}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {filteredPois.map((poi) => (
+              <TableRow key={poi.id}>
+                <TableCell>
+                  <div className="relative h-12 w-12 rounded-md overflow-hidden border">
+                    {poi.headerPhotoUrl ? (
+                      <Image src={poi.headerPhotoUrl} alt={poi.title} fill sizes="48px" className="object-cover" />
+                    ) : (
+                      <div className="h-full w-full bg-muted flex items-center justify-center text-muted-foreground">
+                        <MapPin className="h-6 w-6"/>
+                      </div>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="font-medium">{poi.title}</TableCell>
+                <TableCell>
+                  <Badge variant="secondary">{poi.mainCategory && categoriesMap[poi.mainCategory] ? categoriesMap[poi.mainCategory].label : 'N/A'}</Badge>
+                </TableCell>
+                <TableCell>
+                  {isSponsorActive(poi) ? (
+                    <Badge className="bg-amber-500 hover:bg-amber-500">
+                      Actif
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+                <TableCell className="hidden md:table-cell truncate max-w-sm">{poi.description}</TableCell>
+                <TableCell className="hidden sm:table-cell">
+                    <Badge variant={poi.reviewCount > 0 ? "default" : "secondary"}>
+                        {poi.reviewCount} avis
+                    </Badge>
+                </TableCell>
+                <TableCell className="flex gap-2 justify-end">
+                  <Button variant="outline" size="icon" aria-label={`Voir ${poi.title}`} onClick={() => handleViewClick(poi.id)}>
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  {canManagePois && (
+                    <>
+                      <Button variant="outline" size="icon" aria-label={`Modifier ${poi.title}`} onClick={() => handleEditClick(poi.id)}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="icon" aria-label={`Supprimer ${poi.title}`}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Cette action est irréversible. Le POI "{poi.title}" sera définitivement supprimé.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Annuler</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(poi.id)}>Supprimer</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+            {filteredPois.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                  Aucun point d'intérêt trouvé.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </>
   );
 }

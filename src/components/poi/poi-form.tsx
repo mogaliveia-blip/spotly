@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
@@ -23,8 +23,8 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
-import { useState, useEffect } from 'react';
-import { Loader2, MapPin, Crosshair, ImagePlus, X, Calendar as CalendarIcon, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Loader2, MapPin, Crosshair, ImagePlus, X } from 'lucide-react';
 import type { POI, MainCategory, SubCategory, POISponsor } from '@/lib/types';
 import { categoriesMap } from '@/lib/types';
 import { useGeolocation } from '@/providers/geolocation-provider';
@@ -35,7 +35,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useAuth } from '@/hooks/use-auth-user';
 import { useEvent } from '@/providers/event-provider';
 import { Switch } from '@/components/ui/switch';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 async function compressImage(file: File): Promise<File> {
   const img = new window.Image();
@@ -104,6 +103,8 @@ const formSchema = z.object({
 }, { message: 'La date de fin doit être postérieure à la date de début', path: ['sponsor.endDate'] });
 
 type POIFormValues = z.infer<typeof formSchema>;
+type GalleryImage = { url: string; path: string };
+type NewGalleryImage = { id: string; file: File; previewUrl: string };
 
 function getErrorDetails(error: unknown): { code?: string; message: string } {
   if (error instanceof Error) {
@@ -191,7 +192,6 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
     },
   });
 
-  const { fields: galleryFields, append, remove } = useFieldArray({ control: form.control, name: 'galleryUrls' });
   const selectedMainCategory = form.watch('mainCategory');
   const selectedLocation = form.watch('location');
   const headerPhotoUrl = form.watch('headerPhotoUrl');
@@ -199,8 +199,11 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
 
   const [headerImageFile, setHeaderImageFile] = useState<File | null>(null);
   const [headerPreviewUrl, setHeaderPreviewUrl] = useState<string | null>(null);
-  const [galleryImageFiles, setGalleryImageFiles] = useState<File[]>([]);
-  const [galleryPreviewUrls, setGalleryPreviewUrls] = useState<string[]>([]);
+  const [existingGalleryUrls, setExistingGalleryUrls] = useState<GalleryImage[]>([]);
+  const [newGalleryImages, setNewGalleryImages] = useState<NewGalleryImage[]>([]);
+  const loadedPoiKeyRef = useRef<string | null>(null);
+  const initialLocationAppliedRef = useRef(false);
+  const newGalleryImagesRef = useRef<NewGalleryImage[]>([]);
 
   useEffect(() => {
     if (!isEditMode) {
@@ -210,34 +213,49 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   }, [selectedMainCategory, isEditMode, form]);
 
   useEffect(() => {
+    if (!poiId) return;
+    if (!eventId || geoLoading) return;
+
+    const poiKey = `${eventId}:${poiId}`;
+    if (loadedPoiKeyRef.current === poiKey) return;
+    loadedPoiKeyRef.current = poiKey;
+    const resolvedEventId = eventId;
+    const resolvedPoiId = poiId;
+
     async function getPoi() {
-      if (!eventId) return;
-      
-      if (poiId) {
-        try {
-          const data = await fetchPoiById(poiId, eventId);
-          if (data) {
-             const sponsorSafe = {
-              enabled: data.sponsor?.enabled ?? false,
-              level: data.sponsor?.level ?? 'standard',
-              priority: data.sponsor?.priority ?? 0,
-              startDate: data.sponsor?.startDate ? (data.sponsor.startDate as any).toDate?.() || new Date(data.sponsor.startDate) : undefined,
-              endDate: data.sponsor?.endDate ? (data.sponsor.endDate as any).toDate?.() || new Date(data.sponsor.endDate) : undefined,
-            };
-            form.reset({ ...data, sponsor: sponsorSafe } as POIFormValues);
-          } else {
-            router.push(`${prefix}/pois`);
-          }
-        } catch (error) {
-          toast({ title: 'Erreur', variant: 'destructive' });
-        } finally { setPageIsLoading(false); }
-      } else {
-        if (userLocation) form.setValue('location', userLocation);
+      try {
+        const data = await fetchPoiById(resolvedPoiId, resolvedEventId);
+        if (data) {
+          const sponsorSafe = {
+            enabled: data.sponsor?.enabled ?? false,
+            level: data.sponsor?.level ?? 'standard',
+            priority: data.sponsor?.priority ?? 0,
+            startDate: data.sponsor?.startDate ? (data.sponsor.startDate as any).toDate?.() || new Date(data.sponsor.startDate) : undefined,
+            endDate: data.sponsor?.endDate ? (data.sponsor.endDate as any).toDate?.() || new Date(data.sponsor.endDate) : undefined,
+          };
+          form.reset({ ...data, sponsor: sponsorSafe } as POIFormValues);
+          setExistingGalleryUrls(data.galleryUrls ?? []);
+        } else {
+          router.push(`${prefix}/pois`);
+        }
+      } catch (error) {
+        toast({ title: 'Erreur', variant: 'destructive' });
+      } finally {
         setPageIsLoading(false);
       }
     }
-    if (!geoLoading) getPoi();
-  }, [poiId, eventId, geoLoading, userLocation, router, prefix, toast, form]);
+
+    void getPoi();
+  }, [poiId, eventId, geoLoading, router, prefix, toast, form]);
+
+  useEffect(() => {
+    if (poiId || geoLoading) return;
+    if (userLocation && !initialLocationAppliedRef.current) {
+      form.setValue('location', userLocation);
+      initialLocationAppliedRef.current = true;
+    }
+    setPageIsLoading(false);
+  }, [poiId, geoLoading, userLocation, form]);
 
   useEffect(() => {
     if (!headerImageFile) return setHeaderPreviewUrl(null);
@@ -247,10 +265,34 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   }, [headerImageFile]);
 
   useEffect(() => {
-    const urls = galleryImageFiles.map(f => URL.createObjectURL(f));
-    setGalleryPreviewUrls(urls);
-    return () => urls.forEach(u => URL.revokeObjectURL(u));
-  }, [galleryImageFiles]);
+    newGalleryImagesRef.current = newGalleryImages;
+  }, [newGalleryImages]);
+
+  useEffect(() => {
+    return () => {
+      newGalleryImagesRef.current.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+    };
+  }, []);
+
+  function handleAddGalleryImages(files: FileList | null) {
+    if (!files?.length) return;
+
+    const images = Array.from(files).map((file) => ({
+      id: crypto.randomUUID(),
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
+
+    setNewGalleryImages((previous) => [...previous, ...images]);
+  }
+
+  function handleRemoveNewGalleryImage(id: string) {
+    setNewGalleryImages((previous) => {
+      const image = previous.find((item) => item.id === id);
+      if (image) URL.revokeObjectURL(image.previewUrl);
+      return previous.filter((item) => item.id !== id);
+    });
+  }
 
   async function onSubmit(values: POIFormValues) {
     if (!eventId || (eventSlug && eventId === 'default-event')) {
@@ -295,11 +337,10 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
         finalHeader = url;
       }
 
-      const existingGallery = values.galleryUrls || [];
       let newUploads: { url: string; path: string }[] = [];
-      if (galleryImageFiles.length > 0) {
-        newUploads = await Promise.all(galleryImageFiles.map(async f => {
-          const comp = await compressImage(f);
+      if (newGalleryImages.length > 0) {
+        newUploads = await Promise.all(newGalleryImages.map(async image => {
+          const comp = await compressImage(image.file);
           return uploadFile(comp, `${storagePrefix}poi-images/${targetId}/gallery/${crypto.randomUUID()}.jpg`);
         }));
       }
@@ -307,7 +348,7 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
       const updatePayload = {
         ...rest,
         headerPhotoUrl: finalHeader,
-        galleryUrls: [...existingGallery, ...newUploads],
+        galleryUrls: [...existingGalleryUrls, ...newUploads],
         sponsor: sponsorPayload ?? deleteField() as any
       };
 
@@ -425,20 +466,30 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
                   <div className="space-y-2">
                     <Label>Galerie</Label>
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                      {galleryFields.map((f, i) => (
-                        <div className="relative aspect-square rounded-2xl overflow-hidden border group" key={f.id}>
-                          <Image src={f.url} alt="Gallery" fill className="object-cover" />
-                          <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => handleRemoveExistingGalleryImage(i, f.path)}><X className="h-3 w-3" /></Button>
+                      {existingGalleryUrls.map((image) => (
+                        <div className="relative aspect-square rounded-2xl overflow-hidden border group" key={image.path || image.url}>
+                          <Image src={image.url} alt="Gallery" fill sizes="(max-width: 640px) 33vw, 25vw" className="object-cover" />
+                          <Button type="button" variant="destructive" size="icon" aria-label="Supprimer cette image existante" className="absolute top-1 right-1 h-8 w-8 opacity-100 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100" onClick={() => handleRemoveExistingGalleryImage(image.path)}><X className="h-3 w-3" /></Button>
                         </div>
                       ))}
-                      {galleryPreviewUrls.map((u, i) => (
-                        <div className="relative aspect-square rounded-2xl overflow-hidden border bg-primary/5" key={u}>
-                          <Image src={u} alt="New" fill className="object-cover" />
-                          <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => setGalleryImageFiles(prev => prev.filter((_, idx) => idx !== i))}><X className="h-3 w-3" /></Button>
+                      {newGalleryImages.map((image) => (
+                        <div className="relative aspect-square rounded-2xl overflow-hidden border bg-primary/5" key={image.id}>
+                          <Image src={image.previewUrl} alt="New" fill sizes="(max-width: 640px) 33vw, 25vw" className="object-cover" unoptimized />
+                          <Button type="button" variant="ghost" size="icon" aria-label="Retirer cette nouvelle image" className="absolute top-1 right-1 h-8 w-8 sm:h-6 sm:w-6" onClick={() => handleRemoveNewGalleryImage(image.id)}><X className="h-3 w-3" /></Button>
                         </div>
                       ))}
                       <label htmlFor="g-up" className="aspect-square border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-muted/30 transition-colors"><ImagePlus className="h-6 w-6 mb-1" /><span className="text-[10px] font-bold">AJOUTER</span></label>
-                      <Input type="file" multiple accept="image/*" className="hidden" id="g-up" onChange={e => setGalleryImageFiles(p => [...p, ...Array.from(e.target.files || [])])} />
+                      <Input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        className="hidden"
+                        id="g-up"
+                        onChange={(event) => {
+                          handleAddGalleryImages(event.target.files);
+                          event.currentTarget.value = '';
+                        }}
+                      />
                     </div>
                   </div>
                 </CardContent>
@@ -467,9 +518,12 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
       </Form>
   );
 
-  async function handleRemoveExistingGalleryImage(index: number, path: string) {
+  async function handleRemoveExistingGalleryImage(path: string) {
     if (!confirm("Supprimer cette image ?")) return;
-    try { await deleteFileByPath(path); remove(index); } catch (error: any) {
+    try {
+      await deleteFileByPath(path);
+      setExistingGalleryUrls((previous) => previous.filter((image) => image.path !== path));
+    } catch (error: any) {
       toast({
         title: 'Erreur',
         description: 'Impossible de supprimer l\'image du stockage.',
