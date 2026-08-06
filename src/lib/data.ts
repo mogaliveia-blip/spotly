@@ -211,7 +211,7 @@ export async function fetchPublishedEvents(): Promise<AppEvent[]> {
   try {
     const eventsRef = collection(db, 'events');
     const q = query(eventsRef, where('status', '==', 'published'));
-    const snap = await getDocs(q);
+    const snap = await getDocsFromServer(q);
     
     return snap.docs.map(d => {
       const data = d.data();
@@ -224,9 +224,12 @@ export async function fetchPublishedEvents(): Promise<AppEvent[]> {
         endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
       } as AppEvent;
     });
-  } catch (error) {
-    console.error("[Data] Erreur fetchPublishedEvents:", error);
-    return [];
+  } catch (error: any) {
+    console.error('[Data] fetchPublishedEvents failed', {
+      code: error?.code ?? null,
+      message: error?.message ?? null,
+    });
+    throw error;
   }
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { Button } from '@/components/ui/button';
 import { fetchAppConfig, DEFAULT_EVENT_ID, fetchPublishedEvents, fetchUserEvents } from '@/lib/data';
@@ -17,6 +17,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { canAccessMyEvents, canAccessPlatformAdmin } from '@/lib/access-control';
 
 const ALL_DEPARTMENTS_VALUE = 'all';
+const EVENTS_LOAD_TIMEOUT_MS = 8000;
+const EVENTS_RETRY_DELAY_MS = 900;
+const EVENTS_STALE_MS = 30000;
+const defaultConfig: AppConfig = { isLandingPageActive: false };
+
+type EventsLoadStatus = 'loading' | 'refreshing' | 'success' | 'error';
+
+let publishedEventsMemoryCache: { events: AppEvent[]; loadedAt: number } | null = null;
 
 function normalizeSearchValue(value?: string): string {
   return value?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim() ?? '';
@@ -58,14 +66,19 @@ function compareEventsByDate(a: AppEvent, b: AppEvent): number {
 
 export default function PortalPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [events, setEvents] = useState<AppEvent[]>([]);
-  const [eventsLoading, setEventsLoading] = useState(false);
+  const [events, setEvents] = useState<AppEvent[]>(publishedEventsMemoryCache?.events ?? []);
+  const [eventsStatus, setEventsStatus] = useState<EventsLoadStatus>(publishedEventsMemoryCache?.events.length ? 'refreshing' : 'loading');
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [lastEventsLoadedAt, setLastEventsLoadedAt] = useState<number | null>(publishedEventsMemoryCache?.loadedAt ?? null);
   const [hasEventMembership, setHasEventMembership] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState(ALL_DEPARTMENTS_VALUE);
-  const { user, loading: authLoading, role: globalRole } = useAuth();
+  const { user, role: globalRole } = useAuth();
+  const eventRequestSeqRef = useRef(0);
+  const activeEventsRequestRef = useRef<number | null>(null);
+  const latestEventsRef = useRef<AppEvent[]>(publishedEventsMemoryCache?.events ?? []);
 
-  const isLoading = authLoading || !config;
+  const effectiveConfig = config ?? defaultConfig;
   const showMyEvents = !!user && canAccessMyEvents({ globalRole, hasEventMembership });
   const showPlatformAdmin = canAccessPlatformAdmin(globalRole);
 
@@ -166,6 +179,91 @@ export default function PortalPage() {
     };
   }, [user, showPlatformAdmin]);
 
+  const readEventsWithTimeout = useCallback(() => {
+    let timeoutId: number | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = window.setTimeout(() => reject(new Error('EVENTS_LOAD_TIMEOUT')), EVENTS_LOAD_TIMEOUT_MS);
+    });
+
+    return Promise.race([fetchPublishedEvents(), timeout]).finally(() => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    });
+  }, []);
+
+  const loadPublishedEvents = useCallback(async (reason: 'initial' | 'retry' | 'resume' = 'initial') => {
+    if (activeEventsRequestRef.current !== null) return;
+
+    const cached = publishedEventsMemoryCache;
+    const currentEvents = latestEventsRef.current;
+    const hadValidEvents = (cached?.events.length ?? 0) > 0 || currentEvents.length > 0;
+    const requestId = ++eventRequestSeqRef.current;
+    activeEventsRequestRef.current = requestId;
+
+    if (cached?.events.length) {
+      setEvents(cached.events);
+      setLastEventsLoadedAt(cached.loadedAt);
+    } else if (!hadValidEvents && reason === 'initial') {
+      setEvents([]);
+      setLastEventsLoadedAt(null);
+    }
+
+    setEventsStatus(hadValidEvents ? 'refreshing' : 'loading');
+    setEventsError(null);
+
+    try {
+      let nextEvents: AppEvent[];
+
+      try {
+        nextEvents = await readEventsWithTimeout();
+      } catch {
+        await new Promise((resolve) => window.setTimeout(resolve, EVENTS_RETRY_DELAY_MS));
+        nextEvents = await readEventsWithTimeout();
+      }
+
+      if (nextEvents.length === 0 && !hadValidEvents) {
+        await new Promise((resolve) => window.setTimeout(resolve, EVENTS_RETRY_DELAY_MS));
+        nextEvents = await readEventsWithTimeout();
+      }
+
+      if (activeEventsRequestRef.current !== requestId || eventRequestSeqRef.current !== requestId) {
+        return;
+      }
+
+      if (nextEvents.length === 0 && hadValidEvents) {
+        setEvents(cached?.events.length ? cached.events : currentEvents);
+        setEventsStatus('error');
+        setEventsError('La dernière lecture des événements est incomplète. Les derniers événements connus restent affichés.');
+        return;
+      }
+
+      const loadedAt = Date.now();
+      publishedEventsMemoryCache = { events: nextEvents, loadedAt };
+      setEvents(nextEvents);
+      setLastEventsLoadedAt(loadedAt);
+      setEventsStatus('success');
+      setEventsError(null);
+    } catch (error: any) {
+      if (activeEventsRequestRef.current !== requestId || eventRequestSeqRef.current !== requestId) {
+        return;
+      }
+
+      setEventsStatus('error');
+      setEventsError(
+        error?.message === 'EVENTS_LOAD_TIMEOUT'
+          ? 'Le chargement des événements prend trop de temps. Vérifiez votre connexion puis réessayez.'
+          : 'Impossible de charger les événements.'
+      );
+    } finally {
+      if (activeEventsRequestRef.current === requestId) {
+        activeEventsRequestRef.current = null;
+      }
+    }
+  }, [readEventsWithTimeout]);
+
+  useEffect(() => {
+    latestEventsRef.current = events;
+  }, [events]);
+
   const renderEventCard = (event: AppEvent) => {
     const departmentLabel = getEventDepartmentLabel(event);
     const locationLabel = [event.city, departmentLabel, event.region].filter(Boolean).join(' · ');
@@ -227,35 +325,54 @@ export default function PortalPage() {
   };
 
   useEffect(() => {
-    console.log(`[Audit] PortalPage monté. Chargement de la config globale...`);
-    
+    void loadPublishedEvents('initial');
+  }, [loadPublishedEvents]);
+
+  useEffect(() => {
+    let isMounted = true;
+
     fetchAppConfig(DEFAULT_EVENT_ID)
-      .then(appConfig => {
-        console.log(`[Audit] PortalPage a reçu la config:`, appConfig);
-        console.log(`[Audit] Évaluation config.isLandingPageActive:`, appConfig.isLandingPageActive);
-        
-        setConfig(appConfig);
-        
-        setEventsLoading(true);
-        fetchPublishedEvents()
-          .then(data => {
-              console.log(`[Audit] Événements reçus: ${data.length}`);
-              setEvents(data);
-          })
-          .finally(() => setEventsLoading(false));
+      .then((appConfig) => {
+        if (isMounted) setConfig(appConfig);
       })
-      .catch((err) => {
-        console.error(`[Audit] Erreur fatale lors du chargement initial:`, err);
-        setConfig({ isLandingPageActive: false });
+      .catch(() => {
+        if (isMounted) setConfig(defaultConfig);
       });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  useEffect(() => {
+    const shouldRefresh = () => {
+      if (activeEventsRequestRef.current !== null) return false;
+      if (eventsStatus === 'error' && events.length > 0) return true;
+      if (events.length === 0) return true;
+      if (!lastEventsLoadedAt) return true;
+      return Date.now() - lastEventsLoadedAt > EVENTS_STALE_MS;
+    };
+
+    const refreshAfterResume = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (shouldRefresh()) void loadPublishedEvents('resume');
+    };
+
+    window.addEventListener('pageshow', refreshAfterResume);
+    document.addEventListener('visibilitychange', refreshAfterResume);
+
+    return () => {
+      window.removeEventListener('pageshow', refreshAfterResume);
+      document.removeEventListener('visibilitychange', refreshAfterResume);
+    };
+  }, [events.length, eventsStatus, lastEventsLoadedAt, loadPublishedEvents]);
 
   const handleSignOut = async () => {
     await signOut(auth);
     window.location.reload();
   };
 
-  if (isLoading) {
+  if (eventsStatus === 'loading' && events.length === 0 && !config) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Mountain className="h-12 w-12 animate-pulse text-primary" />
@@ -264,7 +381,7 @@ export default function PortalPage() {
   }
 
   // MODE MAINTENANCE / LANDING PAGE ACTIVE
-  if (config.isLandingPageActive && events.length === 0 && !eventsLoading) {
+  if (effectiveConfig.isLandingPageActive && events.length === 0 && eventsStatus === 'success') {
     return (
       <div className="flex min-h-screen flex-col bg-background">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">
@@ -402,7 +519,7 @@ export default function PortalPage() {
                <div className="h-px flex-1 mx-8 bg-muted hidden sm:block" />
             </div>
 
-            {(events.length > 0 || eventsLoading) && (
+            {(events.length > 0 || eventsStatus === 'loading' || eventsStatus === 'refreshing') && (
               <div className="rounded-[2rem] border bg-card p-4 shadow-sm">
                 <div className={hasDepartmentOptions ? 'grid gap-3 md:grid-cols-[1fr_260px_auto] md:items-center' : 'grid gap-3 md:grid-cols-[1fr_auto] md:items-center'}>
                   <div className="relative">
@@ -446,7 +563,19 @@ export default function PortalPage() {
               </div>
             )}
 
-            {eventsLoading ? (
+            {eventsStatus === 'refreshing' && events.length > 0 && (
+              <div className="text-center text-xs font-semibold text-muted-foreground">
+                Actualisation des événements…
+              </div>
+            )}
+
+            {eventsStatus === 'error' && events.length > 0 && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm font-semibold text-amber-900">
+                {eventsError}
+              </div>
+            )}
+
+            {eventsStatus === 'loading' && events.length === 0 ? (
               <div className="grid gap-6 sm:grid-cols-2">
                 <div className="h-48 rounded-[2rem] bg-muted animate-pulse" />
                 <div className="h-48 rounded-[2rem] bg-muted animate-pulse" />
@@ -470,10 +599,18 @@ export default function PortalPage() {
                   </Button>
                 </div>
               )
+            ) : eventsStatus === 'error' && events.length === 0 ? (
+              <div className="text-center py-20 bg-muted/20 rounded-[3rem] border-2 border-dashed border-muted">
+                <Mountain className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
+                <p className="text-muted-foreground font-bold">{eventsError}</p>
+                <Button type="button" variant="outline" onClick={() => void loadPublishedEvents('retry')} className="mt-6 rounded-2xl">
+                  Réessayer
+                </Button>
+              </div>
             ) : (
               <div className="text-center py-20 bg-muted/20 rounded-[3rem] border-2 border-dashed border-muted">
                 <Mountain className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
-                <p className="text-muted-foreground font-bold">Aucun événement n'est actuellement disponible publiquement.</p>
+                <p className="text-muted-foreground font-bold">Aucun événement en cours</p>
                 <p className="text-sm text-muted-foreground mt-2">Revenez bientôt !</p>
               </div>
             )}
