@@ -4,8 +4,8 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
-  getDocsFromCache,
   getDocsFromServer,
   setDoc,
   updateDoc,
@@ -724,32 +724,16 @@ export async function fetchPoisLite(eventId: string): Promise<POILite[]> {
     snap.docs.map((d) => ({ id: d.id, ...d.data() } as POILite))
 
   try {
-    const cacheSnap = await getDocsFromCache(colRef).catch(() => null)
-
-    if (cacheSnap && !cacheSnap.empty) {
-      const cached = mapSnap(cacheSnap)
-      void getDocsFromServer(colRef).catch((error: any) => {
-          console.warn('[Data] fetchPoisLite background refresh failed', {
-            eventId,
-            path: colRef.path,
-            code: error?.code ?? null,
-            message: error?.message ?? null,
-          })
-        })
-      return cached
-    }
-
     const serverSnap = await getDocsFromServer(colRef)
     return mapSnap(serverSnap)
   } catch (e: any) {
-    console.error('[Data] fetchPoisLite failed, falling back to private POI read', {
+    console.error('[Data] fetchPoisLite public read failed', {
       eventId,
       path: colRef.path,
       code: e?.code ?? null,
       message: e?.message ?? null,
     })
-    const full = await fetchPois(eventId)
-    return full as unknown as POILite[]
+    throw e
   }
 }
 
@@ -768,6 +752,28 @@ export async function fetchPoiById(id: string, eventId: string): Promise<POI | u
       message: error?.message ?? null,
     })
   }
+  return undefined
+}
+
+export async function fetchPublicPoiById(id: string, eventId: string): Promise<(POILite | POI) | undefined> {
+  const poiRef = doc(db, dbPaths.poisPublic(eventId), id)
+
+  try {
+    const poiSnap = await getDocFromServer(poiRef)
+    if (poiSnap.exists()) {
+      return { id: poiSnap.id, ...poiSnap.data() } as POILite | POI
+    }
+  } catch (error: any) {
+    console.error('[Data] fetchPublicPoiById failed', {
+      eventId,
+      poiId: id,
+      path: poiRef.path,
+      code: error?.code ?? null,
+      message: error?.message ?? null,
+    })
+    throw error
+  }
+
   return undefined
 }
 
@@ -885,12 +891,14 @@ export async function createPoi(
       const liteData: any = {
         id,
         title: fullPoiData.title,
+        description: fullPoiData.description,
         location: fullPoiData.location,
         mainCategory: fullPoiData.mainCategory,
         subCategory: fullPoiData.subCategory,
         averageRating: 0,
         reviewCount: 0,
-        headerPhotoUrl: fullPoiData.headerPhotoUrl
+        headerPhotoUrl: fullPoiData.headerPhotoUrl,
+        galleryUrls: fullPoiData.galleryUrls
       };
       
       if (fullPoiData.sponsor) {
@@ -939,13 +947,15 @@ export async function updatePoi(
       tx.set(poiPublicRef, {
         id: poiId,
         title: updatedData.title,
+        description: updatedData.description,
         location: updatedData.location,
         mainCategory: updatedData.mainCategory,
         subCategory: updatedData.subCategory,
         averageRating: updatedData.averageRating,
         reviewCount: updatedData.reviewCount,
         sponsor: updatedData.sponsor,
-        headerPhotoUrl: updatedData.headerPhotoUrl
+        headerPhotoUrl: updatedData.headerPhotoUrl,
+        galleryUrls: updatedData.galleryUrls
       }, { merge: true });
     });
   } catch (serverError: any) {
