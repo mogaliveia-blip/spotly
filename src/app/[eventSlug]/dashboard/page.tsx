@@ -4,7 +4,7 @@ import { POIMapAdapter } from '@/components/poi/poi-map-adapter'
 import type { POI, POILite, MainCategory, MarketingConfig } from '@/lib/types'
 import { useSearchParams, usePathname } from 'next/navigation'
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
-import { fetchPoisLite, fetchPublicPoiById, fetchMarketingConfig } from '@/lib/data'
+import { DEFAULT_EVENT_ID, fetchPoisLite, fetchPoiById, fetchMarketingConfig } from '@/lib/data'
 import { useAuth } from '@/hooks/use-auth-user'
 import { CategoryFilter } from '@/components/poi/category-filter'
 import { HeroOverlay } from '@/components/marketing/hero-overlay'
@@ -30,8 +30,22 @@ const defaultMarketingConfig: MarketingConfig = {
 const SECONDARY_CONFIG_TIMEOUT_MS = 3000
 const POI_LOAD_TIMEOUT_MS = 8000
 const POI_STALE_MS = 30000
+const POI_RETRY_DELAY_MS = 900
 
 const poisMemoryCache = new Map<string, { pois: POILite[]; loadedAt: number }>()
+const poiDetailsMemoryCache = new Map<string, POI>()
+
+function isFullPoi(poi: POILite | POI | null): poi is POI {
+  return (
+    !!poi &&
+    typeof (poi as any).description === 'string' &&
+    Array.isArray((poi as any).galleryUrls)
+  )
+}
+
+function poiDetailCacheKey(eventId: string, poiId: string) {
+  return `${eventId}:${poiId}`
+}
 
 export default function DashboardPage() {
   const pathname = usePathname()
@@ -57,6 +71,8 @@ export default function DashboardPage() {
   const poiRequestSeqRef = useRef(0)
   const activePoiRequestRef = useRef<{ eventId: string; requestId: number } | null>(null)
   const latestEventIdRef = useRef(eventId)
+  const latestPoisRef = useRef<POILite[]>([])
+  const lastNonEmptyEventIdRef = useRef<string | null>(null)
 
   const updateUrl = useCallback(
     (params: URLSearchParams) => {
@@ -67,20 +83,37 @@ export default function DashboardPage() {
     [pathname]
   )
 
+  const readPoisWithTimeout = useCallback((resolvedEventId: string) => {
+    let timeoutId: number | undefined
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = window.setTimeout(() => reject(new Error('POI_LOAD_TIMEOUT')), POI_LOAD_TIMEOUT_MS)
+    })
+
+    return Promise.race([fetchPoisLite(resolvedEventId), timeout]).finally(() => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+    })
+  }, [])
+
   const loadPois = useCallback(async (reason: 'initial' | 'retry' | 'resume' = 'initial') => {
-    if (!eventId || eventLoading) return
+    if (!eventId || eventId === DEFAULT_EVENT_ID || eventLoading) {
+      setPoiLoadStatus('loading')
+      return
+    }
 
     const activeRequest = activePoiRequestRef.current
     if (activeRequest?.eventId === eventId) return
 
     const cached = poisMemoryCache.get(eventId)
+    const cachedPois = cached?.pois ?? []
+    const currentPois = latestPoisRef.current
+    const hadValidPois = cachedPois.length > 0 || (lastNonEmptyEventIdRef.current === eventId && currentPois.length > 0)
     const requestId = ++poiRequestSeqRef.current
     activePoiRequestRef.current = { eventId, requestId }
 
     if (cached) {
       setPois(cached.pois)
       setLastPoiLoadedAt(cached.loadedAt)
-    } else if (latestEventIdRef.current !== eventId || reason === 'initial') {
+    } else if (!hadValidPois && (latestEventIdRef.current !== eventId || reason === 'initial')) {
       setPois([])
       setLastPoiLoadedAt(null)
     }
@@ -89,10 +122,19 @@ export default function DashboardPage() {
     setPoiLoadError(null)
 
     try {
-      const timeout = new Promise<never>((_, reject) => {
-        window.setTimeout(() => reject(new Error('POI_LOAD_TIMEOUT')), POI_LOAD_TIMEOUT_MS)
-      })
-      const poiData = await Promise.race([fetchPoisLite(eventId), timeout])
+      let poiData: POILite[]
+
+      try {
+        poiData = await readPoisWithTimeout(eventId)
+      } catch {
+        await new Promise((resolve) => window.setTimeout(resolve, POI_RETRY_DELAY_MS))
+        poiData = await readPoisWithTimeout(eventId)
+      }
+
+      if (poiData.length === 0 && !hadValidPois) {
+        await new Promise((resolve) => window.setTimeout(resolve, POI_RETRY_DELAY_MS))
+        poiData = await readPoisWithTimeout(eventId)
+      }
 
       if (
         latestEventIdRef.current !== eventId ||
@@ -104,11 +146,19 @@ export default function DashboardPage() {
       }
 
       const loadedAt = Date.now()
+      if (poiData.length === 0 && hadValidPois) {
+        setPois(cachedPois.length > 0 ? cachedPois : currentPois)
+        setPoiLoadStatus('error')
+        setPoiLoadError('La dernière lecture des lieux est incomplète. Les derniers lieux connus restent affichés.')
+        return
+      }
+
       poisMemoryCache.set(eventId, { pois: poiData, loadedAt })
       setPois(poiData)
       setLastPoiLoadedAt(loadedAt)
       setPoiLoadStatus('success')
       setPoiLoadError(null)
+      if (poiData.length > 0) lastNonEmptyEventIdRef.current = eventId
     } catch (error: any) {
       if (
         latestEventIdRef.current !== eventId ||
@@ -130,23 +180,37 @@ export default function DashboardPage() {
         activePoiRequestRef.current = null
       }
     }
-  }, [eventId, eventLoading])
+  }, [eventId, eventLoading, readPoisWithTimeout])
+
+  useEffect(() => {
+    latestPoisRef.current = pois
+  }, [pois])
 
   const loadFullPoi = useCallback(async (poiId: string) => {
+    const cachedFull = poiDetailsMemoryCache.get(poiDetailCacheKey(eventId, poiId))
+    if (cachedFull) {
+      setActivePoi(cachedFull)
+    }
+
     const requestSeq = ++fullPoiRequestSeqRef.current
     try {
-      const full = await fetchPublicPoiById(poiId, eventId)
-      if (!full) return
+      const full = await fetchPoiById(poiId, eventId)
+      if (!full || !isFullPoi(full)) return
       if (requestSeq !== fullPoiRequestSeqRef.current) return
-      setActivePoi(full)
+      poiDetailsMemoryCache.set(poiDetailCacheKey(eventId, poiId), full)
+      setActivePoi((prev) => {
+        if (isFullPoi(prev) && prev.id === full.id) return prev
+        return full
+      })
     } catch {
-      // Keep lite if full fetch fails
+      // Keep the last valid detail or lite data if the network cannot provide a complete POI.
     }
   }, [eventId])
 
   const handleSelectPoi = useCallback(
     (poi: POILite | null) => {
-      setActivePoi(poi ? { ...poi } : null)
+      const cachedFull = poi ? poiDetailsMemoryCache.get(poiDetailCacheKey(eventId, poi.id)) : null
+      setActivePoi(poi ? (cachedFull ?? { ...poi }) : null)
       if (!poi) fullPoiRequestSeqRef.current += 1
       
       const params = new URLSearchParams(searchParams.toString())
@@ -166,7 +230,7 @@ export default function DashboardPage() {
   useEffect(() => {
     latestEventIdRef.current = eventId
 
-    if (eventLoading) {
+    if (eventLoading || eventId === DEFAULT_EVENT_ID) {
       activePoiRequestRef.current = null
       setPoiLoadStatus('loading')
       setPoiLoadError(null)
@@ -184,7 +248,7 @@ export default function DashboardPage() {
     if (eventLoading) return
 
     const shouldRefresh = () => {
-      if (!eventId) return false
+      if (!eventId || eventId === DEFAULT_EVENT_ID) return false
       if (activePoiRequestRef.current?.eventId === eventId) return false
       if (poiLoadStatus === 'error' && pois.length > 0) return true
       if (pois.length === 0) return true

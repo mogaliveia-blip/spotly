@@ -13,15 +13,14 @@ export const metadata: Metadata = {
   title: 'Spotly',
   description: "Votre guide pour les points d'intérêt de l'événement.",
   icons: {
-    icon: [
-      {
-        url: '/icon/favicon.svg',
-        type: 'image/svg+xml',
-      },
-      {
-        url: '/icon/favicon.ico',
-      },
-    ],
+    icon: {
+      url: '/icon/favicon.svg',
+      type: 'image/svg+xml',
+    },
+    apple: {
+      url: '/icon.svg',
+      type: 'image/svg+xml',
+    },
   },
 }
 
@@ -50,7 +49,6 @@ export default function RootLayout({
         {/* PWA - crossorigin added to handle cloud workstation proxy auth */}
         <link rel="manifest" href="/manifest.json" crossOrigin="use-credentials" />
         <meta name="theme-color" content="#673AB7" />
-        <link rel="apple-touch-icon" href="/icon.svg" />
 
         {/* Google Analytics */}
         {GA_ID && (

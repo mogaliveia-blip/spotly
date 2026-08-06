@@ -4,7 +4,6 @@ import {
   collection,
   doc,
   getDoc,
-  getDocFromServer,
   getDocs,
   getDocsFromServer,
   setDoc,
@@ -725,7 +724,23 @@ export async function fetchPoisLite(eventId: string): Promise<POILite[]> {
 
   try {
     const serverSnap = await getDocsFromServer(colRef)
-    return mapSnap(serverSnap)
+    const pois = mapSnap(serverSnap)
+    const hasInvalidPoi = pois.some((poi) => (
+      !poi.id ||
+      typeof poi.title !== 'string' ||
+      !poi.title.trim() ||
+      !poi.location ||
+      typeof poi.location.lat !== 'number' ||
+      typeof poi.location.lng !== 'number' ||
+      typeof poi.mainCategory !== 'string' ||
+      typeof poi.subCategory !== 'string'
+    ))
+
+    if (hasInvalidPoi) {
+      throw new Error('INVALID_POIS_PUBLIC_SNAPSHOT')
+    }
+
+    return pois
   } catch (e: any) {
     console.error('[Data] fetchPoisLite public read failed', {
       eventId,
@@ -752,28 +767,6 @@ export async function fetchPoiById(id: string, eventId: string): Promise<POI | u
       message: error?.message ?? null,
     })
   }
-  return undefined
-}
-
-export async function fetchPublicPoiById(id: string, eventId: string): Promise<(POILite | POI) | undefined> {
-  const poiRef = doc(db, dbPaths.poisPublic(eventId), id)
-
-  try {
-    const poiSnap = await getDocFromServer(poiRef)
-    if (poiSnap.exists()) {
-      return { id: poiSnap.id, ...poiSnap.data() } as POILite | POI
-    }
-  } catch (error: any) {
-    console.error('[Data] fetchPublicPoiById failed', {
-      eventId,
-      poiId: id,
-      path: poiRef.path,
-      code: error?.code ?? null,
-      message: error?.message ?? null,
-    })
-    throw error
-  }
-
   return undefined
 }
 

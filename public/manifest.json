@@ -8,14 +8,15 @@
   "theme_color": "#673AB7",
   "icons": [
     {
-      "src": "https://picsum.photos/seed/spotly/192/192",
-      "sizes": "192x192",
-      "type": "image/png"
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     },
     {
-      "src": "https://picsum.photos/seed/spotly/512/512",
-      "sizes": "512x512",
-      "type": "image/png"
+      "src": "/icon/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
     }
   ]
 }
