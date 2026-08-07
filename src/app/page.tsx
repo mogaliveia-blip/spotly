@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import type { MouseEvent } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { Button } from '@/components/ui/button';
 import { fetchAppConfig, DEFAULT_EVENT_ID, fetchPublishedEvents, fetchUserEvents } from '@/lib/data';
@@ -190,7 +191,7 @@ export default function PortalPage() {
     });
   }, []);
 
-  const loadPublishedEvents = useCallback(async (reason: 'initial' | 'retry' | 'resume' = 'initial') => {
+  const loadPublishedEvents = useCallback(async (reason: 'initial' | 'retry' | 'resume' | 'manual' = 'initial') => {
     if (activeEventsRequestRef.current !== null) return;
 
     const cached = publishedEventsMemoryCache;
@@ -226,13 +227,6 @@ export default function PortalPage() {
       }
 
       if (activeEventsRequestRef.current !== requestId || eventRequestSeqRef.current !== requestId) {
-        return;
-      }
-
-      if (nextEvents.length === 0 && hadValidEvents) {
-        setEvents(cached?.events.length ? cached.events : currentEvents);
-        setEventsStatus('error');
-        setEventsError('La dernière lecture des événements est incomplète. Les derniers événements connus restent affichés.');
         return;
       }
 
@@ -372,6 +366,12 @@ export default function PortalPage() {
     window.location.reload();
   };
 
+  const handleSpotlyHomeClick = useCallback((event: MouseEvent<HTMLAnchorElement>) => {
+    if (window.location.pathname !== '/') return;
+    event.preventDefault();
+    void loadPublishedEvents('manual');
+  }, [loadPublishedEvents]);
+
   if (eventsStatus === 'loading' && events.length === 0 && !config) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
@@ -387,6 +387,7 @@ export default function PortalPage() {
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">
           <Link
             href="/"
+            onClick={handleSpotlyHomeClick}
             className="inline-flex h-11 items-center gap-2 rounded-xl border bg-background/90 px-3 shadow-sm transition hover:bg-accent active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Mountain className="h-6 w-6 text-primary" />
@@ -470,6 +471,7 @@ export default function PortalPage() {
       <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">
         <Link
           href="/"
+          onClick={handleSpotlyHomeClick}
           className="inline-flex h-11 items-center gap-2 rounded-xl border bg-background/90 px-3 shadow-sm transition hover:bg-accent active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Mountain className="h-6 w-6 text-primary" />
