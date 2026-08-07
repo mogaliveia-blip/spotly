@@ -385,10 +385,13 @@ export default function PortalPage() {
     return (
       <div className="flex min-h-screen flex-col bg-background">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">
-          <div className="flex items-center gap-2">
+          <Link
+            href="/"
+            className="inline-flex h-11 items-center gap-2 rounded-xl border bg-background/90 px-3 shadow-sm transition hover:bg-accent active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <Mountain className="h-6 w-6 text-primary" />
             <span className="text-lg font-semibold">Spotly</span>
-          </div>
+          </Link>
           {user && (
             <div className="flex items-center gap-2">
               {showMyEvents && (
@@ -465,10 +468,13 @@ export default function PortalPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">
-        <div className="flex items-center gap-2">
+        <Link
+          href="/"
+          className="inline-flex h-11 items-center gap-2 rounded-xl border bg-background/90 px-3 shadow-sm transition hover:bg-accent active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           <Mountain className="h-6 w-6 text-primary" />
           <span className="text-lg font-bold tracking-tight text-primary">Spotly</span>
-        </div>
+        </Link>
         <div className="flex items-center gap-3">
           {user ? (
             <>

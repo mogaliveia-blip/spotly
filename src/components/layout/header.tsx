@@ -91,11 +91,14 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 flex h-16 items-center gap-3 border-b bg-background/95 backdrop-blur-sm px-3 md:px-6 shrink-0 shadow-sm">
       <div className="flex items-center gap-3">
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="p-1.5 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
+        <Link
+          href="/"
+          className="inline-flex h-11 items-center gap-2 rounded-xl border bg-background/90 px-3 shadow-sm transition hover:bg-accent active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <div className="rounded-xl bg-primary/10 p-1.5 transition-colors">
             <Mountain className="h-5 w-5 text-primary" />
           </div>
-          <h1 className="text-lg font-bold tracking-tight hidden sm:block text-primary">Spotly</h1>
+          <h1 className="text-lg font-bold tracking-tight text-primary">Spotly</h1>
         </Link>
       </div>
 
