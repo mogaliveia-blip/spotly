@@ -5,6 +5,8 @@ import { useAuth } from '@/hooks/use-auth-user';
 import { useRouter } from 'next/navigation';
 import {
   fetchUsers,
+  fetchAllEvents,
+  fetchEventMembers,
   updateUserRole,
   updateUserApproval,
   fetchAppConfig,
@@ -14,7 +16,7 @@ import {
   uploadFile,
   DEFAULT_EVENT_ID
 } from '@/lib/data';
-import type { AppUser, UserRole, AppConfig, MarketingConfig } from '@/lib/types';
+import type { AppUser, UserRole, AppConfig, MarketingConfig, AppEvent, EventMemberWithProfile, EventRole, EventStatus } from '@/lib/types';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -23,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { CalendarDays, ImagePlus, Loader2, ShieldCheck, UserCheck, UserX, UsersRound } from 'lucide-react';
+import { CalendarDays, ImagePlus, Loader2, Search, ShieldCheck, UserCheck, UserX, UsersRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -31,11 +33,44 @@ import { Textarea } from '@/components/ui/textarea';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 const PLATFORM_ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   owner: 'Administration globale, validation des comptes et supervision plateforme.',
   user: "Compte standard. Les droits admin/editor se donnent dans l'équipe d'un événement."
 };
+
+type UserEventMembership = {
+  event: AppEvent;
+  role: EventRole;
+  joinedAt?: Date;
+};
+
+type UserWithEventMemberships = AppUser & {
+  memberships: UserEventMembership[];
+};
+
+type EventStatusFilter = 'all' | EventStatus;
+
+function getStatusLabel(status: EventStatus): string {
+  if (status === 'published') return 'Publié';
+  if (status === 'paused') return 'En pause';
+  return 'Brouillon';
+}
+
+function getStatusBadgeClass(status: EventStatus): string {
+  return cn(
+    'text-[10px] uppercase font-bold',
+    status === 'published' && 'bg-green-500/10 text-green-600 border-none',
+    status === 'paused' && 'bg-amber-500/10 text-amber-600 border-none',
+    status === 'draft' && 'text-muted-foreground'
+  );
+}
+
+function formatDate(date?: Date): string | null {
+  if (!date) return null;
+  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
 
 /* =========================
    APP CONFIG CARD
@@ -316,6 +351,251 @@ function MarketingConfigCard() {
   );
 }
 
+function UserEventsOverviewCard() {
+  const [rows, setRows] = useState<UserWithEventMemberships[]>([]);
+  const [eventsCount, setEventsCount] = useState(0);
+  const [membershipsCount, setMembershipsCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
+  const [eventStatusFilter, setEventStatusFilter] = useState<EventStatusFilter>('all');
+  const { toast } = useToast();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadOverview() {
+      try {
+        const [users, events] = await Promise.all([
+          fetchUsers(),
+          fetchAllEvents()
+        ]);
+
+        const membershipsByUser = new Map<string, UserEventMembership[]>();
+        let totalMemberships = 0;
+
+        await Promise.all(events.map(async (event) => {
+          const members = await fetchEventMembers(event.id);
+          totalMemberships += members.length;
+
+          members.forEach((member: EventMemberWithProfile) => {
+            const current = membershipsByUser.get(member.uid) ?? [];
+            current.push({
+              event,
+              role: member.role,
+              joinedAt: member.joinedAt
+            });
+            membershipsByUser.set(member.uid, current);
+          });
+        }));
+
+        const nextRows = users
+          .map((user) => ({
+            ...user,
+            memberships: (membershipsByUser.get(user.uid) ?? [])
+              .sort((a, b) => a.event.name.localeCompare(b.event.name, 'fr'))
+          }))
+          .sort((a, b) => (a.displayName || a.email || '').localeCompare(b.displayName || b.email || '', 'fr'));
+
+        if (!isMounted) return;
+        setRows(nextRows);
+        setEventsCount(events.length);
+        setMembershipsCount(totalMemberships);
+      } catch {
+        if (!isMounted) return;
+        toast({
+          title: 'Erreur',
+          description: "Impossible de charger la vue Utilisateurs & Événements.",
+          variant: 'destructive'
+        });
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    void loadOverview();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [toast]);
+
+  const filteredRows = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return rows
+      .map((user) => ({
+        ...user,
+        memberships: user.memberships.filter((membership) =>
+          eventStatusFilter === 'all' || membership.event.status === eventStatusFilter
+        )
+      }))
+      .filter((user) => {
+        const matchesSearch =
+          !normalizedSearch ||
+          user.displayName?.toLowerCase().includes(normalizedSearch) ||
+          user.email?.toLowerCase().includes(normalizedSearch);
+        const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+        const matchesEventStatus = eventStatusFilter === 'all' || user.memberships.length > 0;
+        return matchesSearch && matchesRole && matchesEventStatus;
+      });
+  }, [rows, searchTerm, roleFilter, eventStatusFilter]);
+
+  const renderUserIdentity = (user: AppUser) => (
+    <div className="flex min-w-0 items-center gap-3">
+      <Avatar className="h-10 w-10 shrink-0">
+        <AvatarImage src={user.photoURL || undefined} />
+        <AvatarFallback>{user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0">
+        <div className="truncate text-sm font-semibold">{user.displayName || 'Utilisateur sans nom'}</div>
+        <div className="truncate text-xs text-muted-foreground">{user.email || 'Email non renseigné'}</div>
+        <div className="mt-2 flex flex-wrap gap-2 md:hidden">
+          <Badge variant={user.role === 'owner' ? 'default' : 'outline'}>{user.role}</Badge>
+          <Badge variant={user.isApproved ? 'default' : 'outline'} className={user.isApproved ? 'bg-green-500 hover:bg-green-600' : ''}>
+            {user.isApproved ? 'Approuvé' : 'En attente'}
+          </Badge>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderMemberships = (memberships: UserEventMembership[]) => {
+    if (memberships.length === 0) {
+      return <div className="text-sm text-muted-foreground">Aucun événement associé.</div>;
+    }
+
+    return (
+      <div className="space-y-3">
+        {memberships.map(({ event, role, joinedAt }) => {
+          const href = event.slug ? `/${event.slug}/admin` : '/admin/events';
+          const createdAt = formatDate(event.createdAt);
+
+          return (
+            <div key={`${event.id}-${role}`} className="rounded-xl border bg-muted/20 p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 space-y-2">
+                  <div className="font-semibold leading-tight">{event.name}</div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant={event.status === 'published' ? 'default' : 'outline'} className={getStatusBadgeClass(event.status)}>
+                      {getStatusLabel(event.status)}
+                    </Badge>
+                    <Badge variant="secondary" className="text-[10px] uppercase font-bold">{role}</Badge>
+                    {createdAt && <Badge variant="outline" className="text-[10px] uppercase font-bold">Créé le {createdAt}</Badge>}
+                    {!createdAt && joinedAt && <Badge variant="outline" className="text-[10px] uppercase font-bold">Membre depuis {formatDate(joinedAt)}</Badge>}
+                  </div>
+                </div>
+                <Button asChild size="sm" variant="outline" className="h-9 shrink-0 rounded-xl">
+                  <Link href={href}>Ouvrir</Link>
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  if (loading) return <Skeleton className="h-64 w-full" />;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border bg-muted/20 p-4">
+          <div className="text-2xl font-bold">{rows.length}</div>
+          <div className="text-xs font-medium text-muted-foreground">Utilisateurs</div>
+        </div>
+        <div className="rounded-xl border bg-muted/20 p-4">
+          <div className="text-2xl font-bold">{eventsCount}</div>
+          <div className="text-xs font-medium text-muted-foreground">Événements</div>
+        </div>
+        <div className="rounded-xl border bg-muted/20 p-4">
+          <div className="text-2xl font-bold">{membershipsCount}</div>
+          <div className="text-xs font-medium text-muted-foreground">Memberships</div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-[1fr_180px_220px]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Rechercher nom ou email"
+            className="pl-9"
+          />
+        </div>
+        <Select value={roleFilter} onValueChange={(value) => setRoleFilter(value as 'all' | UserRole)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous</SelectItem>
+            <SelectItem value="owner">Owner</SelectItem>
+            <SelectItem value="user">Users</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={eventStatusFilter} onValueChange={(value) => setEventStatusFilter(value as EventStatusFilter)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les événements</SelectItem>
+            <SelectItem value="published">Publiés</SelectItem>
+            <SelectItem value="draft">Brouillons</SelectItem>
+            <SelectItem value="paused">En pause</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="hidden rounded-md border md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Utilisateur</TableHead>
+              <TableHead>Rôle plateforme</TableHead>
+              <TableHead>Événements associés</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredRows.map((user) => (
+              <TableRow key={user.uid}>
+                <TableCell className="w-[280px] align-top">{renderUserIdentity(user)}</TableCell>
+                <TableCell className="w-[180px] align-top">
+                  <div className="flex flex-col items-start gap-2">
+                    <Badge variant={user.role === 'owner' ? 'default' : 'outline'}>{user.role}</Badge>
+                    <Badge variant={user.isApproved ? 'default' : 'outline'} className={user.isApproved ? 'bg-green-500 hover:bg-green-600' : ''}>
+                      {user.isApproved ? 'Approuvé' : 'En attente'}
+                    </Badge>
+                  </div>
+                </TableCell>
+                <TableCell className="align-top">{renderMemberships(user.memberships)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="space-y-4 md:hidden">
+        {filteredRows.map((user) => (
+          <div key={user.uid} className="rounded-2xl border p-4">
+            <div className="space-y-4">
+              {renderUserIdentity(user)}
+              {renderMemberships(user.memberships)}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {filteredRows.length === 0 && (
+        <div className="rounded-xl border bg-muted/20 p-8 text-center text-sm text-muted-foreground">
+          Aucun utilisateur ne correspond aux filtres.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UserTable() {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -369,15 +649,23 @@ function UserTable() {
   if (loading) return <Skeleton className="h-40 w-full" />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
         Cette table gère uniquement les rôles plateforme : <span className="font-semibold text-foreground">owner</span> et <span className="font-semibold text-foreground">user</span>. Les rôles événement <span className="font-semibold text-foreground">admin</span> et <span className="font-semibold text-foreground">editor</span> se gèrent dans l'équipe de chaque événement.
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4">
-        <Input placeholder="Rechercher..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="max-w-sm" />
+      <div className="grid gap-3 md:grid-cols-[1fr_220px]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher nom ou email"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="pl-9"
+          />
+        </div>
         <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -388,13 +676,14 @@ function UserTable() {
         </Select>
       </div>
 
-      <div className="rounded-md border">
+      <div className="hidden rounded-md border md:block">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Utilisateur</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Rôle</TableHead>
               <TableHead>Statut</TableHead>
-              <TableHead>Rôle plateforme</TableHead>
               <TableHead className="hidden lg:table-cell">Périmètre</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -402,30 +691,27 @@ function UserTable() {
           <TableBody>
             {filteredUsers.map(user => (
               <TableRow key={user.uid}>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-8 w-8">
+                <TableCell className="w-[240px]">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Avatar className="h-10 w-10 shrink-0">
                       <AvatarImage src={user.photoURL || undefined} />
-                      <AvatarFallback>{user.displayName?.charAt(0) || 'U'}</AvatarFallback>
+                      <AvatarFallback>{user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}</AvatarFallback>
                     </Avatar>
-                    <div>
-                      <div className="font-medium text-sm">{user.displayName}</div>
-                      <div className="text-xs text-muted-foreground">{user.email}</div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold">{user.displayName || 'Utilisateur sans nom'}</div>
                     </div>
                   </div>
                 </TableCell>
-                <TableCell>
-                  <Badge variant={user.isApproved ? "default" : "outline"} className={user.isApproved ? "bg-green-500 hover:bg-green-600" : ""}>
-                    {user.isApproved ? "Approuvé" : "En attente"}
-                  </Badge>
+                <TableCell className="max-w-[260px]">
+                  <div className="truncate text-sm text-muted-foreground">{user.email || 'Email non renseigné'}</div>
                 </TableCell>
                 <TableCell>
-                  <Select 
-                    value={user.role} 
-                    onValueChange={v => handleRoleChange(user.uid, v as UserRole)} 
+                  <Select
+                    value={user.role}
+                    onValueChange={v => handleRoleChange(user.uid, v as UserRole)}
                     disabled={user.uid === currentUser?.uid}
                   >
-                    <SelectTrigger className="w-[170px] h-8 text-xs">
+                    <SelectTrigger className="h-9 w-[170px] text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -433,6 +719,11 @@ function UserTable() {
                       <SelectItem value="user">Utilisateur</SelectItem>
                     </SelectContent>
                   </Select>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={user.isApproved ? "default" : "outline"} className={user.isApproved ? "bg-green-500 hover:bg-green-600" : ""}>
+                    {user.isApproved ? "Approuvé" : "En attente"}
+                  </Badge>
                 </TableCell>
                 <TableCell className="hidden lg:table-cell max-w-xs">
                   <div className="text-xs text-muted-foreground">
@@ -444,11 +735,11 @@ function UserTable() {
                     <Button
                       variant={user.isApproved ? "ghost" : "default"}
                       size="sm"
-                      className="h-8 gap-1 rounded-lg"
+                      className="h-9 gap-1 rounded-lg"
                       onClick={() => handleApprovalToggle(user.uid, user.isApproved)}
                     >
                       {user.isApproved ? <UserX className="h-3 w-3" /> : <UserCheck className="h-3 w-3" />}
-                      <span className="hidden sm:inline">{user.isApproved ? "Révoquer" : "Approuver"}</span>
+                      <span>{user.isApproved ? "Révoquer" : "Approuver"}</span>
                     </Button>
                   )}
                 </TableCell>
@@ -457,6 +748,66 @@ function UserTable() {
           </TableBody>
         </Table>
       </div>
+
+      <div className="space-y-4 md:hidden">
+        {filteredUsers.map(user => (
+          <div key={user.uid} className="rounded-2xl border p-4">
+            <div className="space-y-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <Avatar className="h-10 w-10 shrink-0">
+                  <AvatarImage src={user.photoURL || undefined} />
+                  <AvatarFallback>{user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <div className="break-words text-sm font-semibold">{user.displayName || 'Utilisateur sans nom'}</div>
+                  <div className="break-words text-xs text-muted-foreground">{user.email || 'Email non renseigné'}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Badge variant={user.role === 'owner' ? 'default' : 'outline'}>{user.role}</Badge>
+                    <Badge variant={user.isApproved ? "default" : "outline"} className={user.isApproved ? "bg-green-500 hover:bg-green-600" : ""}>
+                      {user.isApproved ? "Approuvé" : "En attente"}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground">Rôle plateforme</div>
+                <Select
+                  value={user.role}
+                  onValueChange={v => handleRoleChange(user.uid, v as UserRole)}
+                  disabled={user.uid === currentUser?.uid}
+                >
+                  <SelectTrigger className="h-11 w-full text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="owner">Owner plateforme</SelectItem>
+                    <SelectItem value="user">Utilisateur</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="text-xs text-muted-foreground">{PLATFORM_ROLE_DESCRIPTIONS[user.role]}</div>
+              </div>
+
+              {user.uid !== currentUser?.uid && (
+                <Button
+                  variant={user.isApproved ? "outline" : "default"}
+                  className="h-11 w-full gap-2 rounded-xl"
+                  onClick={() => handleApprovalToggle(user.uid, user.isApproved)}
+                >
+                  {user.isApproved ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                  {user.isApproved ? "Révoquer" : "Approuver"}
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {filteredUsers.length === 0 && (
+        <div className="rounded-xl border bg-muted/20 p-8 text-center text-sm text-muted-foreground">
+          Aucun utilisateur ne correspond aux filtres.
+        </div>
+      )}
     </div>
   );
 }
@@ -538,6 +889,16 @@ export default function AdminPage() {
             </CardHeader>
             <CardContent className="pt-6">
               <UserTable />
+            </CardContent>
+          </Card>
+
+        <Card className="rounded-2xl border-muted shadow-sm overflow-hidden">
+            <CardHeader className="bg-primary/5">
+              <CardTitle>Utilisateurs & Événements</CardTitle>
+              <CardDescription>Visualiser les événements auxquels chaque utilisateur participe ainsi que son rôle dans chacun d'eux.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <UserEventsOverviewCard />
             </CardContent>
           </Card>
 

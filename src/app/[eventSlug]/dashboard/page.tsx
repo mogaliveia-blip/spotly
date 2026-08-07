@@ -11,9 +11,9 @@ import { HeroOverlay } from '@/components/marketing/hero-overlay'
 import { PoiListBottomSheet } from '@/components/poi/poi-list-bottom-sheet'
 import { useGeolocation } from '@/providers/geolocation-provider'
 import { Button } from '@/components/ui/button'
-import { AlertCircle, List, Loader2, RefreshCw } from 'lucide-react'
-import { MobilePOIBottomSheet } from '@/components/poi/mobile-poi-bottom-sheet'
+import { AlertCircle, List, Loader2, RefreshCw, X } from 'lucide-react'
 import { useEvent } from '@/providers/event-provider'
+import { POIDetails } from '@/components/poi/poi-details'
 
 type AppMode = 'normal' | 'map-fallback'
 type PoiLoadStatus = 'loading' | 'success' | 'error'
@@ -60,12 +60,12 @@ export default function DashboardPage() {
   const [poiLoadError, setPoiLoadError] = useState<string | null>(null)
   const [lastPoiLoadedAt, setLastPoiLoadedAt] = useState<number | null>(null)
   const [marketingConfig, setMarketingConfig] = useState<MarketingConfig | null>(null)
-  const [activePoi, setActivePoi] = useState<POILite | POI | null>(null)
+  const [selectedPoiId, setSelectedPoiId] = useState<string | null>(() => searchParams.get('poi'))
+  const [poiDetailsById, setPoiDetailsById] = useState<Record<string, POI>>({})
   const [heroVisible, setHeroVisible] = useState(false)
   const [appMode, setAppMode] = useState<AppMode>('normal')
   const [isListVisible, setIsListVisible] = useState(true)
 
-  const selectedPoiId = searchParams.get('poi')
   const categoryFilter = searchParams.get('category') || 'all'
   const fullPoiRequestSeqRef = useRef(0)
   const poiRequestSeqRef = useRef(0)
@@ -189,7 +189,7 @@ export default function DashboardPage() {
   const loadFullPoi = useCallback(async (poiId: string) => {
     const cachedFull = poiDetailsMemoryCache.get(poiDetailCacheKey(eventId, poiId))
     if (cachedFull) {
-      setActivePoi(cachedFull)
+      setPoiDetailsById((previous) => ({ ...previous, [poiId]: cachedFull }))
     }
 
     const requestSeq = ++fullPoiRequestSeqRef.current
@@ -198,33 +198,33 @@ export default function DashboardPage() {
       if (!full || !isFullPoi(full)) return
       if (requestSeq !== fullPoiRequestSeqRef.current) return
       poiDetailsMemoryCache.set(poiDetailCacheKey(eventId, poiId), full)
-      setActivePoi((prev) => {
-        if (isFullPoi(prev) && prev.id === full.id) return prev
-        return full
-      })
+      setPoiDetailsById((previous) => ({ ...previous, [poiId]: full }))
     } catch {
       // Keep the last valid detail or lite data if the network cannot provide a complete POI.
     }
   }, [eventId])
 
-  const handleSelectPoi = useCallback(
-    (poi: POILite | null) => {
-      const cachedFull = poi ? poiDetailsMemoryCache.get(poiDetailCacheKey(eventId, poi.id)) : null
-      setActivePoi(poi ? (cachedFull ?? { ...poi }) : null)
-      if (!poi) fullPoiRequestSeqRef.current += 1
-      
-      const params = new URLSearchParams(searchParams.toString())
-      if (poi) {
-        params.set('poi', poi.id)
-        setIsListVisible(true) 
+  const selectPoiId = useCallback(
+    (poiId: string | null) => {
+      const params = new URLSearchParams(window.location.search)
+      if (poiId) {
+        params.set('poi', poiId)
       } else {
         params.delete('poi')
-        setIsListVisible(false) 
+        fullPoiRequestSeqRef.current += 1
       }
+      setSelectedPoiId(poiId)
       updateUrl(params)
-      if (poi) void loadFullPoi(poi.id)
+      if (poiId) void loadFullPoi(poiId)
     },
-    [loadFullPoi, searchParams, updateUrl]
+    [loadFullPoi, updateUrl]
+  )
+
+  const handleSelectPoi = useCallback(
+    (poi: POILite | null) => {
+      selectPoiId(poi?.id ?? null)
+    },
+    [selectPoiId]
   )
 
   useEffect(() => {
@@ -239,7 +239,8 @@ export default function DashboardPage() {
       return
     }
 
-    setActivePoi(null)
+    setSelectedPoiId(null)
+    setPoiDetailsById({})
     fullPoiRequestSeqRef.current += 1
     void loadPois('initial')
   }, [eventId, eventLoading, loadPois])
@@ -316,32 +317,33 @@ export default function DashboardPage() {
   }, [marketingConfig, eventId, eventLoading])
 
   useEffect(() => {
-    if (!pois.length || eventLoading) return
-  
-    const poiFromUrl = selectedPoiId
-      ? pois.find((p) => p.id === selectedPoiId)
-      : null
-  
-    setActivePoi(prev => {
-      if (!poiFromUrl) return null
-      if (prev && prev.id === poiFromUrl.id && 'description' in prev) {
-        return prev
-      }
-      return poiFromUrl
-    })
-  
-    if (poiFromUrl?.id) {
-      void loadFullPoi(poiFromUrl.id)
-      setIsListVisible(true)
+    const syncSelectionFromUrl = () => {
+      const params = new URLSearchParams(window.location.search)
+      const poiId = params.get('poi')
+      setSelectedPoiId(poiId)
+      if (poiId) void loadFullPoi(poiId)
     }
+
+    window.addEventListener('popstate', syncSelectionFromUrl)
+
+    return () => {
+      window.removeEventListener('popstate', syncSelectionFromUrl)
+    }
+  }, [loadFullPoi])
+
+  useEffect(() => {
+    if (!selectedPoiId || eventLoading) return
+    if (!pois.some((poi) => poi.id === selectedPoiId)) return
+    void loadFullPoi(selectedPoiId)
   }, [selectedPoiId, pois, loadFullPoi, eventLoading])
 
   const handleCategorySelect = (category: MainCategory | 'all') => {
-    const params = new URLSearchParams(searchParams.toString())
+    const params = new URLSearchParams(window.location.search)
     if (category === 'all') params.delete('category')
     else params.set('category', category)
     params.delete('poi')
-    setActivePoi(null)
+    setSelectedPoiId(null)
+    fullPoiRequestSeqRef.current += 1
     updateUrl(params)
     setIsListVisible(true) 
   }
@@ -354,6 +356,11 @@ export default function DashboardPage() {
   const visiblePois = useMemo(() => {
     return pois.filter((p) => categoryFilter === 'all' || p.mainCategory === categoryFilter)
   }, [pois, categoryFilter])
+
+  const selectedPoi = useMemo<POILite | POI | null>(() => {
+    if (!selectedPoiId) return null
+    return poiDetailsById[selectedPoiId] ?? pois.find((poi) => poi.id === selectedPoiId) ?? null
+  }, [selectedPoiId, poiDetailsById, pois])
 
   const showHero = heroVisible && !user && marketingConfig?.heroEnabled
   const showPoiStatusOverlay = poiLoadStatus !== 'success' || visiblePois.length === 0
@@ -385,8 +392,8 @@ export default function DashboardPage() {
 
         {appMode === 'normal' && (
           <POIMapAdapter
-            selectedPoi={activePoi}
-            onSelectPoi={handleSelectPoi}
+            selectedPoiId={selectedPoiId}
+            onSelectPoiId={selectPoiId}
             pois={visiblePois}
             onCrash={() => setAppMode('map-fallback')}
             isListVisible={isListVisible}
@@ -437,7 +444,31 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {!isListVisible && !activePoi && (
+        {selectedPoi && (
+          <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] md:absolute md:inset-x-auto md:bottom-6 md:right-6 md:w-[min(440px,calc(100vw-2rem))] md:px-0 md:pb-0">
+            <div className="pointer-events-auto max-h-[72vh] overflow-hidden rounded-2xl border bg-background/95 shadow-2xl backdrop-blur-md md:max-h-[calc(100vh-8rem)]">
+              <div className="flex min-h-12 items-center justify-between border-b px-4">
+                <div className="h-1.5 w-12 rounded-full bg-muted-foreground/20 md:hidden" />
+                <div className="hidden text-sm font-bold md:block">Détail du lieu</div>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-11 w-11 rounded-full"
+                  aria-label="Fermer le détail du lieu"
+                  onClick={() => selectPoiId(null)}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+              <div className="max-h-[calc(72vh-3rem)] overflow-y-auto px-4 py-4 md:max-h-[calc(100vh-11rem)]">
+                <POIDetails key={selectedPoi.id} poi={selectedPoi} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!isListVisible && !selectedPoiId && (
           <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-bottom-4 duration-500 pointer-events-auto">
             <Button 
               onClick={() => setIsListVisible(true)}
@@ -449,19 +480,12 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <MobilePOIBottomSheet
-          poi={activePoi}
-          onOpenChange={(open) => {
-            if (!open) handleSelectPoi(null)
-          }}
-          forceShow={appMode === 'map-fallback'}
-        />
       </div>
 
       <PoiListBottomSheet
         pois={visiblePois}
         onSelectPoi={handleSelectPoi}
-        selectedPoiId={activePoi?.id || null}
+        selectedPoiId={selectedPoiId}
         userLocation={userLocation}
         categoryFilter={categoryFilter as MainCategory | 'all'}
         isVisible={isListVisible && (poiLoadStatus !== 'loading' || visiblePois.length > 0)}

@@ -1,17 +1,15 @@
 'use client';
 
 import type { POI, POILite } from '@/lib/types';
-import { Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
+import { Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { useEffect, useMemo } from 'react';
 import { User, Crosshair, MapPin } from 'lucide-react';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
 import { Button } from '../ui/button';
-import { POIDetails } from './poi-details';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { categoriesMap } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { ScrollArea } from '../ui/scroll-area';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { useToast } from '@/hooks/use-toast';
 
@@ -39,15 +37,19 @@ function POIMarkerContent({
       role="button"
       tabIndex={0}
       aria-label={`Voir ${poi.title}`}
-      onClick={onSelect}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect();
+      }}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
+          event.stopPropagation();
           onSelect();
         }
       }}
       className={cn(
-        "group relative flex cursor-pointer flex-col items-center -translate-y-2 select-none outline-none",
+        "group relative flex cursor-pointer touch-manipulation flex-col items-center -translate-y-2 select-none outline-none",
         isSelected && "-translate-y-3"
       )}
     >
@@ -81,19 +83,23 @@ function POIMarkerContent({
 
 function MapController({
   pois,
-  onSelectPoi,
-  selectedPoi,
+  onSelectPoiId,
+  selectedPoiId,
   isListVisible
 }: {
   pois: POIAny[];
-  onSelectPoi: (poi: POIAny | null) => void;
-  selectedPoi: POIAny | null;
+  onSelectPoiId: (poiId: string | null) => void;
+  selectedPoiId: string | null;
   isListVisible: boolean;
 }) {
   const { userLocation, error: geoError } = useGeolocation();
   const map = useMap();
   const isMobile = useIsMobile();
   const { toast } = useToast();
+  const selectedPoi = useMemo(
+    () => pois.find((poi) => poi.id === selectedPoiId) ?? null,
+    [pois, selectedPoiId]
+  );
 
   useEffect(() => {
     if (selectedPoi && map) {
@@ -149,26 +155,33 @@ function MapController({
 
   const poiMarkers = useMemo(() => {
     return pois.map((poi) => {
-      const isSelected = selectedPoi?.id === poi.id;
+      const isSelected = selectedPoiId === poi.id;
       const sponsorIsActive = isSponsorActive(poi as any);
       let colorClass = categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
       if (sponsorIsActive) colorClass = 'text-amber-500';
       if (isSelected) colorClass = 'text-accent';
 
       return (
-        <AdvancedMarker key={poi.id} position={poi.location}>
+        <AdvancedMarker
+          key={poi.id}
+          position={poi.location}
+          onClick={(event: any) => {
+            event?.domEvent?.stopPropagation?.();
+            onSelectPoiId(poi.id);
+          }}
+        >
           <POIMarkerContent
             poi={poi}
             colorClass={colorClass}
             isSelected={isSelected}
             isMobile={isMobile}
             sponsorIsActive={sponsorIsActive}
-            onSelect={() => onSelectPoi(poi)}
+            onSelect={() => onSelectPoiId(poi.id)}
           />
         </AdvancedMarker>
       );
     });
-  }, [pois, selectedPoi, isMobile, onSelectPoi]);
+  }, [pois, selectedPoiId, isMobile, onSelectPoiId]);
 
   return (
     <>
@@ -182,16 +195,6 @@ function MapController({
 
       {poiMarkers}
 
-      {!isMobile && selectedPoi && (
-        <InfoWindow position={selectedPoi.location} onCloseClick={() => onSelectPoi(null)} pixelOffset={[0, -48]} maxWidth={460}>
-          <ScrollArea className="h-[50vh] w-[min(420px,calc(100vw-4rem))]">
-            <div className="pr-4 min-w-0">
-              <POIDetails poi={selectedPoi} />
-            </div>
-          </ScrollArea>
-        </InfoWindow>
-      )}
-
       <div className="absolute top-24 right-4 z-30">
         <Button onClick={handleRecenter} type="button" variant="secondary" className="shadow-lg bg-background/95 backdrop-blur-sm hover:bg-background text-primary border border-primary/30 flex items-center gap-2 h-10 px-4 rounded-full transition-all active:scale-95 hover:border-primary/50" title="Recentrer sur ma position">
           <Crosshair className={cn("h-4 w-4", !userLocation && "text-muted-foreground")} />
@@ -204,13 +207,13 @@ function MapController({
 }
 
 export function POIMap({
-  selectedPoi,
-  onSelectPoi,
+  selectedPoiId,
+  onSelectPoiId,
   pois,
   isListVisible
 }: {
-  selectedPoi: POIAny | null;
-  onSelectPoi: (poi: POIAny | null) => void;
+  selectedPoiId: string | null;
+  onSelectPoiId: (poiId: string | null) => void;
   pois: POIAny[];
   isListVisible: boolean;
 }) {
@@ -234,12 +237,12 @@ export function POIMap({
         disableDefaultUI={false}
         mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID || 'default_map_id'}
         className="w-full h-full"
-        onClick={() => onSelectPoi(null)}
+        onClick={() => onSelectPoiId(null)}
       >
         <MapController
           pois={pois}
-          onSelectPoi={onSelectPoi}
-          selectedPoi={selectedPoi}
+          onSelectPoiId={onSelectPoiId}
+          selectedPoiId={selectedPoiId}
           isListVisible={isListVisible}
         />
       </Map>

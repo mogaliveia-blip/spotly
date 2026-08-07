@@ -1,19 +1,19 @@
 'use client'
 
 import { POIMap } from './poi-map'
-import type { POI, POILite } from '@/lib/types'
+import type { POILite } from '@/lib/types'
 import { useEffect, useState } from 'react'
 import { mapsConfig } from '@/lib/firebase-config'
 
 export function POIMapAdapter({
-  selectedPoi,
-  onSelectPoi,
+  selectedPoiId,
+  onSelectPoiId,
   pois,
   onCrash,
   isListVisible
 }: {
-  selectedPoi: POILite | POI | null
-  onSelectPoi: (poi: POILite | null) => void
+  selectedPoiId: string | null
+  onSelectPoiId: (poiId: string | null) => void
   pois: POILite[]
   onCrash?: () => void
   isListVisible: boolean
@@ -39,8 +39,8 @@ export function POIMapAdapter({
   return (
     <div className="w-full h-full min-h-0 relative">
       <POIMap
-        selectedPoi={selectedPoi as any}
-        onSelectPoi={onSelectPoi as any}
+        selectedPoiId={selectedPoiId}
+        onSelectPoiId={onSelectPoiId}
         pois={pois as any}
         isListVisible={isListVisible}
       />

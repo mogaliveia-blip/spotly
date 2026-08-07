@@ -503,10 +503,10 @@ export default function PortalPage() {
           
           <div className="text-center space-y-6">
             <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-foreground">
-              Explorez le <span className="text-primary">Festival</span>.
+              Explorez tous vos <span className="text-primary">événements</span>.
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              Découvrez la programmation, trouvez les points d'intérêt et vivez une expérience immersive au cœur de l'événement.
+              Festivals, concerts, compétitions, marchés, expositions ou salons : retrouvez les temps forts près de chez vous et profitez d'une expérience enrichie avant, pendant et après votre visite.
             </p>
           </div>
 

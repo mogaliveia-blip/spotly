@@ -45,6 +45,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   const { userLocation } = useGeolocation();
   const { eventId } = useEvent();
   const lastPoiIdRef = useRef<string | null>(null);
+  const viewerPoiIdRef = useRef<string | null>(initialPoi.id);
 
   const full = isFullPoi(poi);
 
@@ -92,6 +93,11 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   }, [eventId]);
 
   useEffect(() => {
+    if (viewerPoiIdRef.current !== initialPoi.id) {
+      viewerPoiIdRef.current = initialPoi.id;
+      setSelectedIndex(null);
+    }
+
     setPoi(prev => {
       if (!prev) return initialPoi;
       if (isFullPoi(prev) && prev.id === initialPoi.id) return prev;
