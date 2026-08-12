@@ -773,6 +773,29 @@ export async function fetchPoiById(id: string, eventId: string): Promise<POI | u
   return undefined
 }
 
+export type PublicPoiMetadata = Pick<
+  POI,
+  'id' | 'title' | 'description' | 'headerPhotoUrl' | 'galleryUrls'
+>
+
+export async function fetchPublicPoiMetadataById(id: string, eventId: string): Promise<PublicPoiMetadata | undefined> {
+  try {
+    const poiRef = doc(db, dbPaths.poisPublic(eventId), id)
+    const poiSnap = await getDoc(poiRef)
+    if (poiSnap.exists()) {
+      return { id: poiSnap.id, ...poiSnap.data() } as PublicPoiMetadata
+    }
+  } catch (error: any) {
+    console.error('[Data] fetchPublicPoiMetadataById failed', {
+      eventId,
+      poiId: id,
+      code: error?.code ?? null,
+      message: error?.message ?? null,
+    })
+  }
+  return undefined
+}
+
 export async function fetchReviewsByPoiId(poiId: string, eventId: string): Promise<Review[]> {
   try {
     const reviewsCollection = collection(db, dbPaths.pois(eventId), poiId, 'reviews')
