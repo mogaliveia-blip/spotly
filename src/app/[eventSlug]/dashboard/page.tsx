@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { AlertCircle, List, Loader2, RefreshCw, X } from 'lucide-react'
 import { useEvent } from '@/providers/event-provider'
 import { POIDetails } from '@/components/poi/poi-details'
+import { useToast } from '@/hooks/use-toast'
 
 type AppMode = 'normal' | 'map-fallback'
 type PoiLoadStatus = 'loading' | 'success' | 'error'
@@ -54,6 +55,7 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const { userLocation } = useGeolocation()
   const { eventId, loading: eventLoading } = useEvent()
+  const { toast } = useToast()
 
   const [pois, setPois] = useState<POILite[]>([])
   const [poiLoadStatus, setPoiLoadStatus] = useState<PoiLoadStatus>('loading')
@@ -239,11 +241,14 @@ export default function DashboardPage() {
       return
     }
 
-    setSelectedPoiId(null)
+    const poiIdFromUrl = new URLSearchParams(window.location.search).get('poi')
+
+    setSelectedPoiId(poiIdFromUrl)
     setPoiDetailsById({})
     fullPoiRequestSeqRef.current += 1
     void loadPois('initial')
-  }, [eventId, eventLoading, loadPois])
+    if (poiIdFromUrl) void loadFullPoi(poiIdFromUrl)
+  }, [eventId, eventLoading, loadFullPoi, loadPois])
 
   useEffect(() => {
     if (eventLoading) return
@@ -336,6 +341,21 @@ export default function DashboardPage() {
     if (!pois.some((poi) => poi.id === selectedPoiId)) return
     void loadFullPoi(selectedPoiId)
   }, [selectedPoiId, pois, loadFullPoi, eventLoading])
+
+  useEffect(() => {
+    if (!selectedPoiId || eventLoading || poiLoadStatus !== 'success') return
+    if (pois.some((poi) => poi.id === selectedPoiId)) return
+
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('poi') === selectedPoiId) {
+      params.delete('poi')
+      updateUrl(params)
+    }
+
+    fullPoiRequestSeqRef.current += 1
+    setSelectedPoiId(null)
+    toast({ title: 'Ce lieu n’est plus disponible.' })
+  }, [eventLoading, poiLoadStatus, pois, selectedPoiId, toast, updateUrl])
 
   const handleCategorySelect = (category: MainCategory | 'all') => {
     const params = new URLSearchParams(window.location.search)
@@ -444,7 +464,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {selectedPoi && (
+        {selectedPoiId && (
           <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] md:absolute md:inset-x-auto md:bottom-6 md:right-6 md:w-[min(440px,calc(100vw-2rem))] md:px-0 md:pb-0">
             <div className="pointer-events-auto max-h-[72vh] overflow-hidden rounded-2xl border bg-background/95 shadow-2xl backdrop-blur-md md:max-h-[calc(100vh-8rem)]">
               <div className="flex min-h-12 items-center justify-between border-b px-4">
@@ -462,7 +482,14 @@ export default function DashboardPage() {
                 </Button>
               </div>
               <div className="max-h-[calc(72vh-3rem)] overflow-y-auto px-4 py-4 md:max-h-[calc(100vh-11rem)]">
-                <POIDetails key={selectedPoi.id} poi={selectedPoi} />
+                {selectedPoi ? (
+                  <POIDetails key={selectedPoi.id} poi={selectedPoi} />
+                ) : (
+                  <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <div className="font-medium text-foreground">Chargement du lieu</div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
