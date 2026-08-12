@@ -14,10 +14,12 @@ import { POIGallery } from './poi-gallery';
 import { ImageViewer } from './image-viewer';
 import { getDistance } from '@/lib/utils';
 import { useGeolocation } from '@/providers/geolocation-provider';
-import { Navigation } from 'lucide-react';
+import { Navigation, Share2 } from 'lucide-react';
 import { SponsorBadge } from '../sponsor/sponsor-badge';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { useEvent } from '@/providers/event-provider';
+import { useToast } from '@/hooks/use-toast';
+import { buildPoiShareUrl, canSharePoi } from '@/lib/poi-sharing';
 
 type POIAny = POILite | POI;
 const REVIEWS_CONFIG_TIMEOUT_MS = 3000;
@@ -33,21 +35,48 @@ function isFullPoi(poi: POIAny): poi is POI {
   );
 }
 
+async function copyTextWithFallback(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.top = '-9999px';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    const copied = document.execCommand('copy');
+    if (!copied) throw new Error('COPY_COMMAND_FAILED');
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
 export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   const [poi, setPoi] = useState<POIAny>(initialPoi);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewsEnabled, setReviewsEnabled] = useState(true);
+  const [shareLoading, setShareLoading] = useState(false);
   
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   const { user } = useAuth();
   const { userLocation } = useGeolocation();
-  const { eventId } = useEvent();
+  const { eventId, event, userRole } = useEvent();
+  const { toast } = useToast();
   const lastPoiIdRef = useRef<string | null>(null);
   const viewerPoiIdRef = useRef<string | null>(initialPoi.id);
 
   const full = isFullPoi(poi);
+  const shareAllowed = canSharePoi(event);
+  const showUnavailableShare = !!event && !shareAllowed && !!userRole;
 
   const allImages = useMemo(() => {
     const imgs: string[] = [];
@@ -126,6 +155,38 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
     setReviews(prev => [newReview, ...prev]);
   }, []);
 
+  const handleShare = useCallback(async () => {
+    if (!event || !shareAllowed || typeof window === 'undefined') return;
+
+    const shareUrl = buildPoiShareUrl(event, poi, window.location.origin);
+    const shareText = event.name ? `${poi.title} - ${event.name}` : poi.title;
+
+    setShareLoading(true);
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: poi.title,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      }
+
+      await copyTextWithFallback(shareUrl);
+      toast({ title: 'Lien copié' });
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return;
+
+      toast({
+        title: 'Partage indisponible',
+        description: 'Impossible de copier le lien pour le moment.',
+        variant: 'destructive',
+      });
+    } finally {
+      setShareLoading(false);
+    }
+  }, [event, poi, shareAllowed, toast]);
+
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${poi.location.lat},${poi.location.lng}&travelmode=walking`;
 
   return (
@@ -174,6 +235,34 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
               Itinéraire
             </a>
           </Button>
+
+          {shareAllowed && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="min-h-11 rounded-full px-5 font-bold"
+              onClick={() => void handleShare()}
+              disabled={shareLoading}
+            >
+              <Share2 className="mr-2 h-4 w-4" />
+              Partager
+            </Button>
+          )}
+
+          {showUnavailableShare && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="min-h-11 rounded-full px-5 font-bold"
+              disabled
+              title="Partage indisponible - événement non publié"
+            >
+              <Share2 className="mr-2 h-4 w-4" />
+              Partage indisponible - événement non publié
+            </Button>
+          )}
         </div>
 
         <div className="pt-2 min-h-[80px]">
