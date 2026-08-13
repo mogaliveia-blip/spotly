@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 
 import { DashboardClient } from './dashboard-client'
-import { fetchEventBySlug, fetchPublicPoiMetadataById } from '@/lib/data'
+import { fetchEventBySlug, fetchPublicPoiMetadataById, type PublicPoiMetadata } from '@/lib/data'
 
 type DashboardPageProps = {
   params: Promise<{ eventSlug: string }>
@@ -31,8 +32,9 @@ function normalizeText(value: string | undefined, fallback: string, maxLength: n
   return `${normalized.slice(0, maxLength - 1).trim()}…`
 }
 
-function getPoiImageUrl(): string {
-  return SPOTLY_IMAGE_URL
+function getPoiImageUrl(poi: PublicPoiMetadata | undefined, useCrawlerSafeFallback: boolean): string {
+  if (useCrawlerSafeFallback) return SPOTLY_IMAGE_URL
+  return poi?.headerPhotoUrl || poi?.galleryUrls?.[0]?.url || SPOTLY_IMAGE_URL
 }
 
 function buildDashboardUrl(eventSlug: string, poiId: string | null): string {
@@ -52,6 +54,20 @@ function buildMetadata({
   url: string
   imageUrl: string
 }): Metadata {
+  const usesFallbackImage = imageUrl === SPOTLY_IMAGE_URL
+  const image = {
+    url: imageUrl,
+    secureUrl: imageUrl,
+    ...(usesFallbackImage
+      ? {
+          width: SPOTLY_IMAGE_WIDTH,
+          height: SPOTLY_IMAGE_HEIGHT,
+          type: SPOTLY_IMAGE_TYPE,
+        }
+      : {}),
+    alt: title,
+  }
+
   return {
     title,
     description,
@@ -64,21 +80,13 @@ function buildMetadata({
       url,
       siteName: SPOTLY_TITLE,
       type: 'website',
-      images: [
-        {
-          url: imageUrl,
-          width: SPOTLY_IMAGE_WIDTH,
-          height: SPOTLY_IMAGE_HEIGHT,
-          type: SPOTLY_IMAGE_TYPE,
-          alt: title,
-        },
-      ],
+      images: [image],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: [imageUrl],
+      images: [image],
     },
   }
 }
@@ -89,6 +97,8 @@ export async function generateMetadata({
 }: DashboardPageProps): Promise<Metadata> {
   const { eventSlug } = await params
   const resolvedSearchParams = await searchParams
+  const userAgent = (await headers()).get('user-agent') || ''
+  const useCrawlerSafeImage = /WhatsApp/i.test(userAgent)
   const poiId = getSingleSearchParam(resolvedSearchParams.poi)
   const dashboardUrl = buildDashboardUrl(eventSlug, poiId)
 
@@ -131,7 +141,7 @@ export async function generateMetadata({
       title,
       description,
       url: dashboardUrl,
-      imageUrl: getPoiImageUrl(),
+      imageUrl: getPoiImageUrl(poi, useCrawlerSafeImage),
     })
   } catch (error) {
     console.error('[Dashboard Metadata] generation failed', {
