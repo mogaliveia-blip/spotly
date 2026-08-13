@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 import { DashboardClient } from './dashboard-client'
-import { fetchEventBySlug, fetchPublicPoiMetadataById, type PublicPoiMetadata } from '@/lib/data'
+import { fetchEventBySlug, fetchPublicPoiMetadataById } from '@/lib/data'
 
 type DashboardPageProps = {
   params: Promise<{ eventSlug: string }>
@@ -11,7 +11,10 @@ type DashboardPageProps = {
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://spotly.anavastudio.fr'
 const SPOTLY_TITLE = 'Spotly'
 const SPOTLY_DESCRIPTION = "Votre guide pour les points d'intérêt de l'événement."
-const SPOTLY_IMAGE_URL = new URL('/icon.svg', SITE_URL).toString()
+const SPOTLY_IMAGE_URL = new URL('/og-default.png', SITE_URL).toString()
+const SPOTLY_IMAGE_WIDTH = 1200
+const SPOTLY_IMAGE_HEIGHT = 630
+const SPOTLY_IMAGE_TYPE = 'image/png'
 
 function getSingleSearchParam(value: string | string[] | undefined): string | null {
   if (Array.isArray(value)) return value[0] || null
@@ -28,8 +31,8 @@ function normalizeText(value: string | undefined, fallback: string, maxLength: n
   return `${normalized.slice(0, maxLength - 1).trim()}…`
 }
 
-function getPoiImageUrl(poi: PublicPoiMetadata | undefined): string {
-  return poi?.headerPhotoUrl || poi?.galleryUrls?.[0]?.url || SPOTLY_IMAGE_URL
+function getPoiImageUrl(): string {
+  return SPOTLY_IMAGE_URL
 }
 
 function buildDashboardUrl(eventSlug: string, poiId: string | null): string {
@@ -64,6 +67,9 @@ function buildMetadata({
       images: [
         {
           url: imageUrl,
+          width: SPOTLY_IMAGE_WIDTH,
+          height: SPOTLY_IMAGE_HEIGHT,
+          type: SPOTLY_IMAGE_TYPE,
           alt: title,
         },
       ],
@@ -125,7 +131,7 @@ export async function generateMetadata({
       title,
       description,
       url: dashboardUrl,
-      imageUrl: getPoiImageUrl(poi),
+      imageUrl: getPoiImageUrl(),
     })
   } catch (error) {
     console.error('[Dashboard Metadata] generation failed', {
