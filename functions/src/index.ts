@@ -15,12 +15,13 @@ const region = 'europe-west1';
 const reviewDocument = 'events/{eventId}/pois/{poiId}/reviews/{reviewId}';
 const privateAccessTokenBytes = 32;
 const privateAccessGrantDurationMs = 30 * 24 * 60 * 60 * 1000;
+const PRIVATE_ACCESS_CORS = [
+  'http://localhost:9002',
+  'https://spotly.anavastudio.fr'
+];
 const privateAccessCallableOptions = {
   region,
-  cors: [
-    'http://localhost:9002',
-    'https://spotly.anavastudio.fr'
-  ]
+  cors: PRIVATE_ACCESS_CORS
 };
 
 type ReviewDocumentData = {
