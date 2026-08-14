@@ -15,7 +15,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { firebaseUser, role, profileLoading } = useAuth();
-  const { event, loading: eventLoading, userRole, roleLoading } = useEvent();
+  const { event, loading: eventLoading, userRole, roleLoading, privateAccessRecoveryRequired } = useEvent();
   const params = useParams();
   const eventSlug = params.eventSlug as string;
 
@@ -37,7 +37,9 @@ export default function DashboardLayout({
             </div>
             <CardTitle className="text-3xl font-black tracking-tight">Événement indisponible</CardTitle>
             <CardDescription className="text-base mt-2 px-6">
-              Cet événement n'est pas publié ou n'est pas accessible avec votre compte.
+              {privateAccessRecoveryRequired
+                ? "Votre session a changé. Rouvrez le lien privé pour restaurer l'accès à cet événement."
+                : "Cet événement n'est pas publié ou n'est pas accessible avec votre compte."}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-8 pb-10">

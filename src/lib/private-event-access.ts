@@ -5,6 +5,7 @@ import { auth, functions } from './firebase'
 
 const PRIVATE_ACCESS_PARAM = 'privateAccess'
 const PRIVATE_ACCESS_EVENT_STORAGE_PREFIX = 'spotly.privateAccess.eventId.'
+const PRIVATE_ACCESS_TOKEN_SESSION_PREFIX = 'spotly.privateAccess.token.'
 
 type RotatePrivateEventTokenResult = {
   token: string
@@ -17,6 +18,7 @@ type RedeemPrivateEventAccessResult = {
   expiresAt: string
   accessVersion: number
   uid: string
+  isAnonymous: boolean
 }
 
 export function getPrivateAccessTokenFromUrl(): string | null {
@@ -60,6 +62,24 @@ export function clearStoredPrivateAccessEventId(eventSlug: string): void {
   window.localStorage.removeItem(`${PRIVATE_ACCESS_EVENT_STORAGE_PREFIX}${eventSlug}`)
 }
 
+export function getSessionPrivateAccessToken(eventSlug: string): string | null {
+  if (typeof window === 'undefined') return null
+
+  return window.sessionStorage.getItem(`${PRIVATE_ACCESS_TOKEN_SESSION_PREFIX}${eventSlug}`)?.trim() || null
+}
+
+export function storeSessionPrivateAccessToken(eventSlug: string, token: string): void {
+  if (typeof window === 'undefined') return
+
+  window.sessionStorage.setItem(`${PRIVATE_ACCESS_TOKEN_SESSION_PREFIX}${eventSlug}`, token)
+}
+
+export function clearSessionPrivateAccessToken(eventSlug: string): void {
+  if (typeof window === 'undefined') return
+
+  window.sessionStorage.removeItem(`${PRIVATE_ACCESS_TOKEN_SESSION_PREFIX}${eventSlug}`)
+}
+
 async function ensurePrivateAccessUserUid(): Promise<string> {
   const initialUser = await waitForInitialAuthUser()
   if (initialUser) return initialUser.uid
@@ -87,7 +107,7 @@ export async function redeemPrivateEventAccess(eventSlug: string, token: string)
     'redeemPrivateEventAccess'
   )
   const result = await redeem({ eventSlug, token })
-  return { ...result.data, uid }
+  return { ...result.data, uid, isAnonymous: auth.currentUser?.isAnonymous ?? false }
 }
 
 export async function rotatePrivateEventToken(eventId: string): Promise<RotatePrivateEventTokenResult> {

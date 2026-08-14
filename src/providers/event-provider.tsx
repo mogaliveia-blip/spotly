@@ -9,10 +9,13 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   clearStoredPrivateAccessEventId,
+  clearSessionPrivateAccessToken,
+  getSessionPrivateAccessToken,
   getStoredPrivateAccessEventId,
   getPrivateAccessTokenFromUrl,
   redeemPrivateEventAccess,
   removePrivateAccessTokenFromUrl,
+  storeSessionPrivateAccessToken,
   storePrivateAccessEventId
 } from '@/lib/private-event-access';
 
@@ -22,6 +25,7 @@ interface EventContextType {
   loading: boolean;
   userRole: EventRole | null; // Ajout du rôle local de l'utilisateur
   roleLoading: boolean;
+  privateAccessRecoveryRequired: boolean;
 }
 
 const EventContext = createContext<EventContextType>({
@@ -30,18 +34,20 @@ const EventContext = createContext<EventContextType>({
   loading: true,
   userRole: null,
   roleLoading: false,
+  privateAccessRecoveryRequired: false,
 });
 
 export function EventProvider({ children }: { children: React.ReactNode }) {
   const params = useParams();
   const pathname = usePathname();
-  const { user, role: globalRole, loading: authLoading, authStateKnown } = useAuth();
+  const { user, firebaseUser, role: globalRole, loading: authLoading, authStateKnown } = useAuth();
   const [event, setEvent] = useState<AppEvent | null>(null);
   const [currentEventId, setInternalEventId] = useState<string>(DEFAULT_EVENT_ID);
   const [userRole, setUserRole] = useState<EventRole | null>(null);
   const [roleLoading, setRoleLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [resolvedSlug, setResolvedSlug] = useState<string | null>(null);
+  const [privateAccessRecoveryRequired, setPrivateAccessRecoveryRequired] = useState(false);
   const redeemedPrivateAccessRef = useRef<string | null>(null);
 
   const eventSlug = params?.eventSlug as string;
@@ -62,13 +68,21 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           setResolvedSlug('global');
           setUserRole(null);
           setRoleLoading(false);
+          setPrivateAccessRecoveryRequired(false);
           setLoading(false);
         }
         return;
       }
 
+      const shouldReplayPrivateTokenForSignedInUser =
+        isPublicDashboard &&
+        !!firebaseUser &&
+        !firebaseUser.isAnonymous &&
+        !!getSessionPrivateAccessToken(eventSlug);
+
       if (
         isPublicDashboard &&
+        !shouldReplayPrivateTokenForSignedInUser &&
         resolvedSlug === eventSlug &&
         event?.slug === eventSlug &&
         event.status === 'published'
@@ -91,21 +105,32 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       setEvent(null);
       setUserRole(null);
       setRoleLoading(false);
+      setPrivateAccessRecoveryRequired(false);
 
       try {
         let privateAccessUid: string | null = null;
         let privateAccessEvent: AppEvent | null = null;
         const privateAccessToken = isPublicDashboard ? getPrivateAccessTokenFromUrl() : null;
+        const sessionPrivateAccessToken = isPublicDashboard ? getSessionPrivateAccessToken(eventSlug) : null;
+        const tokenForCurrentUser = !privateAccessToken && firebaseUser && !firebaseUser.isAnonymous
+          ? sessionPrivateAccessToken
+          : null;
+        const tokenToRedeem = privateAccessToken ?? tokenForCurrentUser;
 
-        if (privateAccessToken && redeemedPrivateAccessRef.current !== `${eventSlug}:${privateAccessToken}`) {
+        if (tokenToRedeem && redeemedPrivateAccessRef.current !== `${eventSlug}:${tokenToRedeem}:${firebaseUser?.uid ?? 'initial'}`) {
           try {
-            const redeemResult = await redeemPrivateEventAccess(eventSlug, privateAccessToken);
+            const redeemResult = await redeemPrivateEventAccess(eventSlug, tokenToRedeem);
             privateAccessUid = redeemResult.uid;
             privateAccessEvent = await fetchEventById(redeemResult.eventId);
             if (privateAccessEvent) {
               storePrivateAccessEventId(eventSlug, redeemResult.eventId);
             }
-            redeemedPrivateAccessRef.current = `${eventSlug}:${privateAccessToken}`;
+            if (redeemResult.isAnonymous) {
+              storeSessionPrivateAccessToken(eventSlug, tokenToRedeem);
+            } else {
+              clearSessionPrivateAccessToken(eventSlug);
+            }
+            redeemedPrivateAccessRef.current = `${eventSlug}:${tokenToRedeem}:${redeemResult.uid}`;
           } catch (error) {
             console.warn('[EventProvider] private access validation failed', {
               eventSlug,
@@ -113,11 +138,13 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
               errorMessage: (error as any)?.message ?? null,
             });
           } finally {
-            removePrivateAccessTokenFromUrl();
+            if (privateAccessToken) {
+              removePrivateAccessTokenFromUrl();
+            }
           }
         }
 
-        if (!privateAccessEvent && isPublicDashboard && !privateAccessToken) {
+        if (!privateAccessEvent && isPublicDashboard && !tokenToRedeem) {
           const storedPrivateAccessEventId = getStoredPrivateAccessEventId(eventSlug);
 
           if (storedPrivateAccessEventId) {
@@ -125,6 +152,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
             if (!privateAccessEvent) {
               clearStoredPrivateAccessEventId(eventSlug);
+              if (isMounted) setPrivateAccessRecoveryRequired(true);
             }
           }
         }
@@ -187,7 +215,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [eventSlug, user?.uid, globalRole, authLoading, authStateKnown, isPublicDashboard, pathname]);
+  }, [eventSlug, user?.uid, firebaseUser?.uid, firebaseUser?.isAnonymous, globalRole, authLoading, authStateKnown, isPublicDashboard, pathname]);
 
   useEffect(() => {
     let isMounted = true;
@@ -256,7 +284,8 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       eventId: currentEventId, 
       loading: loading || isTransitioning,
       userRole,
-      roleLoading
+      roleLoading,
+      privateAccessRecoveryRequired
     }}>
       {children}
     </EventContext.Provider>
