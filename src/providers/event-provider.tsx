@@ -118,27 +118,39 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         const tokenToRedeem = privateAccessToken ?? tokenForCurrentUser;
 
         if (tokenToRedeem && redeemedPrivateAccessRef.current !== `${eventSlug}:${tokenToRedeem}:${firebaseUser?.uid ?? 'initial'}`) {
+          let shouldRemoveUrlToken = false;
+
           try {
             const redeemResult = await redeemPrivateEventAccess(eventSlug, tokenToRedeem);
             privateAccessUid = redeemResult.uid;
             privateAccessEvent = await fetchEventById(redeemResult.eventId);
-            if (privateAccessEvent) {
-              storePrivateAccessEventId(eventSlug, redeemResult.eventId);
+
+            if (!privateAccessEvent) {
+              throw new Error('PRIVATE_EVENT_READ_AFTER_GRANT_FAILED');
             }
+
+            storePrivateAccessEventId(eventSlug, redeemResult.eventId);
             if (redeemResult.isAnonymous) {
               storeSessionPrivateAccessToken(eventSlug, tokenToRedeem);
             } else {
               clearSessionPrivateAccessToken(eventSlug);
             }
             redeemedPrivateAccessRef.current = `${eventSlug}:${tokenToRedeem}:${redeemResult.uid}`;
+            shouldRemoveUrlToken = true;
           } catch (error) {
+            const errorCode = (error as any)?.code ?? null;
             console.warn('[EventProvider] private access validation failed', {
               eventSlug,
-              errorCode: (error as any)?.code ?? null,
+              errorCode,
               errorMessage: (error as any)?.message ?? null,
             });
+
+            shouldRemoveUrlToken =
+              errorCode === 'functions/permission-denied' ||
+              errorCode === 'functions/not-found' ||
+              errorCode === 'functions/invalid-argument';
           } finally {
-            if (privateAccessToken) {
+            if (privateAccessToken && shouldRemoveUrlToken) {
               removePrivateAccessTokenFromUrl();
             }
           }

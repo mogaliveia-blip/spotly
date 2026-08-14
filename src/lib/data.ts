@@ -4,6 +4,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   getDocsFromServer,
   setDoc,
@@ -70,7 +71,7 @@ export async function fetchEventById(eventId: string): Promise<AppEvent | null> 
   if (!eventId || eventId === DEFAULT_EVENT_ID) return null;
 
   try {
-    const eventDoc = await getDoc(doc(db, 'events', eventId));
+    const eventDoc = await getDocFromServer(doc(db, 'events', eventId));
     if (!eventDoc.exists()) return null;
     return eventFromDoc(eventDoc);
   } catch (error) {

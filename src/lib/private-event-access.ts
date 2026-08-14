@@ -101,6 +101,7 @@ function waitForInitialAuthUser(): Promise<User | null> {
 
 export async function redeemPrivateEventAccess(eventSlug: string, token: string): Promise<RedeemPrivateEventAccessResult> {
   const uid = await ensurePrivateAccessUserUid()
+  await auth.currentUser?.getIdToken(true)
 
   const redeem = httpsCallable<{ eventSlug: string; token: string }, RedeemPrivateEventAccessResult>(
     functions,
