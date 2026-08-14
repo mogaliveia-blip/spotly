@@ -26,7 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Copy, KeyRound, Loader2, ImagePlus, Plus, Trash2 } from 'lucide-react';
+import { Copy, KeyRound, Loader2, ImagePlus, Plus, Share2, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -444,8 +444,10 @@ function PrivateAccessCard() {
   const [busyAction, setBusyAction] = useState<'create' | string | null>(null);
   const [linkTitle, setLinkTitle] = useState('');
   const [linkDescription, setLinkDescription] = useState('');
+  const [generatedLinkShareData, setGeneratedLinkShareData] = useState<{ title?: string; description?: string } | null>(null);
 
   const isPrivate = event?.visibility === 'private';
+  const canSharePrivateUrl = !!privateUrl && typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
   const loadLinks = async () => {
     if (!eventId || !isPrivate) {
@@ -505,6 +507,10 @@ function PrivateAccessCard() {
       });
       const url = buildPrivateEventUrl(event.slug, result.token, window.location.origin);
       setPrivateUrl(url);
+      setGeneratedLinkShareData({
+        title: title || undefined,
+        description: description || undefined
+      });
       setLinkTitle('');
       setLinkDescription('');
       await loadLinks();
@@ -546,6 +552,25 @@ function PrivateAccessCard() {
       toast({
         title: 'Copie indisponible',
         description: 'Sélectionnez le lien manuellement.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleShare = async () => {
+    if (!privateUrl || typeof navigator === 'undefined' || typeof navigator.share !== 'function') return;
+
+    try {
+      await navigator.share({
+        title: generatedLinkShareData?.title || 'Lien privé Spotly',
+        ...(generatedLinkShareData?.description ? { text: generatedLinkShareData.description } : {}),
+        url: privateUrl
+      });
+    } catch (error) {
+      if ((error as any)?.name === 'AbortError') return;
+      toast({
+        title: 'Partage indisponible',
+        description: 'Utilisez Copier le lien.',
         variant: 'destructive'
       });
     }
@@ -597,11 +622,18 @@ function PrivateAccessCard() {
       {privateUrl && (
         <div className="space-y-2">
           <Label htmlFor="private-event-url">Lien généré</Label>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Input id="private-event-url" value={privateUrl} readOnly className="rounded-xl font-mono text-xs" />
-            <Button type="button" variant="outline" size="icon" className="h-10 w-10 shrink-0 rounded-xl" onClick={handleCopy}>
-              <Copy className="h-4 w-4" />
+            <Button type="button" variant="outline" className="h-10 shrink-0 rounded-xl" onClick={handleCopy}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copier le lien
             </Button>
+            {canSharePrivateUrl && (
+              <Button type="button" variant="outline" className="h-10 shrink-0 rounded-xl" onClick={handleShare}>
+                <Share2 className="mr-2 h-4 w-4" />
+                Partager
+              </Button>
+            )}
           </div>
           <p className="text-xs text-muted-foreground">
             Ce lien est affiché une seule fois. Créer un nouveau lien ne révoque pas les précédents.
