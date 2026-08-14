@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { MapsApiProvider } from '@/providers/maps-api-provider'
 import { GeolocationProvider } from '@/providers/geolocation-provider'
 import { EventProvider } from '@/providers/event-provider'
+import { PwaInstallAssistant } from '@/components/pwa/install-assistant'
 
 export const metadata: Metadata = {
   title: 'Spotly',
@@ -18,8 +19,8 @@ export const metadata: Metadata = {
       type: 'image/svg+xml',
     },
     apple: {
-      url: '/icon.svg',
-      type: 'image/svg+xml',
+      url: '/apple-touch-icon.png',
+      type: 'image/png',
     },
   },
 }
@@ -82,6 +83,7 @@ export default function RootLayout({
             <EventProvider>
               <GeolocationProvider>
                 {children}
+                <PwaInstallAssistant />
                 <Toaster />
               </GeolocationProvider>
             </EventProvider>
