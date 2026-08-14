@@ -172,7 +172,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         const publicResolved = await fetchEventBySlug(eventSlug);
         let resolved = privateAccessEvent ?? publicResolved;
 
-        if (!publicResolved) {
+        if (!resolved) {
           const fallbackUid = privateAccessUid ?? user?.uid;
           const canAttemptPrivateFallback = !!fallbackUid || globalRole === 'owner';
           const shouldAttemptPrivateFallback = canAttemptPrivateFallback && (!!privateAccessUid || !isPublicDashboard || authStateKnown);
