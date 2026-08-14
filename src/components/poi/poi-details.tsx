@@ -257,10 +257,10 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
               variant="outline"
               className="min-h-11 rounded-full px-5 font-bold"
               disabled
-              title="Partage indisponible - événement non publié"
+              title="Partage indisponible - événement non public"
             >
               <Share2 className="mr-2 h-4 w-4" />
-              Partage indisponible - événement non publié
+              Partage indisponible - événement non public
             </Button>
           )}
         </div>

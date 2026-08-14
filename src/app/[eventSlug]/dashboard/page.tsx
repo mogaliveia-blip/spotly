@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 
 import { DashboardClient } from './dashboard-client'
-import { fetchEventBySlug, fetchPublicPoiMetadataById, type PublicPoiMetadata } from '@/lib/data'
+import { fetchEventBySlug, fetchPublicPoiMetadataById, isPubliclyAccessibleEvent, type PublicPoiMetadata } from '@/lib/data'
 
 type DashboardPageProps = {
   params: Promise<{ eventSlug: string }>
@@ -104,7 +104,7 @@ export async function generateMetadata({
 
   try {
     const event = await fetchEventBySlug(eventSlug)
-    if (!event || event.status !== 'published') {
+    if (!isPubliclyAccessibleEvent(event)) {
       return buildMetadata({
         title: SPOTLY_TITLE,
         description: SPOTLY_DESCRIPTION,

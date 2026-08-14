@@ -11,7 +11,7 @@ import {
   updateEventDetails,
   uploadFile
 } from '@/lib/data';
-import type { AppConfig, MarketingConfig } from '@/lib/types';
+import type { AppConfig, EventVisibility, MarketingConfig } from '@/lib/types';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -55,6 +55,7 @@ function EventDetailsCard() {
   const [departmentName, setDepartmentName] = useState(event?.departmentName ?? '');
   const [region, setRegion] = useState(event?.region ?? '');
   const [country, setCountry] = useState(event?.country ?? 'France');
+  const [visibility, setVisibility] = useState<EventVisibility>(event?.visibility ?? 'public');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -66,6 +67,7 @@ function EventDetailsCard() {
     setDepartmentName(event?.departmentName ?? '');
     setRegion(event?.region ?? '');
     setCountry(event?.country ?? 'France');
+    setVisibility(event?.visibility ?? 'public');
   }, [event]);
 
   const handleSave = async () => {
@@ -100,7 +102,8 @@ function EventDetailsCard() {
         city: optionalText(city),
         departmentName: optionalText(departmentName),
         region: optionalText(region),
-        country: optionalText(country)
+        country: optionalText(country),
+        visibility
       });
       toast({ title: 'Événement mis à jour' });
     } catch (error) {
@@ -134,6 +137,21 @@ function EventDetailsCard() {
       <div className="space-y-2">
         <Label htmlFor="event-timezone">Fuseau horaire</Label>
         <Input id="event-timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} className="rounded-xl" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="event-visibility">Visibilité</Label>
+        <Select value={visibility} onValueChange={(value) => setVisibility(value as EventVisibility)}>
+          <SelectTrigger id="event-visibility" className="rounded-xl">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="public">Public</SelectItem>
+            <SelectItem value="private">Privé</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-sm text-muted-foreground">
+          Un événement privé est réservé au staff pour cette phase. Le lien privé sera ajouté dans une prochaine étape.
+        </p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">

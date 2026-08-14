@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createEvent } from '@/lib/data';
 import { useAuth } from '@/hooks/use-auth-user';
 import { useRouter } from 'next/navigation';
@@ -40,6 +41,7 @@ const formSchema = z.object({
   departmentName: z.string().max(80, 'Département trop long').optional(),
   region: z.string().max(80, 'Région trop longue').optional(),
   country: z.string().max(80, 'Pays trop long').optional(),
+  visibility: z.enum(['public', 'private']),
 }).refine((data) => {
   if (!data.startDate || !data.endDate) return true;
   return data.startDate <= data.endDate;
@@ -79,7 +81,8 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
       city: '',
       departmentName: '',
       region: '',
-      country: 'France'
+      country: 'France',
+      visibility: 'public'
     },
   });
 
@@ -109,6 +112,7 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
         departmentName: optionalText(values.departmentName),
         region: optionalText(values.region),
         country: optionalText(values.country),
+        visibility: values.visibility,
       });
       toast({ title: 'Événement créé !', description: `L'événement ${event.name} est prêt.` });
       setOpen(false);
@@ -199,6 +203,30 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
                   )}
                 />
               </div>
+              <FormField
+                control={form.control}
+                name="visibility"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Visibilité</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="rounded-xl">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="public">Public</SelectItem>
+                        <SelectItem value="private">Privé</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Un événement privé ne sera pas visible publiquement. Le lien privé sera ajouté dans une prochaine phase.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="timezone"

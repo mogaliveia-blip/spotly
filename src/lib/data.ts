@@ -29,6 +29,7 @@ import type {
   MarketingConfig,
   AppEvent,
   EventStatus,
+  EventVisibility,
   EventMember,
   EventRole,
   EventMemberWithProfile,
@@ -49,6 +50,10 @@ import {
 
 export const DEFAULT_EVENT_ID = 'default-event';
 
+export function isPubliclyAccessibleEvent(event: AppEvent | null | undefined): event is AppEvent {
+  return event?.status === 'published' && event.visibility === 'public';
+}
+
 /**
  * Résout un événement à partir de son slug URL.
  */
@@ -62,7 +67,13 @@ export async function fetchEventBySlug(
   
   try {
     const eventsRef = collection(db, 'events');
-    const q = query(eventsRef, where('slug', '==', normalizedSlug), where('status', '==', 'published'), limit(1));
+    const q = query(
+      eventsRef,
+      where('slug', '==', normalizedSlug),
+      where('status', '==', 'published'),
+      where('visibility', '==', 'public'),
+      limit(1)
+    );
     const snap = await getDocsFromServer(q);
     
     if (!snap.empty) {
@@ -210,7 +221,7 @@ export async function fetchAllEvents(): Promise<AppEvent[]> {
 export async function fetchPublishedEvents(): Promise<AppEvent[]> {
   try {
     const eventsRef = collection(db, 'events');
-    const q = query(eventsRef, where('status', '==', 'published'));
+    const q = query(eventsRef, where('status', '==', 'published'), where('visibility', '==', 'public'));
     const snap = await getDocsFromServer(q);
     
     return snap.docs.map(d => {
@@ -330,6 +341,7 @@ export async function createEvent(data: {
   departmentName?: string;
   region?: string;
   country?: string;
+  visibility?: EventVisibility;
 }): Promise<AppEvent> {
   const eventRef = doc(collection(db, 'events'));
   const id = eventRef.id;
@@ -347,6 +359,7 @@ export async function createEvent(data: {
     slug: string;
     adminId: string;
     status: 'draft';
+    visibility: EventVisibility;
     startDate?: Date;
     endDate?: Date;
     timezone: string;
@@ -361,6 +374,7 @@ export async function createEvent(data: {
     slug: data.slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
     adminId: data.adminId,
     status: 'draft' as const,
+    visibility: data.visibility ?? 'public',
     timezone: data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
@@ -433,7 +447,7 @@ export async function createEvent(data: {
 
 export async function updateEventDetails(
   eventId: string,
-  data: Partial<Pick<AppEvent, 'name' | 'startDate' | 'endDate' | 'timezone' | 'city' | 'departmentCode' | 'departmentName' | 'region' | 'country'>>
+  data: Partial<Pick<AppEvent, 'name' | 'startDate' | 'endDate' | 'timezone' | 'city' | 'departmentCode' | 'departmentName' | 'region' | 'country' | 'visibility'>>
 ): Promise<void> {
   const payload: Record<string, unknown> = {};
 
@@ -450,6 +464,13 @@ export async function updateEventDetails(
 export async function updateEventStatus(eventId: string, status: EventStatus): Promise<void> {
   await updateDoc(doc(db, 'events', eventId), {
     status,
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function updateEventVisibility(eventId: string, visibility: EventVisibility): Promise<void> {
+  await updateDoc(doc(db, 'events', eventId), {
+    visibility,
     updatedAt: serverTimestamp()
   });
 }

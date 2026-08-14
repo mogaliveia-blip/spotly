@@ -2,13 +2,13 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
-import { deleteEvent, fetchAllEvents, fetchUserEvents, updateEventStatus } from '@/lib/data';
-import type { AppEvent, EventRole, EventStatus } from '@/lib/types';
+import { deleteEvent, fetchAllEvents, fetchUserEvents, updateEventStatus, updateEventVisibility } from '@/lib/data';
+import type { AppEvent, EventRole, EventStatus, EventVisibility } from '@/lib/types';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Calendar, LayoutDashboard, Settings, AlertCircle, RefreshCw, Lock, UserCheck, ShieldCheck, Loader2, Trash2 } from 'lucide-react';
+import { Calendar, LayoutDashboard, Settings, AlertCircle, RefreshCw, Lock, UserCheck, ShieldCheck, Loader2, Trash2, Globe2 } from 'lucide-react';
 import Link from 'next/link';
 import { CreateEventDialog } from '@/components/admin/create-event-dialog';
 import { cn } from '@/lib/utils';
@@ -46,6 +46,15 @@ function getStatusAction(status: EventStatus): { label: string; nextStatus: Even
   return { label: 'Publier', nextStatus: 'published' };
 }
 
+function getVisibilityLabel(visibility: EventVisibility): string {
+  return visibility === 'private' ? 'Privé' : 'Public';
+}
+
+function getVisibilityAction(visibility: EventVisibility): { label: string; nextVisibility: EventVisibility } {
+  if (visibility === 'private') return { label: 'Rendre public', nextVisibility: 'public' };
+  return { label: 'Rendre privé', nextVisibility: 'private' };
+}
+
 function formatEventDateRange(event: AppEvent): string {
   if (!event.startDate && !event.endDate) return 'Dates à définir';
 
@@ -67,6 +76,7 @@ export default function MyEventsPage() {
   const [loading, setLoading] = useState(true);
   const [errorType, setErrorType] = useState<'NONE' | 'INDEX_MISSING' | 'OTHER'>('NONE');
   const [updatingEventId, setUpdatingEventId] = useState<string | null>(null);
+  const [updatingVisibilityEventId, setUpdatingVisibilityEventId] = useState<string | null>(null);
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
   const [eventToDelete, setEventToDelete] = useState<AppEventWithRole | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
@@ -131,6 +141,35 @@ export default function MyEventsPage() {
       });
     } finally {
       setUpdatingEventId(null);
+    }
+  };
+
+  const handleVisibilityChange = async (event: AppEventWithRole) => {
+    const currentVisibility = event.visibility ?? 'public';
+    const action = getVisibilityAction(currentVisibility);
+    setUpdatingVisibilityEventId(event.id);
+
+    try {
+      await updateEventVisibility(event.id, action.nextVisibility);
+      setEvents((currentEvents) =>
+        currentEvents.map((currentEvent) =>
+          currentEvent.id === event.id
+            ? { ...currentEvent, visibility: action.nextVisibility, updatedAt: new Date() }
+            : currentEvent
+        )
+      );
+      toast({
+        title: 'Visibilité mise à jour',
+        description: `${event.name} est maintenant ${getVisibilityLabel(action.nextVisibility).toLowerCase()}.`
+      });
+    } catch {
+      toast({
+        title: 'Erreur',
+        description: "Impossible de mettre à jour la visibilité de l'événement.",
+        variant: 'destructive'
+      });
+    } finally {
+      setUpdatingVisibilityEventId(null);
     }
   };
 
@@ -300,6 +339,7 @@ export default function MyEventsPage() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {events.map((e) => {
               const eventSlug = getValidEventSlug(e);
+              const eventVisibility = e.visibility ?? 'public';
               const canOpenSettings = isPlatformOwner || e.userRole === 'admin';
               const settingsDisabledReason = !eventSlug
                 ? 'Slug événement manquant ou invalide.'
@@ -323,6 +363,10 @@ export default function MyEventsPage() {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
+                       <Badge variant="outline" className="flex gap-1 items-center text-[10px] uppercase font-bold">
+                          {eventVisibility === 'private' ? <Lock className="h-3 w-3" /> : <Globe2 className="h-3 w-3" />}
+                          {getVisibilityLabel(eventVisibility)}
+                       </Badge>
                        <Badge className="bg-primary/10 text-primary hover:bg-primary/10 border-none flex gap-1 items-center text-[10px] uppercase font-bold">
                           <ShieldCheck className="h-3 w-3" />
                           {isPlatformOwner ? 'Owner plateforme' : e.userRole || 'Admin'}
@@ -386,11 +430,21 @@ export default function MyEventsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => handleStatusChange(e)}
-                            disabled={updatingEventId === e.id || deletingEventId === e.id}
+                            disabled={updatingEventId === e.id || updatingVisibilityEventId === e.id || deletingEventId === e.id}
                             className="rounded-xl h-12 font-bold"
                           >
                             {updatingEventId === e.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                             {getStatusAction(e.status).label}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleVisibilityChange(e)}
+                            disabled={updatingEventId === e.id || updatingVisibilityEventId === e.id || deletingEventId === e.id}
+                            className="rounded-xl h-12 font-bold"
+                          >
+                            {updatingVisibilityEventId === e.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            {getVisibilityAction(eventVisibility).label}
                           </Button>
                           <Button
                             variant="destructive"

@@ -45,6 +45,24 @@ service cloud.firestore {
         get(eventPath).data.status == "published";
     }
 
+    function isEventPublic(eventId) {
+      let eventPath =
+        /databases/$(database)/documents/events/$(eventId);
+
+      return exists(eventPath) &&
+        get(eventPath).data.status == "published" &&
+        get(eventPath).data.visibility == "public";
+    }
+
+    function hasPrivateAccessGrant(eventId) {
+      let grantPath =
+        /databases/$(database)/documents/events/$(eventId)/privateAccess/$(getUserId());
+
+      return isAuthenticated() &&
+        exists(grantPath) &&
+        get(grantPath).data.expiresAt > request.time;
+    }
+
     function areReviewsEnabled(eventId) {
       let configPath =
         /databases/$(database)/documents/events/$(eventId)/config/main;
@@ -148,6 +166,14 @@ service cloud.firestore {
       return role == "admin" || role == "editor";
     }
 
+    function isValidEventStatus(status) {
+      return status == "draft" || status == "published" || status == "paused";
+    }
+
+    function isValidEventVisibility(visibility) {
+      return visibility == "public" || visibility == "private";
+    }
+
     function canCreateEvent() {
       return isOwner();
     }
@@ -158,19 +184,37 @@ service cloud.firestore {
 
     match /events/{eventId} {
       allow get: if
-        resource.data.status == "published" ||
-        isEventMember(eventId);
+        (
+          resource.data.status == "published" &&
+          resource.data.visibility == "public"
+        ) ||
+        isEventMember(eventId) ||
+        hasPrivateAccessGrant(eventId);
 
       allow list: if
         isOwner() ||
-        resource.data.status == "published";
+        (
+          resource.data.status == "published" &&
+          resource.data.visibility == "public"
+        ) ||
+        isEventMember(eventId) ||
+        hasPrivateAccessGrant(eventId);
 
       allow create: if
         canCreateEvent() &&
         request.resource.data.adminId == getUserId() &&
-        request.resource.data.status == "draft";
+        request.resource.data.status == "draft" &&
+        isValidEventVisibility(request.resource.data.visibility);
 
-      allow update, delete: if isEventAdmin(eventId);
+      allow update: if isEventAdmin(eventId) &&
+        isValidEventStatus(request.resource.data.status) &&
+        isValidEventVisibility(request.resource.data.visibility);
+
+      allow delete: if isEventAdmin(eventId);
+    }
+
+    match /events/{eventId}/privateAccess/{userId} {
+      allow read, write: if false;
     }
 
     /* =========================
@@ -216,8 +260,9 @@ service cloud.firestore {
 
     match /events/{eventId}/pois_public/{poiId} {
       allow read: if
-        isEventPublished(eventId) ||
-        isEventMember(eventId);
+        isEventPublic(eventId) ||
+        isEventMember(eventId) ||
+        hasPrivateAccessGrant(eventId);
 
       allow write: if
         isAdminOrEditor(eventId);
@@ -229,23 +274,25 @@ service cloud.firestore {
 
     match /events/{eventId}/pois/{poiId} {
       allow read: if
-        isEventPublished(eventId) ||
-        isEventMember(eventId);
+        isEventPublic(eventId) ||
+        isEventMember(eventId) ||
+        hasPrivateAccessGrant(eventId);
 
       allow create, update, delete: if
         isAdminOrEditor(eventId);
 
       match /reviews/{reviewId} {
         allow read: if
-          isEventPublished(eventId) ||
-          isEventMember(eventId);
+          isEventPublic(eventId) ||
+          isEventMember(eventId) ||
+          hasPrivateAccessGrant(eventId);
 
         allow create: if
           isApproved() &&
           areReviewsEnabled(eventId) &&
           isValidReviewCreate(poiId) &&
           (
-            isEventPublished(eventId) ||
+            isEventPublic(eventId) ||
             isEventMember(eventId)
           );
 
@@ -274,8 +321,9 @@ service cloud.firestore {
 
     match /events/{eventId}/config/{docId} {
       allow read: if
-        isEventPublished(eventId) ||
-        isEventMember(eventId);
+        isEventPublic(eventId) ||
+        isEventMember(eventId) ||
+        hasPrivateAccessGrant(eventId);
 
       // IMPORTANT :
       // autorise création initiale après création du document event

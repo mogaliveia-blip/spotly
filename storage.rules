@@ -23,6 +23,27 @@ service firebase.storage {
         ).data.status == 'published';
     }
 
+    function isEventPublic(eventId) {
+      return firestore.exists(
+        /databases/(default)/documents/events/$(eventId)
+      ) &&
+        firestore.get(
+          /databases/(default)/documents/events/$(eventId)
+        ).data.status == 'published' &&
+        firestore.get(
+          /databases/(default)/documents/events/$(eventId)
+        ).data.visibility == 'public';
+    }
+
+    function hasPrivateAccessGrant(eventId) {
+      let grantPath =
+        /databases/(default)/documents/events/$(eventId)/privateAccess/$(request.auth.uid);
+
+      return isSignedIn() &&
+        firestore.exists(grantPath) &&
+        firestore.get(grantPath).data.expiresAt > request.time;
+    }
+
     function getEventRole(eventId) {
       let memberPath =
         /databases/(default)/documents/events/$(eventId)/members/$(request.auth.uid);
@@ -52,7 +73,7 @@ service firebase.storage {
     }
 
     match /events/{eventId}/poi-images/{allPaths=**} {
-      allow read: if isEventPublished(eventId) || isAdminOrEditor(eventId);
+      allow read: if isEventPublic(eventId) || isAdminOrEditor(eventId) || hasPrivateAccessGrant(eventId);
       allow write: if isAdminOrEditor(eventId);
     }
 

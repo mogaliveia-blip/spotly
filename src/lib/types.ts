@@ -208,6 +208,7 @@ export interface MarketingConfig {
 }
 
 export type EventStatus = 'draft' | 'published' | 'paused'
+export type EventVisibility = 'public' | 'private'
 
 export interface AppEvent {
   id: string
@@ -215,6 +216,7 @@ export interface AppEvent {
   slug: string
   adminId: string
   status: EventStatus
+  visibility: EventVisibility
   createdAt: Date
   updatedAt: Date
   startDate?: Date
@@ -233,6 +235,14 @@ export interface AppEvent {
 }
 
 export type EventRole = 'admin' | 'editor'
+
+export interface EventPrivateAccessGrant {
+  uid: string
+  eventId: string
+  createdAt: Date
+  expiresAt: Date
+  accessVersion?: number
+}
 
 export interface EventMember {
   uid: string
