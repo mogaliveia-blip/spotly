@@ -561,9 +561,12 @@ function PrivateAccessCard() {
     if (!privateUrl || typeof navigator === 'undefined' || typeof navigator.share !== 'function') return;
 
     try {
+      const title = generatedLinkShareData?.title || 'Lien privé Spotly';
+      const description = generatedLinkShareData?.description;
+
       await navigator.share({
-        title: generatedLinkShareData?.title || 'Lien privé Spotly',
-        ...(generatedLinkShareData?.description ? { text: generatedLinkShareData.description } : {}),
+        title,
+        text: description ? `${title}\n\n${description}` : title,
         url: privateUrl
       });
     } catch (error) {
