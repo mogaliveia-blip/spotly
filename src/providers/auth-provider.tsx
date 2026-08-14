@@ -101,7 +101,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setFirebaseUser(currentUser);
 
       if (currentUser) {
-        setUser({
+        const anonymousUser: AppUser = {
           uid: currentUser.uid,
           email: currentUser.email,
           displayName: currentUser.displayName,
@@ -109,7 +109,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           role: 'user',
           isApproved: false,
           emailVerified: currentUser.emailVerified,
+        };
+        setUser({
+          ...anonymousUser,
         });
+        if (currentUser.isAnonymous) {
+          setRole('user');
+          setIsApproved(false);
+          setProfileLoading(false);
+          return;
+        }
         void loadUserProfile(currentUser, requestId);
       } else {
         setFirebaseUser(null);

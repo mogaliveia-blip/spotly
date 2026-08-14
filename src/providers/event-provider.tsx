@@ -2,15 +2,18 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useParams, usePathname } from 'next/navigation';
-import { fetchEventBySlug, DEFAULT_EVENT_ID } from '@/lib/data';
+import { fetchEventById, fetchEventBySlug, DEFAULT_EVENT_ID } from '@/lib/data';
 import type { AppEvent, EventRole } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth-user';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import {
+  clearStoredPrivateAccessEventId,
+  getStoredPrivateAccessEventId,
   getPrivateAccessTokenFromUrl,
   redeemPrivateEventAccess,
-  removePrivateAccessTokenFromUrl
+  removePrivateAccessTokenFromUrl,
+  storePrivateAccessEventId
 } from '@/lib/private-event-access';
 
 interface EventContextType {
@@ -78,6 +81,11 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      if (isPublicDashboard && !authStateKnown && getStoredPrivateAccessEventId(eventSlug) && !getPrivateAccessTokenFromUrl()) {
+        setLoading(true);
+        return;
+      }
+
       setLoading(true);
       setInternalEventId(DEFAULT_EVENT_ID);
       setEvent(null);
@@ -86,12 +94,17 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
       try {
         let privateAccessUid: string | null = null;
+        let privateAccessEvent: AppEvent | null = null;
         const privateAccessToken = isPublicDashboard ? getPrivateAccessTokenFromUrl() : null;
 
         if (privateAccessToken && redeemedPrivateAccessRef.current !== `${eventSlug}:${privateAccessToken}`) {
           try {
-            await redeemPrivateEventAccess(eventSlug, privateAccessToken);
-            privateAccessUid = auth.currentUser?.uid ?? null;
+            const redeemResult = await redeemPrivateEventAccess(eventSlug, privateAccessToken);
+            privateAccessUid = redeemResult.uid;
+            privateAccessEvent = await fetchEventById(redeemResult.eventId);
+            if (privateAccessEvent) {
+              storePrivateAccessEventId(eventSlug, redeemResult.eventId);
+            }
             redeemedPrivateAccessRef.current = `${eventSlug}:${privateAccessToken}`;
           } catch (error) {
             console.warn('[EventProvider] private access validation failed', {
@@ -104,8 +117,20 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        if (!privateAccessEvent && isPublicDashboard && !privateAccessToken) {
+          const storedPrivateAccessEventId = getStoredPrivateAccessEventId(eventSlug);
+
+          if (storedPrivateAccessEventId) {
+            privateAccessEvent = await fetchEventById(storedPrivateAccessEventId);
+
+            if (!privateAccessEvent) {
+              clearStoredPrivateAccessEventId(eventSlug);
+            }
+          }
+        }
+
         const publicResolved = await fetchEventBySlug(eventSlug);
-        let resolved = publicResolved;
+        let resolved = privateAccessEvent ?? publicResolved;
 
         if (!publicResolved) {
           const fallbackUid = privateAccessUid ?? user?.uid;

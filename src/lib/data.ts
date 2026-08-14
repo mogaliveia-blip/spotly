@@ -66,6 +66,23 @@ function eventFromDoc(d: { id: string; data: () => any }): AppEvent {
   } as AppEvent;
 }
 
+export async function fetchEventById(eventId: string): Promise<AppEvent | null> {
+  if (!eventId || eventId === DEFAULT_EVENT_ID) return null;
+
+  try {
+    const eventDoc = await getDoc(doc(db, 'events', eventId));
+    if (!eventDoc.exists()) return null;
+    return eventFromDoc(eventDoc);
+  } catch (error) {
+    console.error('[Data] Erreur lors de la résolution de l’événement par ID:', {
+      eventId,
+      errorCode: (error as any)?.code ?? null,
+      errorMessage: (error as any)?.message ?? null,
+    });
+    return null;
+  }
+}
+
 /**
  * Résout un événement à partir de son slug URL.
  */
