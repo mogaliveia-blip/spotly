@@ -442,6 +442,8 @@ function PrivateAccessCard() {
   const [links, setLinks] = useState<EventPrivateLink[]>([]);
   const [linksLoading, setLinksLoading] = useState(false);
   const [busyAction, setBusyAction] = useState<'create' | string | null>(null);
+  const [linkTitle, setLinkTitle] = useState('');
+  const [linkDescription, setLinkDescription] = useState('');
 
   const isPrivate = event?.visibility === 'private';
 
@@ -495,9 +497,16 @@ function PrivateAccessCard() {
 
     setBusyAction('create');
     try {
-      const result = await rotatePrivateEventToken(eventId);
+      const title = linkTitle.trim();
+      const description = linkDescription.trim();
+      const result = await rotatePrivateEventToken(eventId, {
+        title: title || undefined,
+        description: description || undefined
+      });
       const url = buildPrivateEventUrl(event.slug, result.token, window.location.origin);
       setPrivateUrl(url);
+      setLinkTitle('');
+      setLinkDescription('');
       await loadLinks();
 
       const copied = (await navigator.clipboard
@@ -600,7 +609,31 @@ function PrivateAccessCard() {
         </div>
       )}
 
-      <div>
+      <div className="space-y-3 rounded-xl border p-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="private-link-title">Titre</Label>
+            <Input
+              id="private-link-title"
+              value={linkTitle}
+              onChange={(event) => setLinkTitle(event.target.value)}
+              placeholder="Famille Laurent"
+              disabled={!isPrivate || busyAction !== null}
+              className="rounded-xl"
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="private-link-description">Description</Label>
+            <Textarea
+              id="private-link-description"
+              value={linkDescription}
+              onChange={(event) => setLinkDescription(event.target.value)}
+              placeholder="Accès au programme et aux lieux de notre séjour."
+              disabled={!isPrivate || busyAction !== null}
+              className="min-h-20 rounded-xl"
+            />
+          </div>
+        </div>
         <Button
           type="button"
           onClick={handleCreate}
@@ -612,10 +645,11 @@ function PrivateAccessCard() {
         </Button>
       </div>
 
-      <div className="rounded-xl border">
+      <div className="overflow-x-auto rounded-xl border">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Lien</TableHead>
               <TableHead>Création</TableHead>
               <TableHead>Statut</TableHead>
               <TableHead>Expiration</TableHead>
@@ -625,14 +659,14 @@ function PrivateAccessCard() {
           <TableBody>
             {linksLoading && (
               <TableRow>
-                <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                <TableCell colSpan={5} className="text-sm text-muted-foreground">
                   Chargement...
                 </TableCell>
               </TableRow>
             )}
             {!linksLoading && links.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                <TableCell colSpan={5} className="text-sm text-muted-foreground">
                   Aucun lien privé créé.
                 </TableCell>
               </TableRow>
@@ -643,9 +677,17 @@ function PrivateAccessCard() {
 
               return (
                 <TableRow key={link.id}>
-                  <TableCell className="text-sm">{formatDate(link.createdAt)}</TableCell>
-                  <TableCell className="text-sm">{status}</TableCell>
-                  <TableCell className="text-sm">{formatDate(link.expiresAt)}</TableCell>
+                  <TableCell className="min-w-[220px] text-sm">
+                    <div className="font-medium">{link.title?.trim() || 'Lien privé'}</div>
+                    {link.description?.trim() && (
+                      <div className="mt-1 max-w-xs whitespace-normal text-xs text-muted-foreground">
+                        {link.description}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-sm">{formatDate(link.createdAt)}</TableCell>
+                  <TableCell className="whitespace-nowrap text-sm">{status}</TableCell>
+                  <TableCell className="whitespace-nowrap text-sm">{formatDate(link.expiresAt)}</TableCell>
                   <TableCell className="text-right">
                     <Button
                       type="button"

@@ -27,6 +27,8 @@ type RedeemPrivateEventAccessResult = {
 type ListPrivateEventLinksResult = {
   links: {
     id: string
+    title: string | null
+    description: string | null
     createdAt: string | null
     expiresAt: string | null
     revokedAt: string | null
@@ -129,12 +131,22 @@ export async function redeemPrivateEventAccess(eventSlug: string, token: string)
   return { ...result.data, uid, isAnonymous: auth.currentUser?.isAnonymous ?? false }
 }
 
-export async function rotatePrivateEventToken(eventId: string): Promise<RotatePrivateEventTokenResult> {
-  const rotate = httpsCallable<{ eventId: string }, RotatePrivateEventTokenResult>(
+export async function rotatePrivateEventToken(
+  eventId: string,
+  metadata: { title?: string; description?: string } = {}
+): Promise<RotatePrivateEventTokenResult> {
+  const rotate = httpsCallable<
+    { eventId: string; title?: string; description?: string },
+    RotatePrivateEventTokenResult
+  >(
     functions,
     'rotatePrivateEventToken'
   )
-  const result = await rotate({ eventId })
+  const result = await rotate({
+    eventId,
+    title: metadata.title,
+    description: metadata.description
+  })
   return result.data
 }
 
@@ -163,6 +175,8 @@ export async function fetchPrivateEventLinks(eventId: string): Promise<EventPriv
 
   return result.data.links.map((link) => ({
     id: link.id,
+    title: link.title ?? undefined,
+    description: link.description ?? undefined,
     createdAt: dateFromIso(link.createdAt),
     expiresAt: dateFromIso(link.expiresAt),
     revokedAt: link.revokedAt ? dateFromIso(link.revokedAt) : undefined,

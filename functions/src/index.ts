@@ -49,6 +49,8 @@ type PrivateLinkDocumentData = {
   revokedAt?: unknown;
   createdBy?: unknown;
   revokedBy?: unknown;
+  title?: unknown;
+  description?: unknown;
 };
 
 function hashPrivateAccessToken(eventId: string, token: string): string {
@@ -74,6 +76,12 @@ function normalizeSlug(value: unknown): string {
 
 function normalizeToken(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeOptionalText(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return normalized || null;
 }
 
 function toDate(value: unknown): Date | null {
@@ -173,6 +181,8 @@ export const rotatePrivateEventToken = onCall(
   async (request) => {
     const uid = request.auth?.uid;
     const eventId = typeof request.data?.eventId === 'string' ? request.data.eventId.trim() : '';
+    const title = normalizeOptionalText(request.data?.title);
+    const description = normalizeOptionalText(request.data?.description);
 
     if (!uid) {
       throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
@@ -193,7 +203,9 @@ export const rotatePrivateEventToken = onCall(
       tokenHash,
       createdAt: FieldValue.serverTimestamp(),
       expiresAt,
-      createdBy: uid
+      createdBy: uid,
+      ...(title ? { title } : {}),
+      ...(description ? { description } : {})
     });
 
     return {
@@ -269,7 +281,9 @@ export const listPrivateEventLinks = onCall(
           expiresAt: toDate(data.expiresAt)?.toISOString() ?? null,
           revokedAt: toDate(data.revokedAt)?.toISOString() ?? null,
           createdBy: typeof data.createdBy === 'string' ? data.createdBy : null,
-          revokedBy: typeof data.revokedBy === 'string' ? data.revokedBy : null
+          revokedBy: typeof data.revokedBy === 'string' ? data.revokedBy : null,
+          title: typeof data.title === 'string' ? data.title : null,
+          description: typeof data.description === 'string' ? data.description : null
         };
       })
     };

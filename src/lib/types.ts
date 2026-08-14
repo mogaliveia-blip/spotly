@@ -251,6 +251,8 @@ export interface EventPrivateAccessGrant {
 
 export interface EventPrivateLink {
   id: string
+  title?: string
+  description?: string
   createdAt: Date
   expiresAt: Date
   revokedAt?: Date
