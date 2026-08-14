@@ -217,6 +217,10 @@ export interface AppEvent {
   adminId: string
   status: EventStatus
   visibility: EventVisibility
+  privateAccessTokenHash?: string
+  privateAccessVersion?: number
+  privateAccessTokenUpdatedAt?: Date
+  privateAccessTokenRevokedAt?: Date
   createdAt: Date
   updatedAt: Date
   startDate?: Date
@@ -241,7 +245,7 @@ export interface EventPrivateAccessGrant {
   eventId: string
   createdAt: Date
   expiresAt: Date
-  accessVersion?: number
+  accessVersion: number
 }
 
 export interface EventMember {

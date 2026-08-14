@@ -55,12 +55,14 @@ service cloud.firestore {
     }
 
     function hasPrivateAccessGrant(eventId) {
-      let grantPath =
-        /databases/$(database)/documents/events/$(eventId)/privateAccess/$(getUserId());
-
       return isAuthenticated() &&
-        exists(grantPath) &&
-        get(grantPath).data.expiresAt > request.time;
+        exists(/databases/$(database)/documents/events/$(eventId)) &&
+        get(/databases/$(database)/documents/events/$(eventId)).data.status == "published" &&
+        get(/databases/$(database)/documents/events/$(eventId)).data.visibility == "private" &&
+        exists(/databases/$(database)/documents/events/$(eventId)/privateAccess/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/events/$(eventId)/privateAccess/$(request.auth.uid)).data.expiresAt > request.time &&
+        get(/databases/$(database)/documents/events/$(eventId)/privateAccess/$(request.auth.uid)).data.accessVersion ==
+          get(/databases/$(database)/documents/events/$(eventId)).data.privateAccessVersion;
     }
 
     function areReviewsEnabled(eventId) {
@@ -174,6 +176,18 @@ service cloud.firestore {
       return visibility == "public" || visibility == "private";
     }
 
+    function doesNotEditPrivateAccessFields() {
+      return !request.resource.data
+        .diff(resource.data)
+        .affectedKeys()
+        .hasAny([
+          "privateAccessTokenHash",
+          "privateAccessVersion",
+          "privateAccessTokenUpdatedAt",
+          "privateAccessTokenRevokedAt"
+        ]);
+    }
+
     function canCreateEvent() {
       return isOwner();
     }
@@ -208,7 +222,8 @@ service cloud.firestore {
 
       allow update: if isEventAdmin(eventId) &&
         isValidEventStatus(request.resource.data.status) &&
-        isValidEventVisibility(request.resource.data.visibility);
+        isValidEventVisibility(request.resource.data.visibility) &&
+        doesNotEditPrivateAccessFields();
 
       allow delete: if isEventAdmin(eventId);
     }

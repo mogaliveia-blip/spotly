@@ -1,12 +1,17 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useParams, usePathname } from 'next/navigation';
 import { fetchEventBySlug, DEFAULT_EVENT_ID } from '@/lib/data';
 import type { AppEvent, EventRole } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth-user';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import {
+  getPrivateAccessTokenFromUrl,
+  redeemPrivateEventAccess,
+  removePrivateAccessTokenFromUrl
+} from '@/lib/private-event-access';
 
 interface EventContextType {
   event: AppEvent | null;
@@ -34,6 +39,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
   const [roleLoading, setRoleLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [resolvedSlug, setResolvedSlug] = useState<string | null>(null);
+  const redeemedPrivateAccessRef = useRef<string | null>(null);
 
   const eventSlug = params?.eventSlug as string;
   const isPublicDashboard = /^\/[^/]+\/dashboard(?:\/)?$/.test(pathname || '');
@@ -79,16 +85,36 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       setRoleLoading(false);
 
       try {
+        let privateAccessUid: string | null = null;
+        const privateAccessToken = isPublicDashboard ? getPrivateAccessTokenFromUrl() : null;
+
+        if (privateAccessToken && redeemedPrivateAccessRef.current !== `${eventSlug}:${privateAccessToken}`) {
+          try {
+            await redeemPrivateEventAccess(eventSlug, privateAccessToken);
+            privateAccessUid = auth.currentUser?.uid ?? null;
+            redeemedPrivateAccessRef.current = `${eventSlug}:${privateAccessToken}`;
+          } catch (error) {
+            console.warn('[EventProvider] private access validation failed', {
+              eventSlug,
+              errorCode: (error as any)?.code ?? null,
+              errorMessage: (error as any)?.message ?? null,
+            });
+          } finally {
+            removePrivateAccessTokenFromUrl();
+          }
+        }
+
         const publicResolved = await fetchEventBySlug(eventSlug);
         let resolved = publicResolved;
 
         if (!publicResolved) {
-          const canAttemptPrivateFallback = !!user || globalRole === 'owner';
-          const shouldAttemptPrivateFallback = canAttemptPrivateFallback && (!isPublicDashboard || authStateKnown);
+          const fallbackUid = privateAccessUid ?? user?.uid;
+          const canAttemptPrivateFallback = !!fallbackUid || globalRole === 'owner';
+          const shouldAttemptPrivateFallback = canAttemptPrivateFallback && (!!privateAccessUid || !isPublicDashboard || authStateKnown);
 
           if (shouldAttemptPrivateFallback) {
             resolved = await fetchEventBySlug(eventSlug, {
-              uid: user?.uid,
+              uid: fallbackUid,
               isOwner: globalRole === 'owner',
               allowPrivateFallback: true,
             });

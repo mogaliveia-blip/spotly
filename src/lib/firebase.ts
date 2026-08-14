@@ -9,6 +9,7 @@ import {
   type Firestore
 } from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
+import { getFunctions, type Functions } from 'firebase/functions';
 import { firebaseConfig } from './firebase-config';
 
 const isBrowser = typeof window !== 'undefined';
@@ -109,5 +110,6 @@ if (isBrowser && !globalThis.__spotlyFirestoreErrorListenersInstalled) {
 }
 
 const storage: FirebaseStorage = getStorage(app);
+const functions: Functions = getFunctions(app, 'europe-west1');
 
-export { app, auth, db, storage };
+export { app, auth, db, storage, functions };

@@ -12,6 +12,11 @@ import {
   uploadFile
 } from '@/lib/data';
 import type { AppConfig, EventVisibility, MarketingConfig } from '@/lib/types';
+import {
+  buildPrivateEventUrl,
+  revokePrivateEventToken,
+  rotatePrivateEventToken
+} from '@/lib/private-event-access';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -20,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Trash2, Loader2, ImagePlus } from 'lucide-react';
+import { Copy, KeyRound, Loader2, ImagePlus, RotateCcw, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -429,6 +434,148 @@ function MarketingConfigCard() {
   );
 }
 
+function PrivateAccessCard() {
+  const { event, eventId } = useEvent();
+  const { toast } = useToast();
+  const [privateUrl, setPrivateUrl] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<'rotate' | 'revoke' | null>(null);
+
+  const isPrivate = event?.visibility === 'private';
+
+  const handleRotate = async () => {
+    if (!event?.slug) return;
+
+    setBusyAction('rotate');
+    try {
+      const result = await rotatePrivateEventToken(eventId);
+      const url = buildPrivateEventUrl(event.slug, result.token, window.location.origin);
+      setPrivateUrl(url);
+
+      const copied = (await navigator.clipboard
+        ?.writeText(url)
+        .then(() => true)
+        .catch(() => false)) ?? false;
+
+      toast({
+        title: 'Lien privé généré',
+        description: copied
+          ? 'Le lien a été copié. Il ne sera plus affiché après fermeture de cette page.'
+          : "Le lien est affiché ci-dessous. Il ne sera plus affiché après fermeture de cette page."
+      });
+    } catch (error) {
+      console.error('[PrivateAccessCard] rotate failed', {
+        eventId,
+        errorCode: (error as any)?.code ?? null,
+        errorMessage: (error as any)?.message ?? null,
+      });
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de générer le lien privé.',
+        variant: 'destructive'
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!privateUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(privateUrl);
+      toast({ title: 'Lien copié' });
+    } catch {
+      toast({
+        title: 'Copie indisponible',
+        description: 'Sélectionnez le lien manuellement.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleRevoke = async () => {
+    setBusyAction('revoke');
+    try {
+      await revokePrivateEventToken(eventId);
+      setPrivateUrl(null);
+      toast({
+        title: 'Lien privé révoqué',
+        description: 'Les anciens liens et grants existants sont invalidés.'
+      });
+    } catch (error) {
+      console.error('[PrivateAccessCard] revoke failed', {
+        eventId,
+        errorCode: (error as any)?.code ?? null,
+        errorMessage: (error as any)?.message ?? null,
+      });
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de révoquer le lien privé.',
+        variant: 'destructive'
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border p-4 bg-muted/10 space-y-2">
+        <div className="flex items-center gap-2 font-semibold">
+          <KeyRound className="h-4 w-4" />
+          Lien privé sécurisé
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Génère un lien pour consulter cet événement privé en lecture seule. Le token n'est jamais stocké en clair.
+        </p>
+      </div>
+
+      {!isPrivate && (
+        <p className="text-sm text-muted-foreground">
+          Passez la visibilité de l'événement en privé pour utiliser ce lien.
+        </p>
+      )}
+
+      {privateUrl && (
+        <div className="space-y-2">
+          <Label htmlFor="private-event-url">Lien généré</Label>
+          <div className="flex gap-2">
+            <Input id="private-event-url" value={privateUrl} readOnly className="rounded-xl font-mono text-xs" />
+            <Button type="button" variant="outline" size="icon" className="h-10 w-10 shrink-0 rounded-xl" onClick={handleCopy}>
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Ce lien est affiché une seule fois. Régénérez-le si vous devez le récupérer plus tard.
+          </p>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button
+          type="button"
+          onClick={handleRotate}
+          disabled={!isPrivate || busyAction !== null}
+          className="h-11 rounded-xl font-bold"
+        >
+          {busyAction === 'rotate' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+          Générer un nouveau lien
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleRevoke}
+          disabled={!isPrivate || busyAction !== null}
+          className="h-11 rounded-xl font-bold"
+        >
+          {busyAction === 'revoke' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+          Révoquer
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { firebaseUser, role, loading: authLoading, profileLoading } = useAuth();
   const { event, loading: eventLoading, userRole, roleLoading } = useEvent();
@@ -474,6 +621,16 @@ export default function AdminPage() {
             </CardHeader>
             <CardContent className="pt-6">
               <AppConfigCard />
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[2rem] border-muted/60 shadow-sm overflow-hidden">
+            <CardHeader className="bg-primary/5">
+              <CardTitle>Accès privé</CardTitle>
+              <CardDescription>Générez ou révoquez le lien d'accès lecture seule.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <PrivateAccessCard />
             </CardContent>
           </Card>
 

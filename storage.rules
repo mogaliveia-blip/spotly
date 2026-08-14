@@ -36,12 +36,14 @@ service firebase.storage {
     }
 
     function hasPrivateAccessGrant(eventId) {
-      let grantPath =
-        /databases/(default)/documents/events/$(eventId)/privateAccess/$(request.auth.uid);
-
       return isSignedIn() &&
-        firestore.exists(grantPath) &&
-        firestore.get(grantPath).data.expiresAt > request.time;
+        firestore.exists(/databases/(default)/documents/events/$(eventId)) &&
+        firestore.get(/databases/(default)/documents/events/$(eventId)).data.status == 'published' &&
+        firestore.get(/databases/(default)/documents/events/$(eventId)).data.visibility == 'private' &&
+        firestore.exists(/databases/(default)/documents/events/$(eventId)/privateAccess/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/events/$(eventId)/privateAccess/$(request.auth.uid)).data.expiresAt > request.time &&
+        firestore.get(/databases/(default)/documents/events/$(eventId)/privateAccess/$(request.auth.uid)).data.accessVersion ==
+          firestore.get(/databases/(default)/documents/events/$(eventId)).data.privateAccessVersion;
     }
 
     function getEventRole(eventId) {

@@ -54,6 +54,18 @@ export function isPubliclyAccessibleEvent(event: AppEvent | null | undefined): e
   return event?.status === 'published' && event.visibility === 'public';
 }
 
+function eventFromDoc(d: { id: string; data: () => any }): AppEvent {
+  const data = d.data();
+  return {
+    id: d.id,
+    ...data,
+    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+    updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+    startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
+    endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
+  } as AppEvent;
+}
+
 /**
  * Résout un événement à partir de son slug URL.
  */
@@ -77,17 +89,7 @@ export async function fetchEventBySlug(
     const snap = await getDocsFromServer(q);
     
     if (!snap.empty) {
-      const d = snap.docs[0];
-      const data = d.data();
-      const event = {
-        id: d.id,
-        ...data,
-        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
-        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
-        startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
-        endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
-      } as AppEvent;
-      return event;
+      return eventFromDoc(snap.docs[0]);
     }
 
     if (options.isOwner && options.allowPrivateFallback) {
@@ -95,21 +97,22 @@ export async function fetchEventBySlug(
       const ownerSnap = await getDocs(ownerQuery);
 
       if (!ownerSnap.empty) {
-        const d = ownerSnap.docs[0];
-        const data = d.data();
-        const event = {
-          id: d.id,
-          ...data,
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
-          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
-          startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
-          endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
-        } as AppEvent;
-        return event;
+        return eventFromDoc(ownerSnap.docs[0]);
       }
     }
 
     if (options.uid && options.allowPrivateFallback) {
+      try {
+        const directQuery = query(eventsRef, where('slug', '==', normalizedSlug), limit(1));
+        const directSnap = await getDocsFromServer(directQuery);
+
+        if (!directSnap.empty) {
+          return eventFromDoc(directSnap.docs[0]);
+        }
+      } catch {
+        // Si les règles refusent la requête directe, on conserve le fallback membership existant.
+      }
+
       const userEvents = await fetchUserEvents(options.uid);
       const event = userEvents.find((event) => event.slug === normalizedSlug) ?? null;
       return event;
