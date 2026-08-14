@@ -54,15 +54,36 @@ service cloud.firestore {
         get(eventPath).data.visibility == "public";
     }
 
+    function hasActivePrivateLink(eventId, linkId) {
+      let linkPath =
+        /databases/$(database)/documents/events/$(eventId)/privateLinks/$(linkId);
+
+      return exists(linkPath) &&
+        get(linkPath).data.expiresAt > request.time &&
+        !("revokedAt" in get(linkPath).data);
+    }
+
     function hasPrivateAccessGrant(eventId) {
+      let grantPath =
+        /databases/$(database)/documents/events/$(eventId)/privateAccess/$(request.auth.uid);
+
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/events/$(eventId)) &&
         get(/databases/$(database)/documents/events/$(eventId)).data.status == "published" &&
         get(/databases/$(database)/documents/events/$(eventId)).data.visibility == "private" &&
-        exists(/databases/$(database)/documents/events/$(eventId)/privateAccess/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/events/$(eventId)/privateAccess/$(request.auth.uid)).data.expiresAt > request.time &&
-        get(/databases/$(database)/documents/events/$(eventId)/privateAccess/$(request.auth.uid)).data.accessVersion ==
-          get(/databases/$(database)/documents/events/$(eventId)).data.privateAccessVersion;
+        exists(grantPath) &&
+        get(grantPath).data.expiresAt > request.time &&
+        (
+          (
+            get(grantPath).data.linkId is string &&
+            hasActivePrivateLink(eventId, get(grantPath).data.linkId)
+          ) ||
+          (
+            get(grantPath).data.accessVersion is number &&
+            get(grantPath).data.accessVersion ==
+              get(/databases/$(database)/documents/events/$(eventId)).data.privateAccessVersion
+          )
+        );
     }
 
     function areReviewsEnabled(eventId) {
@@ -229,6 +250,10 @@ service cloud.firestore {
     }
 
     match /events/{eventId}/privateAccess/{userId} {
+      allow read, write: if false;
+    }
+
+    match /events/{eventId}/privateLinks/{linkId} {
       allow read, write: if false;
     }
 

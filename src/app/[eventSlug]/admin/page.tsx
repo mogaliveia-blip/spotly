@@ -11,10 +11,11 @@ import {
   updateEventDetails,
   uploadFile
 } from '@/lib/data';
-import type { AppConfig, EventVisibility, MarketingConfig } from '@/lib/types';
+import type { AppConfig, EventPrivateLink, EventVisibility, MarketingConfig } from '@/lib/types';
 import {
   buildPrivateEventUrl,
-  revokePrivateEventToken,
+  fetchPrivateEventLinks,
+  revokePrivateEventLink,
   rotatePrivateEventToken
 } from '@/lib/private-event-access';
 import { AppLayout } from '@/components/layout/app-layout';
@@ -25,7 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Copy, KeyRound, Loader2, ImagePlus, RotateCcw, Trash2 } from 'lucide-react';
+import { Copy, KeyRound, Loader2, ImagePlus, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -438,18 +439,66 @@ function PrivateAccessCard() {
   const { event, eventId } = useEvent();
   const { toast } = useToast();
   const [privateUrl, setPrivateUrl] = useState<string | null>(null);
-  const [busyAction, setBusyAction] = useState<'rotate' | 'revoke' | null>(null);
+  const [links, setLinks] = useState<EventPrivateLink[]>([]);
+  const [linksLoading, setLinksLoading] = useState(false);
+  const [busyAction, setBusyAction] = useState<'create' | string | null>(null);
 
   const isPrivate = event?.visibility === 'private';
 
-  const handleRotate = async () => {
+  const loadLinks = async () => {
+    if (!eventId || !isPrivate) {
+      setLinks([]);
+      return;
+    }
+
+    setLinksLoading(true);
+    try {
+      setLinks(await fetchPrivateEventLinks(eventId));
+    } catch (error) {
+      console.error('[PrivateAccessCard] fetch links failed', {
+        eventId,
+        errorCode: (error as any)?.code ?? null,
+        errorMessage: (error as any)?.message ?? null,
+      });
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de charger les liens privés.',
+        variant: 'destructive'
+      });
+    } finally {
+      setLinksLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadLinks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, isPrivate]);
+
+  const formatDate = (value?: Date) => {
+    if (!value) return '—';
+
+    return new Intl.DateTimeFormat('fr-FR', {
+      dateStyle: 'short',
+      timeStyle: 'short'
+    }).format(value);
+  };
+
+  const getLinkStatus = (link: EventPrivateLink): 'Actif' | 'Révoqué' | 'Expiré' => {
+    if (link.revokedAt) return 'Révoqué';
+    if (link.expiresAt <= new Date()) return 'Expiré';
+    return 'Actif';
+  };
+
+  const handleCreate = async () => {
     if (!event?.slug) return;
 
-    setBusyAction('rotate');
+    setBusyAction('create');
     try {
       const result = await rotatePrivateEventToken(eventId);
       const url = buildPrivateEventUrl(event.slug, result.token, window.location.origin);
       setPrivateUrl(url);
+      await loadLinks();
 
       const copied = (await navigator.clipboard
         ?.writeText(url)
@@ -463,7 +512,7 @@ function PrivateAccessCard() {
           : "Le lien est affiché ci-dessous. Il ne sera plus affiché après fermeture de cette page."
       });
     } catch (error) {
-      console.error('[PrivateAccessCard] rotate failed', {
+      console.error('[PrivateAccessCard] create failed', {
         eventId,
         errorCode: (error as any)?.code ?? null,
         errorMessage: (error as any)?.message ?? null,
@@ -493,14 +542,14 @@ function PrivateAccessCard() {
     }
   };
 
-  const handleRevoke = async () => {
-    setBusyAction('revoke');
+  const handleRevoke = async (linkId: string) => {
+    setBusyAction(linkId);
     try {
-      await revokePrivateEventToken(eventId);
-      setPrivateUrl(null);
+      await revokePrivateEventLink(eventId, linkId);
+      await loadLinks();
       toast({
         title: 'Lien privé révoqué',
-        description: 'Les anciens liens et grants existants sont invalidés.'
+        description: 'Seul ce lien privé est invalidé.'
       });
     } catch (error) {
       console.error('[PrivateAccessCard] revoke failed', {
@@ -523,10 +572,10 @@ function PrivateAccessCard() {
       <div className="rounded-xl border p-4 bg-muted/10 space-y-2">
         <div className="flex items-center gap-2 font-semibold">
           <KeyRound className="h-4 w-4" />
-          Lien privé sécurisé
+          Accès privés
         </div>
         <p className="text-sm text-muted-foreground">
-          Génère un lien pour consulter cet événement privé en lecture seule. Le token n'est jamais stocké en clair.
+          Crée des liens de consultation lecture seule. Les tokens ne sont jamais stockés en clair.
         </p>
       </div>
 
@@ -546,31 +595,75 @@ function PrivateAccessCard() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Ce lien est affiché une seule fois. Régénérez-le si vous devez le récupérer plus tard.
+            Ce lien est affiché une seule fois. Créer un nouveau lien ne révoque pas les précédents.
           </p>
         </div>
       )}
 
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div>
         <Button
           type="button"
-          onClick={handleRotate}
+          onClick={handleCreate}
           disabled={!isPrivate || busyAction !== null}
           className="h-11 rounded-xl font-bold"
         >
-          {busyAction === 'rotate' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
-          Générer un nouveau lien
+          {busyAction === 'create' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+          Créer un lien privé
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleRevoke}
-          disabled={!isPrivate || busyAction !== null}
-          className="h-11 rounded-xl font-bold"
-        >
-          {busyAction === 'revoke' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-          Révoquer
-        </Button>
+      </div>
+
+      <div className="rounded-xl border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Création</TableHead>
+              <TableHead>Statut</TableHead>
+              <TableHead>Expiration</TableHead>
+              <TableHead className="w-[120px] text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {linksLoading && (
+              <TableRow>
+                <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                  Chargement...
+                </TableCell>
+              </TableRow>
+            )}
+            {!linksLoading && links.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                  Aucun lien privé créé.
+                </TableCell>
+              </TableRow>
+            )}
+            {!linksLoading && links.map((link) => {
+              const status = getLinkStatus(link);
+              const canRevoke = status === 'Actif';
+
+              return (
+                <TableRow key={link.id}>
+                  <TableCell className="text-sm">{formatDate(link.createdAt)}</TableCell>
+                  <TableCell className="text-sm">{status}</TableCell>
+                  <TableCell className="text-sm">{formatDate(link.expiresAt)}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRevoke(link.id)}
+                      disabled={!canRevoke || busyAction !== null}
+                      className="h-9 rounded-xl"
+                    >
+                      {busyAction === link.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                      Révoquer
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
@@ -626,8 +719,8 @@ export default function AdminPage() {
 
           <Card className="rounded-[2rem] border-muted/60 shadow-sm overflow-hidden">
             <CardHeader className="bg-primary/5">
-              <CardTitle>Accès privé</CardTitle>
-              <CardDescription>Générez ou révoquez le lien d'accès lecture seule.</CardDescription>
+              <CardTitle>Accès privés</CardTitle>
+              <CardDescription>Créez et révoquez les liens d'accès lecture seule.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <PrivateAccessCard />

@@ -41,6 +41,15 @@ type EventDocumentData = {
   privateAccessVersion?: unknown;
 };
 
+type PrivateLinkDocumentData = {
+  tokenHash?: unknown;
+  createdAt?: unknown;
+  expiresAt?: unknown;
+  revokedAt?: unknown;
+  createdBy?: unknown;
+  revokedBy?: unknown;
+};
+
 function hashPrivateAccessToken(eventId: string, token: string): string {
   return createHash('sha256')
     .update(`${eventId}:${token}`, 'utf8')
@@ -64,6 +73,19 @@ function normalizeSlug(value: unknown): string {
 
 function normalizeToken(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function toDate(value: unknown): Date | null {
+  if (value instanceof Date) return value;
+  if (value && typeof value === 'object' && 'toDate' in value && typeof value.toDate === 'function') {
+    return value.toDate();
+  }
+  return null;
+}
+
+function isActivePrivateLink(data: PrivateLinkDocumentData, now = new Date()): boolean {
+  const expiresAt = toDate(data.expiresAt);
+  return !!expiresAt && expiresAt > now && !data.revokedAt;
 }
 
 async function assertEventAdmin(eventId: string, uid: string): Promise<EventDocumentData> {
@@ -163,22 +185,92 @@ export const rotatePrivateEventToken = onCall(
 
     const token = randomBytes(privateAccessTokenBytes).toString('base64url');
     const tokenHash = hashPrivateAccessToken(eventId, token);
-    const eventRef = db.doc(`events/${eventId}`);
-    const eventSnap = await eventRef.get();
-    const currentVersion = Number(eventSnap.data()?.privateAccessVersion ?? 0);
-    const nextVersion = Number.isFinite(currentVersion) ? currentVersion + 1 : 1;
+    const expiresAt = new Date(Date.now() + privateAccessGrantDurationMs);
+    const linkRef = db.collection(`events/${eventId}/privateLinks`).doc();
 
-    await eventRef.update({
-      privateAccessTokenHash: tokenHash,
-      privateAccessVersion: nextVersion,
-      privateAccessTokenUpdatedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp()
+    await linkRef.set({
+      tokenHash,
+      createdAt: FieldValue.serverTimestamp(),
+      expiresAt,
+      createdBy: uid
     });
 
     return {
+      linkId: linkRef.id,
       token,
-      accessVersion: nextVersion,
+      expiresAt: expiresAt.toISOString(),
       grantDurationSeconds: Math.floor(privateAccessGrantDurationMs / 1000)
+    };
+  }
+);
+
+export const revokePrivateEventLink = onCall(
+  privateAccessCallableOptions,
+  async (request) => {
+    const uid = request.auth?.uid;
+    const eventId = typeof request.data?.eventId === 'string' ? request.data.eventId.trim() : '';
+    const linkId = typeof request.data?.linkId === 'string' ? request.data.linkId.trim() : '';
+
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
+    }
+
+    if (!eventId || !linkId) {
+      throw new HttpsError('invalid-argument', 'PRIVATE_LINK_REQUIRED');
+    }
+
+    await assertEventAdmin(eventId, uid);
+
+    const linkRef = db.doc(`events/${eventId}/privateLinks/${linkId}`);
+    const linkSnap = await linkRef.get();
+
+    if (!linkSnap.exists) {
+      throw new HttpsError('not-found', 'PRIVATE_LINK_NOT_FOUND');
+    }
+
+    await linkRef.update({
+      revokedAt: FieldValue.serverTimestamp(),
+      revokedBy: uid
+    });
+
+    return { revoked: true };
+  }
+);
+
+export const listPrivateEventLinks = onCall(
+  privateAccessCallableOptions,
+  async (request) => {
+    const uid = request.auth?.uid;
+    const eventId = typeof request.data?.eventId === 'string' ? request.data.eventId.trim() : '';
+
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
+    }
+
+    if (!eventId) {
+      throw new HttpsError('invalid-argument', 'EVENT_ID_REQUIRED');
+    }
+
+    await assertEventAdmin(eventId, uid);
+
+    const linksSnap = await db
+      .collection(`events/${eventId}/privateLinks`)
+      .orderBy('createdAt', 'desc')
+      .get();
+
+    return {
+      links: linksSnap.docs.map((doc) => {
+        const data = doc.data() as PrivateLinkDocumentData;
+
+        return {
+          id: doc.id,
+          createdAt: toDate(data.createdAt)?.toISOString() ?? null,
+          expiresAt: toDate(data.expiresAt)?.toISOString() ?? null,
+          revokedAt: toDate(data.revokedAt)?.toISOString() ?? null,
+          createdBy: typeof data.createdBy === 'string' ? data.createdBy : null,
+          revokedBy: typeof data.revokedBy === 'string' ? data.revokedBy : null
+        };
+      })
     };
   }
 );
@@ -237,28 +329,49 @@ export const redeemPrivateEventAccess = onCall(
 
     const eventDoc = eventSnap.docs[0];
     const eventData = eventDoc.data() as EventDocumentData;
-    const tokenHash = typeof eventData.privateAccessTokenHash === 'string'
-      ? eventData.privateAccessTokenHash
-      : '';
-    const accessVersion = Number(eventData.privateAccessVersion ?? 0);
     const candidateHash = hashPrivateAccessToken(eventDoc.id, token);
 
     if (
       eventData.status !== 'published' ||
-      eventData.visibility !== 'private' ||
-      !Number.isFinite(accessVersion) ||
-      accessVersion < 1 ||
-      !timingSafeHexEqual(candidateHash, tokenHash)
+      eventData.visibility !== 'private'
     ) {
       throw new HttpsError('permission-denied', 'PRIVATE_LINK_INVALID');
     }
 
-    const expiresAt = new Date(Date.now() + privateAccessGrantDurationMs);
+    const now = new Date();
+    const linkSnap = await db
+      .collection(`events/${eventDoc.id}/privateLinks`)
+      .where('tokenHash', '==', candidateHash)
+      .limit(1)
+      .get();
+
+    const linkDoc = linkSnap.docs.find((doc) => {
+      return isActivePrivateLink(doc.data() as PrivateLinkDocumentData, now);
+    });
+    const legacyTokenHash = typeof eventData.privateAccessTokenHash === 'string'
+      ? eventData.privateAccessTokenHash
+      : '';
+    const legacyAccessVersion = Number(eventData.privateAccessVersion ?? 0);
+    const hasLegacyToken =
+      Number.isFinite(legacyAccessVersion) &&
+      legacyAccessVersion > 0 &&
+      timingSafeHexEqual(candidateHash, legacyTokenHash);
+
+    if (!linkDoc && !hasLegacyToken) {
+      throw new HttpsError('permission-denied', 'PRIVATE_LINK_INVALID');
+    }
+
+    const linkData = linkDoc?.data() as PrivateLinkDocumentData | undefined;
+    const linkExpiresAt = toDate(linkData?.expiresAt);
+    const grantExpiresAt = new Date(Date.now() + privateAccessGrantDurationMs);
+    const expiresAt = linkExpiresAt && linkExpiresAt < grantExpiresAt ? linkExpiresAt : grantExpiresAt;
 
     await db.doc(`events/${eventDoc.id}/privateAccess/${uid}`).set({
       uid,
       eventId: eventDoc.id,
-      accessVersion,
+      ...(linkDoc
+        ? { linkId: linkDoc.id, accessVersion: FieldValue.delete() }
+        : { accessVersion: legacyAccessVersion, linkId: FieldValue.delete() }),
       createdAt: FieldValue.serverTimestamp(),
       expiresAt
     }, { merge: true });
@@ -266,7 +379,7 @@ export const redeemPrivateEventAccess = onCall(
     return {
       eventId: eventDoc.id,
       expiresAt: expiresAt.toISOString(),
-      accessVersion
+      ...(linkDoc ? { linkId: linkDoc.id } : { accessVersion: legacyAccessVersion })
     };
   }
 );

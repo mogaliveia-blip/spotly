@@ -2,23 +2,41 @@ import { onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth'
 import { httpsCallable } from 'firebase/functions'
 
 import { auth, functions } from './firebase'
+import type { EventPrivateLink } from './types'
 
 const PRIVATE_ACCESS_PARAM = 'privateAccess'
 const PRIVATE_ACCESS_EVENT_STORAGE_PREFIX = 'spotly.privateAccess.eventId.'
 const PRIVATE_ACCESS_TOKEN_SESSION_PREFIX = 'spotly.privateAccess.token.'
 
 type RotatePrivateEventTokenResult = {
+  linkId: string
   token: string
-  accessVersion: number
+  expiresAt: string
   grantDurationSeconds: number
 }
 
 type RedeemPrivateEventAccessResult = {
   eventId: string
   expiresAt: string
-  accessVersion: number
+  accessVersion?: number
+  linkId?: string
   uid: string
   isAnonymous: boolean
+}
+
+type ListPrivateEventLinksResult = {
+  links: {
+    id: string
+    createdAt: string | null
+    expiresAt: string | null
+    revokedAt: string | null
+    createdBy: string | null
+    revokedBy: string | null
+  }[]
+}
+
+function dateFromIso(value: string | null): Date {
+  return value ? new Date(value) : new Date(0)
 }
 
 export function getPrivateAccessTokenFromUrl(): string | null {
@@ -126,4 +144,29 @@ export async function revokePrivateEventToken(eventId: string): Promise<void> {
     'revokePrivateEventToken'
   )
   await revoke({ eventId })
+}
+
+export async function revokePrivateEventLink(eventId: string, linkId: string): Promise<void> {
+  const revoke = httpsCallable<{ eventId: string; linkId: string }, { revoked: boolean }>(
+    functions,
+    'revokePrivateEventLink'
+  )
+  await revoke({ eventId, linkId })
+}
+
+export async function fetchPrivateEventLinks(eventId: string): Promise<EventPrivateLink[]> {
+  const list = httpsCallable<{ eventId: string }, ListPrivateEventLinksResult>(
+    functions,
+    'listPrivateEventLinks'
+  )
+  const result = await list({ eventId })
+
+  return result.data.links.map((link) => ({
+    id: link.id,
+    createdAt: dateFromIso(link.createdAt),
+    expiresAt: dateFromIso(link.expiresAt),
+    revokedAt: link.revokedAt ? dateFromIso(link.revokedAt) : undefined,
+    createdBy: link.createdBy ?? undefined,
+    revokedBy: link.revokedBy ?? undefined
+  }))
 }

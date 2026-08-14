@@ -245,7 +245,17 @@ export interface EventPrivateAccessGrant {
   eventId: string
   createdAt: Date
   expiresAt: Date
-  accessVersion: number
+  accessVersion?: number
+  linkId?: string
+}
+
+export interface EventPrivateLink {
+  id: string
+  createdAt: Date
+  expiresAt: Date
+  revokedAt?: Date
+  createdBy?: string
+  revokedBy?: string
 }
 
 export interface EventMember {

@@ -35,15 +35,36 @@ service firebase.storage {
         ).data.visibility == 'public';
     }
 
+    function hasActivePrivateLink(eventId, linkId) {
+      let linkPath =
+        /databases/(default)/documents/events/$(eventId)/privateLinks/$(linkId);
+
+      return firestore.exists(linkPath) &&
+        firestore.get(linkPath).data.expiresAt > request.time &&
+        !('revokedAt' in firestore.get(linkPath).data);
+    }
+
     function hasPrivateAccessGrant(eventId) {
+      let grantPath =
+        /databases/(default)/documents/events/$(eventId)/privateAccess/$(request.auth.uid);
+
       return isSignedIn() &&
         firestore.exists(/databases/(default)/documents/events/$(eventId)) &&
         firestore.get(/databases/(default)/documents/events/$(eventId)).data.status == 'published' &&
         firestore.get(/databases/(default)/documents/events/$(eventId)).data.visibility == 'private' &&
-        firestore.exists(/databases/(default)/documents/events/$(eventId)/privateAccess/$(request.auth.uid)) &&
-        firestore.get(/databases/(default)/documents/events/$(eventId)/privateAccess/$(request.auth.uid)).data.expiresAt > request.time &&
-        firestore.get(/databases/(default)/documents/events/$(eventId)/privateAccess/$(request.auth.uid)).data.accessVersion ==
-          firestore.get(/databases/(default)/documents/events/$(eventId)).data.privateAccessVersion;
+        firestore.exists(grantPath) &&
+        firestore.get(grantPath).data.expiresAt > request.time &&
+        (
+          (
+            firestore.get(grantPath).data.linkId is string &&
+            hasActivePrivateLink(eventId, firestore.get(grantPath).data.linkId)
+          ) ||
+          (
+            firestore.get(grantPath).data.accessVersion is number &&
+            firestore.get(grantPath).data.accessVersion ==
+              firestore.get(/databases/(default)/documents/events/$(eventId)).data.privateAccessVersion
+          )
+        );
     }
 
     function getEventRole(eventId) {
