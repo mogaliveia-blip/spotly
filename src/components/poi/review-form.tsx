@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Star, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
@@ -16,7 +17,12 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useEvent } from '@/providers/event-provider';
 
+const REVIEW_USER_NAME_MAX_LENGTH = 40;
+
 const reviewSchema = z.object({
+  userName: z.string().trim().max(REVIEW_USER_NAME_MAX_LENGTH, {
+    message: `Le prénom doit comporter ${REVIEW_USER_NAME_MAX_LENGTH} caractères maximum.`
+  }).optional(),
   rating: z.number().min(1, { message: 'Veuillez sélectionner une note.' }).max(5),
   comment: z.string().min(10, { message: 'Le commentaire doit comporter au moins 10 caractères.' }),
 });
@@ -30,7 +36,7 @@ interface ReviewFormProps {
 }
 
 export function ReviewForm({ poiId, reviewsEnabled, onReviewAdded }: ReviewFormProps) {
-  const { user, loading: authLoading } = useAuth();
+  const { user, firebaseUser, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const { eventId } = useEvent();
   const router = useRouter();
@@ -42,11 +48,14 @@ export function ReviewForm({ poiId, reviewsEnabled, onReviewAdded }: ReviewFormP
 
   const form = useForm<ReviewFormValues>({
     resolver: zodResolver(reviewSchema),
-    defaultValues: { rating: 0, comment: '' },
+    defaultValues: { userName: '', rating: 0, comment: '' },
   });
 
   const rating = form.watch('rating');
-  const isSubmitDisabled = loading || authLoading || profileLoading || !profileResolved || !reviewsEnabled || !resolvedUserName;
+  const manualUserName = form.watch('userName')?.trim() ?? '';
+  const needsManualUserName = profileResolved && !resolvedUserName;
+  const hasSubmittableUserName = needsManualUserName ? !!manualUserName : !!resolvedUserName;
+  const isSubmitDisabled = loading || authLoading || profileLoading || !profileResolved || !reviewsEnabled || !hasSubmittableUserName;
 
   useEffect(() => {
     let active = true;
@@ -60,6 +69,14 @@ export function ReviewForm({ poiId, reviewsEnabled, onReviewAdded }: ReviewFormP
 
     setProfileResolved(false);
     setProfileLoading(true);
+
+    if (firebaseUser?.isAnonymous) {
+      setResolvedUserName(null);
+      setProfileLoading(false);
+      setProfileResolved(true);
+      return;
+    }
+
     resolveCurrentUserDisplayName(user)
       .then((name) => {
         if (active) setResolvedUserName(name);
@@ -83,7 +100,7 @@ export function ReviewForm({ poiId, reviewsEnabled, onReviewAdded }: ReviewFormP
     return () => {
       active = false;
     };
-  }, [user]);
+  }, [user, firebaseUser?.isAnonymous]);
 
   async function onSubmit(values: ReviewFormValues) {
     if (!user) {
@@ -112,11 +129,21 @@ export function ReviewForm({ poiId, reviewsEnabled, onReviewAdded }: ReviewFormP
       return;
     }
 
-    if (!resolvedUserName) {
+    const userName = (resolvedUserName ?? values.userName ?? '').trim();
+
+    if (!userName) {
+      form.setError('userName', { message: 'Veuillez saisir un prénom.' });
       toast({
-        title: 'Profil incomplet',
-        description: 'Ajoutez un prénom ou un pseudonyme à votre profil avant de laisser un avis.',
+        title: 'Prénom requis',
+        description: 'Saisissez un prénom avant de laisser un avis.',
         variant: 'destructive',
+      });
+      return;
+    }
+
+    if (userName.length > REVIEW_USER_NAME_MAX_LENGTH) {
+      form.setError('userName', {
+        message: `Le prénom doit comporter ${REVIEW_USER_NAME_MAX_LENGTH} caractères maximum.`
       });
       return;
     }
@@ -125,8 +152,9 @@ export function ReviewForm({ poiId, reviewsEnabled, onReviewAdded }: ReviewFormP
     try {
       const reviewData = {
         userId: user.uid,
-        userName: resolvedUserName,
-        ...values
+        userName,
+        rating: values.rating,
+        comment: values.comment
       };
       const newReview = await addReview(poiId, reviewData, eventId);
 
@@ -166,6 +194,26 @@ export function ReviewForm({ poiId, reviewsEnabled, onReviewAdded }: ReviewFormP
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="userName"
+          render={({ field }) => (
+            needsManualUserName ? (
+              <FormItem>
+                <FormLabel>Prénom</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="Votre prénom"
+                    maxLength={REVIEW_USER_NAME_MAX_LENGTH}
+                    disabled={loading}
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            ) : <></>
+          )}
+        />
         <FormField
           control={form.control}
           name="rating"
@@ -212,11 +260,6 @@ export function ReviewForm({ poiId, reviewsEnabled, onReviewAdded }: ReviewFormP
         />
         {profileLoading && (
           <p className="text-sm text-muted-foreground">Chargement du profil...</p>
-        )}
-        {profileResolved && !resolvedUserName && (
-          <p className="text-sm text-destructive">
-            Ajoutez un prénom ou un pseudonyme à votre profil avant de laisser un avis.
-          </p>
         )}
         <Button type="submit" disabled={isSubmitDisabled}>
           {(loading || profileLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

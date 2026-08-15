@@ -94,6 +94,12 @@ service cloud.firestore {
         get(configPath).data.reviewsEnabled != false;
     }
 
+    function hasReviewAccess(eventId) {
+      return isEventPublic(eventId) ||
+        isEventMember(eventId) ||
+        hasPrivateAccessGrant(eventId);
+    }
+
     function isValidReviewCreate(poiId) {
       return request.resource.data.keys().hasOnly([
         "userId",
@@ -121,7 +127,8 @@ service cloud.firestore {
       request.resource.data.comment.size() <= 2000 &&
       request.resource.data.userName is string &&
       request.resource.data.userName.size() > 0 &&
-      request.resource.data.userName.size() <= 120 &&
+      request.resource.data.userName.size() <= 40 &&
+      request.resource.data.userName.matches("^[^\\s](.*[^\\s])?$") &&
       request.resource.data.createdAt == request.time;
     }
 
@@ -328,12 +335,17 @@ service cloud.firestore {
           hasPrivateAccessGrant(eventId);
 
         allow create: if
-          isApproved() &&
           areReviewsEnabled(eventId) &&
           isValidReviewCreate(poiId) &&
           (
-            isEventPublic(eventId) ||
-            isEventMember(eventId)
+            (
+              isApproved() &&
+              (
+                isEventPublic(eventId) ||
+                isEventMember(eventId)
+              )
+            ) ||
+            hasPrivateAccessGrant(eventId)
           );
 
         allow update: if
@@ -342,6 +354,7 @@ service cloud.firestore {
             isAuthenticated() &&
             resource != null &&
             request.auth.uid == resource.data.userId &&
+            hasReviewAccess(eventId) &&
             isValidReviewUpdate()
           );
 
@@ -350,7 +363,8 @@ service cloud.firestore {
           (
             isAuthenticated() &&
             resource != null &&
-            request.auth.uid == resource.data.userId
+            request.auth.uid == resource.data.userId &&
+            hasReviewAccess(eventId)
           );
       }
     }
