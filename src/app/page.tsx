@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { canAccessMyEvents, canAccessPlatformAdmin } from '@/lib/access-control';
 import { SpotlyMapPreview } from '@/components/marketing/spotly-map-preview';
+import { MobileQrReminder } from '@/components/marketing/mobile-qr-reminder';
 
 const ALL_DEPARTMENTS_VALUE = 'all';
 const EVENTS_LOAD_TIMEOUT_MS = 8000;
@@ -671,6 +672,8 @@ export default function PortalPage() {
               </div>
             )}
           </div>
+
+          <MobileQrReminder />
 
         </div>
       </main>
