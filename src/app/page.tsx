@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { canAccessMyEvents, canAccessPlatformAdmin } from '@/lib/access-control';
+import { SpotlyMapPreview } from '@/components/marketing/spotly-map-preview';
 
 const ALL_DEPARTMENTS_VALUE = 'all';
 const EVENTS_LOAD_TIMEOUT_MS = 8000;
@@ -507,29 +508,34 @@ export default function PortalPage() {
       </header>
 
       <main className="flex-1 container mx-auto px-4 py-12 md:py-20">
-        <div className="max-w-4xl mx-auto space-y-16">
+        <div className="mx-auto max-w-6xl space-y-16">
           
-          <div className="text-center space-y-6">
-            <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter text-foreground">
-              Chaque événement, tous ses lieux, <span className="text-primary">sur une carte</span>.
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              Découvrez les événements autour de vous, leurs lieux utiles, leurs informations et les avis directement sur une carte interactive.
-            </p>
-            <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Button asChild size="lg" className="w-full rounded-2xl px-7 font-bold shadow-sm sm:w-auto">
-                <Link href="#evenements">Explorer les événements</Link>
-              </Button>
+          <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(420px,520px)] lg:gap-12">
+            <div className="space-y-6 text-center lg:text-left">
+              <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter text-foreground">
+                Chaque événement, tous ses lieux, <span className="text-primary">sur une carte</span>.
+              </h1>
+              <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed lg:mx-0">
+                Découvrez les événements autour de vous, leurs lieux utiles, leurs informations et les avis directement sur une carte interactive.
+              </p>
+              <div className="flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
+                <Button asChild size="lg" className="w-full rounded-2xl px-7 font-bold shadow-sm sm:w-auto">
+                  <Link href="#evenements">Explorer les événements</Link>
+                </Button>
+              </div>
               {!user && (
-                <AuthDialog
-                  trigger={
-                    <Button variant="ghost" size="lg" className="w-full rounded-2xl px-7 font-bold text-muted-foreground sm:w-auto">
-                      Espace organisateur
-                    </Button>
-                  }
-                />
+                <div className="mx-auto flex max-w-md flex-col items-center gap-2 lg:mx-0 lg:items-start">
+                  <p className="text-sm font-medium leading-relaxed text-muted-foreground">
+                    Vous organisez un événement ? Nous pouvons créer votre espace Spotly avec vous.
+                  </p>
+                  <Button asChild variant="link" size="sm" className="h-auto px-2 font-bold lg:-ml-2">
+                    <Link href="/contact">Parler de mon événement</Link>
+                  </Button>
+                </div>
               )}
             </div>
+
+            <SpotlyMapPreview />
           </div>
 
           <section className="hidden sm:block">
@@ -686,7 +692,7 @@ export default function PortalPage() {
                   <AuthDialog 
                     trigger={
                         <Button variant="ghost" size="sm" className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 hover:text-primary">
-                            Espace Organisateur
+                            Se connecter
                         </Button>
                     }
                   />
