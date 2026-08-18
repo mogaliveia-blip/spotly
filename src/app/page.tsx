@@ -510,12 +510,26 @@ export default function PortalPage() {
         <div className="max-w-4xl mx-auto space-y-16">
           
           <div className="text-center space-y-6">
-            <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-foreground">
-              Explorez tous vos <span className="text-primary">événements</span>.
+            <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter text-foreground">
+              Chaque événement, tous ses lieux, <span className="text-primary">sur une carte</span>.
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              Festivals, concerts, compétitions, marchés, expositions ou salons : retrouvez les temps forts près de chez vous et profitez d'une expérience enrichie avant, pendant et après votre visite.
+              Découvrez les événements autour de vous, leurs lieux utiles, leurs informations et les avis directement sur une carte interactive.
             </p>
+            <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Button asChild size="lg" className="w-full rounded-2xl px-7 font-bold shadow-sm sm:w-auto">
+                <Link href="#evenements">Explorer les événements</Link>
+              </Button>
+              {!user && (
+                <AuthDialog
+                  trigger={
+                    <Button variant="ghost" size="lg" className="w-full rounded-2xl px-7 font-bold text-muted-foreground sm:w-auto">
+                      Espace organisateur
+                    </Button>
+                  }
+                />
+              )}
+            </div>
           </div>
 
           <section className="hidden sm:block">
@@ -546,7 +560,7 @@ export default function PortalPage() {
             </Card>
           </section>
 
-          <div className="space-y-8">
+          <div id="evenements" className="scroll-mt-24 space-y-8">
             <div className="flex items-center justify-between">
                <h2 className="text-2xl font-bold flex items-center gap-2">
                  <Calendar className="h-6 w-6 text-primary" />
