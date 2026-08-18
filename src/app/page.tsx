@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { canAccessMyEvents, canAccessPlatformAdmin } from '@/lib/access-control';
 import { SpotlyMapPreview } from '@/components/marketing/spotly-map-preview';
-import { MobileQrReminder } from '@/components/marketing/mobile-qr-reminder';
+import { SpotlyQrReminder } from '@/components/marketing/spotly-qr-reminder';
 
 const ALL_DEPARTMENTS_VALUE = 'all';
 const EVENTS_LOAD_TIMEOUT_MS = 8000;
@@ -539,34 +539,6 @@ export default function PortalPage() {
             <SpotlyMapPreview />
           </div>
 
-          <section className="hidden sm:block">
-            <Card className="overflow-hidden rounded-[2rem] border-muted bg-card shadow-sm">
-              <CardContent className="grid gap-6 p-6 md:grid-cols-[1fr_auto] md:items-center md:p-8">
-                <div className="space-y-3">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-widest text-primary">
-                    <Mountain className="h-3.5 w-3.5" />
-                    Spotly mobile
-                  </div>
-                  <div className="space-y-2">
-                    <h2 className="text-2xl font-black tracking-tight">Spotly sur votre téléphone</h2>
-                    <p className="max-w-xl text-sm font-medium leading-relaxed text-muted-foreground md:text-base">
-                      Scannez le QR Code pour découvrir les événements près de chez vous et installer Spotly sur votre écran d'accueil.
-                    </p>
-                  </div>
-                </div>
-                <div className="mx-auto rounded-3xl border bg-white p-4 shadow-sm md:mx-0">
-                  <Image
-                    src="/spotly-qr-code.png"
-                    alt="QR Code officiel Spotly vers https://spotly.anavastudio.fr/"
-                    width={168}
-                    height={168}
-                    className="h-[168px] w-[168px]"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </section>
-
           <div id="evenements" className="scroll-mt-24 space-y-8">
             <div className="flex items-center justify-between">
                <h2 className="text-2xl font-bold flex items-center gap-2">
@@ -673,7 +645,7 @@ export default function PortalPage() {
             )}
           </div>
 
-          <MobileQrReminder />
+          <SpotlyQrReminder />
 
         </div>
       </main>

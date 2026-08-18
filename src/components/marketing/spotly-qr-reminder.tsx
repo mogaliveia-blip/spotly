@@ -14,9 +14,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 
-export function MobileQrReminder() {
+export function SpotlyQrReminder() {
   return (
-    <section className="sm:hidden" aria-labelledby="mobile-qr-title">
+    <section className="mx-auto w-full max-w-2xl" aria-labelledby="spotly-qr-title">
       <Card className="overflow-hidden rounded-[2rem] border-muted bg-card shadow-sm">
         <CardContent className="space-y-4 p-5 text-center">
           <div className="mx-auto inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-widest text-primary">
@@ -24,7 +24,7 @@ export function MobileQrReminder() {
             Spotly mobile
           </div>
           <div className="space-y-2">
-            <h2 id="mobile-qr-title" className="text-xl font-black tracking-tight">
+            <h2 id="spotly-qr-title" className="text-xl font-black tracking-tight">
               Spotly sur votre téléphone
             </h2>
             <p className="text-sm font-medium leading-relaxed text-muted-foreground">

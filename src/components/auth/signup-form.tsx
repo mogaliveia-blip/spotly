@@ -75,8 +75,8 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
       });
 
       toast({
-        title: 'Compte créé !',
-        description: 'Un e-mail de vérification a été envoyé. Consultez votre boîte de réception pour continuer.',
+        title: 'Bienvenue sur Spotly !',
+        description: 'Votre compte a bien été créé. Un e-mail vous a été envoyé pour confirmer votre adresse e-mail.',
       });
 
       onSuccess?.();
