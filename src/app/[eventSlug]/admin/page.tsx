@@ -9,9 +9,11 @@ import {
   fetchMarketingConfig,
   updateMarketingConfig,
   updateEventDetails,
-  uploadFile
+  uploadFile,
+  deleteFileByPath
 } from '@/lib/data';
 import type { AppConfig, EventPrivateLink, EventVisibility, MarketingConfig } from '@/lib/types';
+import { compressImageForUpload } from '@/lib/image-compression';
 import {
   buildPrivateEventUrl,
   fetchPrivateEventLinks,
@@ -34,6 +36,9 @@ import { Textarea } from '@/components/ui/textarea';
 import Image from 'next/image';
 import { useEvent } from '@/providers/event-provider';
 
+const EVENT_DESCRIPTION_MAX_LENGTH = 400;
+const EVENT_COVER_STORAGE_PATH = (eventId: string) => `events/${eventId}/event-cover/cover.jpg`;
+
 function toDateInputValue(value?: Date): string {
   if (!value) return '';
   return value.toISOString().slice(0, 10);
@@ -54,6 +59,11 @@ function EventDetailsCard() {
   const { event, eventId } = useEvent();
   const { toast } = useToast();
   const [name, setName] = useState(event?.name ?? '');
+  const [description, setDescription] = useState(event?.description ?? '');
+  const [eventCoverUrl, setEventCoverUrl] = useState(event?.eventCoverUrl ?? '');
+  const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
+  const [coverMarkedForDeletion, setCoverMarkedForDeletion] = useState(false);
   const [startDate, setStartDate] = useState(toDateInputValue(event?.startDate));
   const [endDate, setEndDate] = useState(toDateInputValue(event?.endDate));
   const [timezone, setTimezone] = useState(event?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Europe/Paris');
@@ -66,6 +76,10 @@ function EventDetailsCard() {
 
   useEffect(() => {
     setName(event?.name ?? '');
+    setDescription(event?.description ?? '');
+    setEventCoverUrl(event?.eventCoverUrl ?? '');
+    setCoverImageFile(null);
+    setCoverMarkedForDeletion(false);
     setStartDate(toDateInputValue(event?.startDate));
     setEndDate(toDateInputValue(event?.endDate));
     setTimezone(event?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Europe/Paris');
@@ -75,6 +89,17 @@ function EventDetailsCard() {
     setCountry(event?.country ?? 'France');
     setVisibility(event?.visibility ?? 'public');
   }, [event]);
+
+  useEffect(() => {
+    if (!coverImageFile) {
+      setCoverPreviewUrl(null);
+      return;
+    }
+
+    const url = URL.createObjectURL(coverImageFile);
+    setCoverPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [coverImageFile]);
 
   const handleSave = async () => {
     if (!event) return;
@@ -98,10 +123,35 @@ function EventDetailsCard() {
       return;
     }
 
+    const trimmedDescription = description.trim();
+    if (trimmedDescription.length > EVENT_DESCRIPTION_MAX_LENGTH) {
+      toast({
+        title: 'Description trop longue',
+        description: `La description ne doit pas dépasser ${EVENT_DESCRIPTION_MAX_LENGTH} caractères.`,
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setSaving(true);
     try {
+      let nextEventCoverUrl: string | undefined = eventCoverUrl || undefined;
+
+      if (coverMarkedForDeletion && !coverImageFile) {
+        await deleteFileByPath(EVENT_COVER_STORAGE_PATH(eventId));
+        nextEventCoverUrl = undefined;
+      }
+
+      if (coverImageFile) {
+        const compressedCover = await compressImageForUpload(coverImageFile);
+        const { url } = await uploadFile(compressedCover, EVENT_COVER_STORAGE_PATH(eventId));
+        nextEventCoverUrl = url;
+      }
+
       await updateEventDetails(eventId, {
         name: name.trim(),
+        description: trimmedDescription || undefined,
+        eventCoverUrl: nextEventCoverUrl,
         startDate: parseDateInputValue(startDate),
         endDate: parseDateInputValue(endDate),
         timezone: timezone.trim() || 'Europe/Paris',
@@ -111,6 +161,9 @@ function EventDetailsCard() {
         country: optionalText(country),
         visibility
       });
+      setEventCoverUrl(nextEventCoverUrl ?? '');
+      setCoverImageFile(null);
+      setCoverMarkedForDeletion(false);
       toast({ title: 'Événement mis à jour' });
     } catch (error) {
       console.error('[EventDetailsCard] updateEventDetails failed', error);
@@ -129,6 +182,77 @@ function EventDetailsCard() {
       <div className="space-y-2">
         <Label htmlFor="event-name">Nom</Label>
         <Input id="event-name" value={name} onChange={(event) => setName(event.target.value)} className="rounded-xl" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="event-description">Description de l'événement</Label>
+        <Textarea
+          id="event-description"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          maxLength={EVENT_DESCRIPTION_MAX_LENGTH}
+          rows={4}
+          placeholder="Présentez brièvement l'événement."
+          className="rounded-xl"
+        />
+        <p className="text-sm text-muted-foreground">
+          {description.length}/{EVENT_DESCRIPTION_MAX_LENGTH} caractères
+        </p>
+      </div>
+      <div className="space-y-3">
+        <Label>Photo de couverture</Label>
+        <Input
+          id="event-cover-upload"
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0] ?? null;
+            setCoverImageFile(file);
+            if (file) setCoverMarkedForDeletion(false);
+            event.currentTarget.value = '';
+          }}
+        />
+        <label
+          htmlFor="event-cover-upload"
+          className="relative flex aspect-video w-full cursor-pointer items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed bg-muted/10 transition-colors hover:bg-muted/20"
+        >
+          {coverPreviewUrl || (!coverMarkedForDeletion && eventCoverUrl) ? (
+            <Image
+              src={coverPreviewUrl || eventCoverUrl}
+              alt="Photo de couverture"
+              fill
+              sizes="(max-width: 640px) 100vw, 640px"
+              className="object-cover"
+              unoptimized={!!coverPreviewUrl}
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-2 text-muted-foreground">
+              <ImagePlus className="h-8 w-8" />
+              <span className="text-sm font-bold">Ajouter une photo</span>
+            </div>
+          )}
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" className="rounded-xl font-bold" asChild>
+            <label htmlFor="event-cover-upload" className="cursor-pointer">
+              {eventCoverUrl || coverImageFile ? 'Remplacer la photo' : 'Ajouter une photo'}
+            </label>
+          </Button>
+          {(eventCoverUrl || coverImageFile) && !coverMarkedForDeletion && (
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl font-bold text-destructive hover:text-destructive"
+              onClick={() => {
+                setCoverImageFile(null);
+                setCoverMarkedForDeletion(true);
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Supprimer la photo
+            </Button>
+          )}
+        </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">

@@ -212,6 +212,23 @@ service cloud.firestore {
         );
     }
 
+    function hasValidEventMetadataFields() {
+      return (
+        !("description" in request.resource.data) ||
+        (
+          request.resource.data.description is string &&
+          request.resource.data.description.size() <= 400
+        )
+      ) &&
+      (
+        !("eventCoverUrl" in request.resource.data) ||
+        (
+          request.resource.data.eventCoverUrl is string &&
+          request.resource.data.eventCoverUrl.size() <= 2048
+        )
+      );
+    }
+
     function doesNotEditPrivateAccessFields() {
       return !request.resource.data
         .diff(resource.data)
@@ -254,12 +271,14 @@ service cloud.firestore {
         canCreateEvent() &&
         request.resource.data.adminId == getUserId() &&
         request.resource.data.status == "draft" &&
-        isValidEventVisibility(request.resource.data.visibility);
+        isValidEventVisibility(request.resource.data.visibility) &&
+        hasValidEventMetadataFields();
 
       allow update: if isEventAdmin(eventId) &&
         isValidEventStatus(request.resource.data.status) &&
         isValidEventVisibility(request.resource.data.visibility) &&
-        doesNotEditPrivateAccessFields();
+        doesNotEditPrivateAccessFields() &&
+        hasValidEventMetadataFields();
 
       allow delete: if isEventAdmin(eventId);
     }

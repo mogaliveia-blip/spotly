@@ -468,7 +468,7 @@ export async function createEvent(data: {
 
 export async function updateEventDetails(
   eventId: string,
-  data: Partial<Pick<AppEvent, 'name' | 'startDate' | 'endDate' | 'timezone' | 'city' | 'departmentCode' | 'departmentName' | 'region' | 'country' | 'visibility'>>
+  data: Partial<Pick<AppEvent, 'name' | 'description' | 'eventCoverUrl' | 'startDate' | 'endDate' | 'timezone' | 'city' | 'departmentCode' | 'departmentName' | 'region' | 'country' | 'visibility'>>
 ): Promise<void> {
   const payload: Record<string, unknown> = {};
 

@@ -214,6 +214,8 @@ export interface AppEvent {
   id: string
   name: string
   slug: string
+  description?: string
+  eventCoverUrl?: string
   adminId: string
   status: EventStatus
   visibility: EventVisibility

@@ -100,6 +100,11 @@ service firebase.storage {
       allow write: if isAdminOrEditor(eventId);
     }
 
+    match /events/{eventId}/event-cover/cover.jpg {
+      allow read: if isEventPublic(eventId) || isAdminOrEditor(eventId) || hasPrivateAccessGrant(eventId);
+      allow write: if isEventAdmin(eventId);
+    }
+
     match /events/{eventId}/marketing/{allPaths=**} {
       allow read: if true;
       allow write: if isEventAdmin(eventId);
