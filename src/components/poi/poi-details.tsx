@@ -197,6 +197,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
             src={poi.headerPhotoUrl}
             alt={poi.title}
             fill
+            sizes="(max-width: 767px) calc(100vw - 3.5rem), 408px"
             className="object-cover cursor-zoom-in transition-transform hover:scale-105 duration-500"
             onClick={() => setSelectedIndex(0)}
             priority

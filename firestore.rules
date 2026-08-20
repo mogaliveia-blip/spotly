@@ -204,6 +204,14 @@ service cloud.firestore {
       return visibility == "public" || visibility == "private";
     }
 
+    function hasValidPoiGalleryLimit() {
+      return !("galleryUrls" in request.resource.data) ||
+        (
+          request.resource.data.galleryUrls is list &&
+          request.resource.data.galleryUrls.size() <= 3
+        );
+    }
+
     function doesNotEditPrivateAccessFields() {
       return !request.resource.data
         .diff(resource.data)
@@ -311,7 +319,11 @@ service cloud.firestore {
         isEventMember(eventId) ||
         hasPrivateAccessGrant(eventId);
 
-      allow write: if
+      allow create, update: if
+        isAdminOrEditor(eventId) &&
+        hasValidPoiGalleryLimit();
+
+      allow delete: if
         isAdminOrEditor(eventId);
     }
 
@@ -325,7 +337,11 @@ service cloud.firestore {
         isEventMember(eventId) ||
         hasPrivateAccessGrant(eventId);
 
-      allow create, update, delete: if
+      allow create, update: if
+        isAdminOrEditor(eventId) &&
+        hasValidPoiGalleryLimit();
+
+      allow delete: if
         isAdminOrEditor(eventId);
 
       match /reviews/{reviewId} {

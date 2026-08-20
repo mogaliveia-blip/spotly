@@ -32,7 +32,7 @@ export function POIGallery({ poi, onImageClick }: POIGalleryProps) {
             alt={`${poi.title} image de la galerie ${index + 1}`}
             fill
             className="object-cover"
-            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 25vw"
+            sizes="(max-width: 767px) calc((100vw - 4rem) / 2), 136px"
           />
         </div>
       ))}

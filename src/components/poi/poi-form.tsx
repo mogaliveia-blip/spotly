@@ -36,6 +36,9 @@ import { useAuth } from '@/hooks/use-auth-user';
 import { useEvent } from '@/providers/event-provider';
 import { Switch } from '@/components/ui/switch';
 
+const MAX_GALLERY_PHOTOS = 3;
+const GALLERY_LIMIT_MESSAGE = "Vous pouvez ajouter jusqu'à 3 photos dans la galerie.";
+
 async function compressImage(file: File): Promise<File> {
   const img = new window.Image();
   const url = URL.createObjectURL(file);
@@ -82,7 +85,7 @@ const formSchema = z.object({
     subCategory: z.enum(allSubCategories),
     location: z.object({ lat: z.number(), lng: z.number() }),
     headerPhotoUrl: z.string().optional(),
-    galleryUrls: z.array(z.object({ url: z.string(), path: z.string() })).optional(),
+    galleryUrls: z.array(z.object({ url: z.string(), path: z.string() })).max(MAX_GALLERY_PHOTOS, GALLERY_LIMIT_MESSAGE).optional(),
     sponsor: z.object({
         enabled: z.boolean().default(false),
         level: z.enum(['standard', 'premium', 'official']).default('standard'),
@@ -276,6 +279,16 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
 
   function handleAddGalleryImages(files: FileList | null) {
     if (!files?.length) return;
+    const remainingSlots = MAX_GALLERY_PHOTOS - existingGalleryUrls.length - newGalleryImages.length;
+
+    if (remainingSlots <= 0 || files.length > remainingSlots) {
+      toast({
+        title: 'Limite atteinte',
+        description: GALLERY_LIMIT_MESSAGE,
+        variant: 'destructive',
+      });
+      return;
+    }
 
     const images = Array.from(files).map((file) => ({
       id: crypto.randomUUID(),
@@ -302,6 +315,15 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
             variant: "destructive"
         });
         return;
+    }
+
+    if (existingGalleryUrls.length + newGalleryImages.length > MAX_GALLERY_PHOTOS) {
+      toast({
+        title: 'Limite atteinte',
+        description: GALLERY_LIMIT_MESSAGE,
+        variant: 'destructive',
+      });
+      return;
     }
 
     setFormIsLoading(true);
@@ -377,6 +399,9 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   }
 
   if (pageIsLoading) return <div className="p-12 text-center animate-pulse">Chargement de l'éditeur...</div>;
+
+  const galleryPhotoCount = existingGalleryUrls.length + newGalleryImages.length;
+  const canAddGalleryPhotos = galleryPhotoCount < MAX_GALLERY_PHOTOS;
 
   return (
     <Form {...form}>
@@ -478,13 +503,16 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
                           <Button type="button" variant="ghost" size="icon" aria-label="Retirer cette nouvelle image" className="absolute top-1 right-1 h-8 w-8 sm:h-6 sm:w-6" onClick={() => handleRemoveNewGalleryImage(image.id)}><X className="h-3 w-3" /></Button>
                         </div>
                       ))}
-                      <label htmlFor="g-up" className="aspect-square border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-muted/30 transition-colors"><ImagePlus className="h-6 w-6 mb-1" /><span className="text-[10px] font-bold">AJOUTER</span></label>
+                      {canAddGalleryPhotos && (
+                        <label htmlFor="g-up" className="aspect-square border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-muted/30 transition-colors"><ImagePlus className="h-6 w-6 mb-1" /><span className="text-[10px] font-bold">AJOUTER</span></label>
+                      )}
                       <Input
                         type="file"
                         multiple
                         accept="image/*"
                         className="hidden"
                         id="g-up"
+                        disabled={!canAddGalleryPhotos}
                         onChange={(event) => {
                           handleAddGalleryImages(event.target.files);
                           event.currentTarget.value = '';
