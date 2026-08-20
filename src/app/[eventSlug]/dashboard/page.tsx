@@ -37,6 +37,10 @@ function getPoiImageUrl(poi: PublicPoiMetadata | undefined, useCrawlerSafeFallba
   return poi?.headerPhotoUrl || poi?.galleryUrls?.[0]?.url || SPOTLY_IMAGE_URL
 }
 
+function getEventImageUrl(event: { eventCoverUrl?: string }): string {
+  return event.eventCoverUrl?.trim() || SPOTLY_IMAGE_URL
+}
+
 function buildDashboardUrl(eventSlug: string, poiId: string | null): string {
   const url = new URL(`/${eventSlug}/dashboard`, SITE_URL)
   if (poiId) url.searchParams.set('poi', poiId)
@@ -115,11 +119,12 @@ export async function generateMetadata({
 
     if (!poiId) {
       const title = `${event.name} | ${SPOTLY_TITLE}`
+      const description = normalizeText(event.description, `Découvrez ${event.name} sur Spotly.`, 180)
       return buildMetadata({
         title,
-        description: normalizeText(undefined, `Découvrez ${event.name} sur Spotly.`, 180),
+        description,
         url: dashboardUrl,
-        imageUrl: SPOTLY_IMAGE_URL,
+        imageUrl: getEventImageUrl(event),
       })
     }
 

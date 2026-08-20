@@ -11,10 +11,11 @@ import { HeroOverlay } from '@/components/marketing/hero-overlay'
 import { PoiListBottomSheet } from '@/components/poi/poi-list-bottom-sheet'
 import { useGeolocation } from '@/providers/geolocation-provider'
 import { Button } from '@/components/ui/button'
-import { AlertCircle, List, Loader2, RefreshCw, X } from 'lucide-react'
+import { AlertCircle, List, Loader2, RefreshCw, Share2, X } from 'lucide-react'
 import { useEvent } from '@/providers/event-provider'
 import { POIDetails } from '@/components/poi/poi-details'
 import { useToast } from '@/hooks/use-toast'
+import { buildEventShareText, buildEventShareUrl, canShareEvent, copyTextWithFallback } from '@/lib/event-sharing'
 
 type AppMode = 'normal' | 'map-fallback'
 type PoiLoadStatus = 'loading' | 'success' | 'error'
@@ -54,7 +55,7 @@ export function DashboardClient() {
 
   const { user } = useAuth()
   const { userLocation } = useGeolocation()
-  const { eventId, loading: eventLoading } = useEvent()
+  const { eventId, event, loading: eventLoading } = useEvent()
   const { toast } = useToast()
 
   const [pois, setPois] = useState<POILite[]>([])
@@ -67,6 +68,7 @@ export function DashboardClient() {
   const [heroVisible, setHeroVisible] = useState(false)
   const [appMode, setAppMode] = useState<AppMode>('normal')
   const [isListVisible, setIsListVisible] = useState(true)
+  const [shareLoading, setShareLoading] = useState(false)
 
   const categoryFilter = searchParams.get('category') || 'all'
   const fullPoiRequestSeqRef = useRef(0)
@@ -368,6 +370,38 @@ export function DashboardClient() {
     setIsListVisible(true) 
   }
 
+  const handleShareEvent = useCallback(async () => {
+    if (!event || !canShareEvent(event) || typeof window === 'undefined') return
+
+    const shareUrl = buildEventShareUrl(event)
+    const shareText = buildEventShareText(event)
+
+    setShareLoading(true)
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: event.name,
+          text: shareText,
+          url: shareUrl,
+        })
+        return
+      }
+
+      await copyTextWithFallback(shareUrl)
+      toast({ title: 'Lien copié' })
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return
+
+      toast({
+        title: 'Partage indisponible',
+        description: 'Impossible de copier le lien pour le moment.',
+        variant: 'destructive',
+      })
+    } finally {
+      setShareLoading(false)
+    }
+  }, [event, toast])
+
   const closeMarketingOverlay = useCallback(() => {
     sessionStorage.setItem(`heroDismissed_${eventId}`, 'true')
     setHeroVisible(false)
@@ -384,6 +418,7 @@ export function DashboardClient() {
 
   const showHero = heroVisible && !user && marketingConfig?.heroEnabled
   const showPoiStatusOverlay = poiLoadStatus !== 'success' || visiblePois.length === 0
+  const shareAllowed = canShareEvent(event)
 
   if (eventLoading) {
     return (
@@ -396,10 +431,26 @@ export function DashboardClient() {
   return (
     <div className="flex flex-col h-full w-full relative overflow-hidden">
       <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-background/90 to-transparent pt-2 pb-6">
-        <CategoryFilter
-          selectedCategory={categoryFilter as MainCategory | 'all'}
-          onSelectCategory={handleCategorySelect}
-        />
+        <div className="flex items-start gap-2 bg-background">
+          <div className="min-w-0 flex-1">
+            <CategoryFilter
+              selectedCategory={categoryFilter as MainCategory | 'all'}
+              onSelectCategory={handleCategorySelect}
+            />
+          </div>
+          {shareAllowed && (
+            <Button
+              type="button"
+              variant="outline"
+              className="mr-2 mt-2 h-11 shrink-0 rounded-full px-4 font-bold shadow-sm"
+              onClick={() => void handleShareEvent()}
+              disabled={shareLoading}
+            >
+              {shareLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}
+              Partager
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 relative w-full h-full">
