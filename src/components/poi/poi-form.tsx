@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { type FieldErrors, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
@@ -108,6 +108,26 @@ const formSchema = z.object({
 type POIFormValues = z.infer<typeof formSchema>;
 type GalleryImage = { url: string; path: string };
 type NewGalleryImage = { id: string; file: File; previewUrl: string };
+
+function buildGalleryValidationValue(existingImages: GalleryImage[], newImages: NewGalleryImage[]): GalleryImage[] {
+  return [
+    ...existingImages,
+    ...newImages.map((image) => ({ url: image.previewUrl, path: image.id })),
+  ];
+}
+
+function getFirstFormErrorMessage(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const maybeMessage = (error as { message?: unknown }).message;
+  if (typeof maybeMessage === 'string') return maybeMessage;
+
+  for (const value of Object.values(error)) {
+    const message = getFirstFormErrorMessage(value);
+    if (message) return message;
+  }
+
+  return undefined;
+}
 
 function getErrorDetails(error: unknown): { code?: string; message: string } {
   if (error instanceof Error) {
@@ -272,6 +292,12 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   }, [newGalleryImages]);
 
   useEffect(() => {
+    form.setValue('galleryUrls', buildGalleryValidationValue(existingGalleryUrls, newGalleryImages), {
+      shouldValidate: form.formState.isSubmitted,
+    });
+  }, [existingGalleryUrls, newGalleryImages, form]);
+
+  useEffect(() => {
     return () => {
       newGalleryImagesRef.current.forEach((image) => URL.revokeObjectURL(image.previewUrl));
     };
@@ -398,6 +424,25 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
     } finally { setFormIsLoading(false); }
   }
 
+  function onInvalid(errors: FieldErrors<POIFormValues>) {
+    const message = getFirstFormErrorMessage(errors);
+
+    if (errors.galleryUrls?.message) {
+      toast({
+        title: 'Galerie invalide',
+        description: message ?? GALLERY_LIMIT_MESSAGE,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    toast({
+      title: 'Formulaire incomplet',
+      description: message ?? 'Vérifiez les champs signalés avant de mettre à jour le lieu.',
+      variant: 'destructive',
+    });
+  }
+
   if (pageIsLoading) return <div className="p-12 text-center animate-pulse">Chargement de l'éditeur...</div>;
 
   const galleryPhotoCount = existingGalleryUrls.length + newGalleryImages.length;
@@ -405,7 +450,7 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
 
   return (
     <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8">
           
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
@@ -519,6 +564,11 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
                         }}
                       />
                     </div>
+                    {form.formState.errors.galleryUrls?.message && (
+                      <p className="text-sm font-medium text-destructive">
+                        {String(form.formState.errors.galleryUrls.message)}
+                      </p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
