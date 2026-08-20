@@ -8,6 +8,7 @@ import { usePathname, useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { AuthDialog } from '../auth/auth-dialog';
 import { EventSwitcher } from './event-switcher';
+import { EventShareButton } from '@/components/event/event-share-button';
 import { useEvent } from '@/providers/event-provider';
 import { canAccessMyEvents, canAccessPlatformAdmin, canManageEvent } from '@/lib/access-control';
 import { fetchUserEvents } from '@/lib/data';
@@ -127,6 +128,7 @@ export function Header() {
       </nav>
 
       <div className="ml-auto flex items-center gap-2 md:gap-3">
+        <EventShareButton showLabel={false} className="md:hidden rounded-xl" />
         {user && <div className="hidden sm:block"><EventSwitcher /></div>}
         {!user ? (
           <AuthDialog

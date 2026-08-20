@@ -11,11 +11,11 @@ import { HeroOverlay } from '@/components/marketing/hero-overlay'
 import { PoiListBottomSheet } from '@/components/poi/poi-list-bottom-sheet'
 import { useGeolocation } from '@/providers/geolocation-provider'
 import { Button } from '@/components/ui/button'
-import { AlertCircle, List, Loader2, RefreshCw, Share2, X } from 'lucide-react'
+import { AlertCircle, List, Loader2, RefreshCw, X } from 'lucide-react'
 import { useEvent } from '@/providers/event-provider'
 import { POIDetails } from '@/components/poi/poi-details'
 import { useToast } from '@/hooks/use-toast'
-import { buildEventShareText, buildEventShareUrl, canShareEvent, copyTextWithFallback } from '@/lib/event-sharing'
+import { EventShareButton } from '@/components/event/event-share-button'
 
 type AppMode = 'normal' | 'map-fallback'
 type PoiLoadStatus = 'loading' | 'success' | 'error'
@@ -55,7 +55,7 @@ export function DashboardClient() {
 
   const { user } = useAuth()
   const { userLocation } = useGeolocation()
-  const { eventId, event, loading: eventLoading } = useEvent()
+  const { eventId, loading: eventLoading } = useEvent()
   const { toast } = useToast()
 
   const [pois, setPois] = useState<POILite[]>([])
@@ -68,7 +68,6 @@ export function DashboardClient() {
   const [heroVisible, setHeroVisible] = useState(false)
   const [appMode, setAppMode] = useState<AppMode>('normal')
   const [isListVisible, setIsListVisible] = useState(true)
-  const [shareLoading, setShareLoading] = useState(false)
 
   const categoryFilter = searchParams.get('category') || 'all'
   const fullPoiRequestSeqRef = useRef(0)
@@ -370,38 +369,6 @@ export function DashboardClient() {
     setIsListVisible(true) 
   }
 
-  const handleShareEvent = useCallback(async () => {
-    if (!event || !canShareEvent(event) || typeof window === 'undefined') return
-
-    const shareUrl = buildEventShareUrl(event)
-    const shareText = buildEventShareText(event)
-
-    setShareLoading(true)
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: event.name,
-          text: shareText,
-          url: shareUrl,
-        })
-        return
-      }
-
-      await copyTextWithFallback(shareUrl)
-      toast({ title: 'Lien copié' })
-    } catch (error: any) {
-      if (error?.name === 'AbortError') return
-
-      toast({
-        title: 'Partage indisponible',
-        description: 'Impossible de copier le lien pour le moment.',
-        variant: 'destructive',
-      })
-    } finally {
-      setShareLoading(false)
-    }
-  }, [event, toast])
-
   const closeMarketingOverlay = useCallback(() => {
     sessionStorage.setItem(`heroDismissed_${eventId}`, 'true')
     setHeroVisible(false)
@@ -418,7 +385,6 @@ export function DashboardClient() {
 
   const showHero = heroVisible && !user && marketingConfig?.heroEnabled
   const showPoiStatusOverlay = poiLoadStatus !== 'success' || visiblePois.length === 0
-  const shareAllowed = canShareEvent(event)
 
   if (eventLoading) {
     return (
@@ -438,18 +404,7 @@ export function DashboardClient() {
               onSelectCategory={handleCategorySelect}
             />
           </div>
-          {shareAllowed && (
-            <Button
-              type="button"
-              variant="outline"
-              className="mr-2 mt-2 h-11 shrink-0 rounded-full px-4 font-bold shadow-sm"
-              onClick={() => void handleShareEvent()}
-              disabled={shareLoading}
-            >
-              {shareLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}
-              Partager
-            </Button>
-          )}
+          <EventShareButton className="mr-2 mt-2 hidden md:inline-flex" />
         </div>
       </div>
 
