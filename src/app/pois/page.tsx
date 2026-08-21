@@ -12,13 +12,13 @@ import {
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Eye, PlusCircle, Edit, Trash2, MapPin } from 'lucide-react';
-import { Suspense, useEffect, useState, useMemo } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AppLayout } from '@/components/layout/app-layout';
 import { useAuth } from '@/hooks/use-auth-user';
 import { fetchPois, deletePoi, DEFAULT_EVENT_ID } from '@/lib/data';
-import type { POI, MainCategory } from '@/lib/types';
-import { categoriesMap } from '@/lib/types';
+import type { POI } from '@/lib/types';
+import { UNCATEGORIZED_POI_LABEL } from '@/lib/event-poi-categories';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
@@ -35,7 +35,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import Image from 'next/image';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 
 function POIsTable() {
@@ -45,7 +44,6 @@ function POIsTable() {
   const { toast } = useToast();
   const { role } = useAuth();
   const canManagePois = role === 'owner';
-  const [categoryFilter, setCategoryFilter] = useState<MainCategory | 'all'>('all');
 
   useEffect(() => {
     async function getPois() {
@@ -60,11 +58,6 @@ function POIsTable() {
     }
     getPois();
   }, []);
-
-  const filteredPois = useMemo(() => {
-    return pois.filter(p => categoryFilter === 'all' || p.mainCategory === categoryFilter);
-  }, [pois, categoryFilter]);
-
 
   const handleViewClick = (poiId: string) => {
     router.push(`/dashboard?poi=${poiId}`);
@@ -98,19 +91,6 @@ function POIsTable() {
 
   return (
     <>
-      <div className="flex justify-end mb-4">
-          <Select value={categoryFilter} onValueChange={(value) => setCategoryFilter(value as any)}>
-              <SelectTrigger className="w-full sm:w-[240px]">
-                  <SelectValue placeholder="Filtrer par catégorie" />
-              </SelectTrigger>
-              <SelectContent>
-                  <SelectItem value="all">Toutes les catégories</SelectItem>
-                  {Object.entries(categoriesMap).map(([key, { label }]) => (
-                      <SelectItem key={key} value={key}>{label}</SelectItem>
-                  ))}
-              </SelectContent>
-          </Select>
-      </div>
       <Table>
         <TableHeader>
           <TableRow>
@@ -124,7 +104,7 @@ function POIsTable() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filteredPois.map((poi) => (
+          {pois.map((poi) => (
             <TableRow key={poi.id}>
               <TableCell>
                 <div className="relative h-12 w-12 rounded-md overflow-hidden border">
@@ -139,7 +119,7 @@ function POIsTable() {
               </TableCell>
               <TableCell className="font-medium">{poi.title}</TableCell>
               <TableCell>
-                <Badge variant="secondary">{poi.mainCategory && categoriesMap[poi.mainCategory] ? categoriesMap[poi.mainCategory].label : 'N/A'}</Badge>
+                <Badge variant="secondary">{UNCATEGORIZED_POI_LABEL}</Badge>
               </TableCell>
               <TableCell>
                 {isSponsorActive(poi) ? (

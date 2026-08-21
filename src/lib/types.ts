@@ -164,8 +164,9 @@ export interface POI {
     lat: number
     lng: number
   }
-  mainCategory: MainCategory
-  subCategory: SubCategory
+  categoryId?: string
+  mainCategory?: MainCategory
+  subCategory?: SubCategory
   averageRating: number
   reviewCount: number
   sponsor?: POISponsor
@@ -176,6 +177,7 @@ export type POILite = Pick<
   | 'id'
   | 'title'
   | 'location'
+  | 'categoryId'
   | 'mainCategory'
   | 'subCategory'
   | 'averageRating'

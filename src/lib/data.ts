@@ -761,6 +761,17 @@ export async function fetchPois(eventId: string): Promise<POI[]> {
   }
 }
 
+export async function fetchPoiCategoryUsageCount(eventId: string, categoryId: string): Promise<number> {
+  const trimmedCategoryId = categoryId.trim()
+  if (!trimmedCategoryId) return 0
+
+  const poiCollection = collection(db, dbPaths.pois(eventId))
+  const categoryQuery = query(poiCollection, where('categoryId', '==', trimmedCategoryId))
+  const poiSnapshot = await getDocs(categoryQuery)
+
+  return poiSnapshot.size
+}
+
 export async function fetchPoisLite(eventId: string): Promise<POILite[]> {
   const colRef = collection(db, dbPaths.poisPublic(eventId))
 
@@ -777,8 +788,13 @@ export async function fetchPoisLite(eventId: string): Promise<POILite[]> {
       !poi.location ||
       typeof poi.location.lat !== 'number' ||
       typeof poi.location.lng !== 'number' ||
-      typeof poi.mainCategory !== 'string' ||
-      typeof poi.subCategory !== 'string'
+      (
+        typeof poi.categoryId !== 'string' &&
+        (
+          typeof poi.mainCategory !== 'string' ||
+          typeof poi.subCategory !== 'string'
+        )
+      )
     ))
 
     if (hasInvalidPoi) {
@@ -954,13 +970,23 @@ export async function createPoi(
         title: fullPoiData.title,
         description: fullPoiData.description,
         location: fullPoiData.location,
-        mainCategory: fullPoiData.mainCategory,
-        subCategory: fullPoiData.subCategory,
         averageRating: 0,
         reviewCount: 0,
         headerPhotoUrl: fullPoiData.headerPhotoUrl,
         galleryUrls: fullPoiData.galleryUrls
       };
+
+      if (fullPoiData.categoryId) {
+        liteData.categoryId = fullPoiData.categoryId;
+      }
+
+      if (fullPoiData.mainCategory) {
+        liteData.mainCategory = fullPoiData.mainCategory;
+      }
+
+      if (fullPoiData.subCategory) {
+        liteData.subCategory = fullPoiData.subCategory;
+      }
       
       if (fullPoiData.sponsor) {
         liteData.sponsor = fullPoiData.sponsor;
@@ -1005,19 +1031,36 @@ export async function updatePoi(
       const updatedData = { ...currentData, ...sanitizedPoiData };
 
       tx.update(poiRef, sanitizedPoiData);
-      tx.set(poiPublicRef, {
+      const publicData: any = {
         id: poiId,
         title: updatedData.title,
         description: updatedData.description,
         location: updatedData.location,
-        mainCategory: updatedData.mainCategory,
-        subCategory: updatedData.subCategory,
         averageRating: updatedData.averageRating,
         reviewCount: updatedData.reviewCount,
-        sponsor: updatedData.sponsor,
         headerPhotoUrl: updatedData.headerPhotoUrl,
         galleryUrls: updatedData.galleryUrls
-      }, { merge: true });
+      };
+
+      if (updatedData.categoryId) {
+        publicData.categoryId = updatedData.categoryId;
+      }
+
+      if (updatedData.mainCategory) {
+        publicData.mainCategory = updatedData.mainCategory;
+      }
+
+      if (updatedData.subCategory) {
+        publicData.subCategory = updatedData.subCategory;
+      }
+
+      if ('sponsor' in sanitizedPoiData) {
+        publicData.sponsor = (sanitizedPoiData as any).sponsor;
+      } else if (updatedData.sponsor) {
+        publicData.sponsor = updatedData.sponsor;
+      }
+
+      tx.set(poiPublicRef, publicData, { merge: true });
     });
   } catch (serverError: any) {
     console.error('[Data] updatePoi failed', {

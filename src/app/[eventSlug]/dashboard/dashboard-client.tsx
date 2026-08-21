@@ -1,7 +1,7 @@
 'use client'
 
 import { POIMapAdapter } from '@/components/poi/poi-map-adapter'
-import type { POI, POILite, MainCategory, MarketingConfig } from '@/lib/types'
+import type { POI, POILite, MarketingConfig } from '@/lib/types'
 import { useSearchParams, usePathname } from 'next/navigation'
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { DEFAULT_EVENT_ID, fetchPoisLite, fetchPoiById, fetchMarketingConfig } from '@/lib/data'
@@ -16,6 +16,7 @@ import { useEvent } from '@/providers/event-provider'
 import { POIDetails } from '@/components/poi/poi-details'
 import { useToast } from '@/hooks/use-toast'
 import { EventShareButton } from '@/components/event/event-share-button'
+import { getUsedEventPoiCategories } from '@/lib/event-poi-categories'
 
 type AppMode = 'normal' | 'map-fallback'
 type PoiLoadStatus = 'loading' | 'success' | 'error'
@@ -55,7 +56,7 @@ export function DashboardClient() {
 
   const { user } = useAuth()
   const { userLocation } = useGeolocation()
-  const { eventId, loading: eventLoading } = useEvent()
+  const { event, eventId, loading: eventLoading } = useEvent()
   const { toast } = useToast()
 
   const [pois, setPois] = useState<POILite[]>([])
@@ -358,10 +359,35 @@ export function DashboardClient() {
     toast({ title: 'Ce lieu n’est plus disponible.' })
   }, [eventLoading, poiLoadStatus, pois, selectedPoiId, toast, updateUrl])
 
-  const handleCategorySelect = (category: MainCategory | 'all') => {
+  const usedCategories = useMemo(
+    () => getUsedEventPoiCategories(event?.poiCategories, pois),
+    [event?.poiCategories, pois]
+  )
+
+  const validCategoryIds = useMemo(
+    () => new Set(usedCategories.map((category) => category.id)),
+    [usedCategories]
+  )
+
+  const resolvedCategoryFilter = categoryFilter !== 'all' && validCategoryIds.has(categoryFilter)
+    ? categoryFilter
+    : 'all'
+
+  useEffect(() => {
+    if (categoryFilter === 'all' || eventLoading || poiLoadStatus !== 'success') return
+    if (validCategoryIds.has(categoryFilter)) return
+
     const params = new URLSearchParams(window.location.search)
-    if (category === 'all') params.delete('category')
-    else params.set('category', category)
+    if (params.get('category') === categoryFilter) {
+      params.delete('category')
+      updateUrl(params)
+    }
+  }, [categoryFilter, eventLoading, poiLoadStatus, updateUrl, validCategoryIds])
+
+  const handleCategorySelect = (categoryId: string | 'all') => {
+    const params = new URLSearchParams(window.location.search)
+    if (categoryId === 'all') params.delete('category')
+    else params.set('category', categoryId)
     params.delete('poi')
     setSelectedPoiId(null)
     fullPoiRequestSeqRef.current += 1
@@ -375,8 +401,8 @@ export function DashboardClient() {
   }, [eventId])
 
   const visiblePois = useMemo(() => {
-    return pois.filter((p) => categoryFilter === 'all' || p.mainCategory === categoryFilter)
-  }, [pois, categoryFilter])
+    return pois.filter((p) => resolvedCategoryFilter === 'all' || p.categoryId === resolvedCategoryFilter)
+  }, [pois, resolvedCategoryFilter])
 
   const selectedPoi = useMemo<POILite | POI | null>(() => {
     if (!selectedPoiId) return null
@@ -400,7 +426,8 @@ export function DashboardClient() {
         <div className="flex items-start gap-2 bg-background">
           <div className="min-w-0 flex-1">
             <CategoryFilter
-              selectedCategory={categoryFilter as MainCategory | 'all'}
+              categories={usedCategories}
+              selectedCategoryId={resolvedCategoryFilter}
               onSelectCategory={handleCategorySelect}
             />
           </div>
@@ -421,6 +448,7 @@ export function DashboardClient() {
             selectedPoiId={selectedPoiId}
             onSelectPoiId={selectPoiId}
             pois={visiblePois}
+            categories={event?.poiCategories ?? []}
             onCrash={() => setAppMode('map-fallback')}
             isListVisible={isListVisible}
           />
@@ -520,7 +548,7 @@ export function DashboardClient() {
         onSelectPoi={handleSelectPoi}
         selectedPoiId={selectedPoiId}
         userLocation={userLocation}
-        categoryFilter={categoryFilter as MainCategory | 'all'}
+        categories={event?.poiCategories ?? []}
         isVisible={isListVisible && (poiLoadStatus !== 'loading' || visiblePois.length > 0)}
       />
     </div>

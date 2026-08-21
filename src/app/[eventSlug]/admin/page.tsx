@@ -9,6 +9,7 @@ import {
   fetchMarketingConfig,
   updateMarketingConfig,
   updateEventDetails,
+  fetchPoiCategoryUsageCount,
   uploadFile,
   deleteFileByPath
 } from '@/lib/data';
@@ -458,11 +459,34 @@ function PoiCategoriesCard() {
     void saveCategories(nextCategories, 'Ordre mis à jour');
   };
 
-  const removeCategory = (categoryId: string) => {
-    void saveCategories(
-      categories.filter((category) => category.id !== categoryId),
-      'Catégorie supprimée'
-    );
+  const removeCategory = async (categoryId: string) => {
+    setSaving(true);
+    try {
+      const usedCount = await fetchPoiCategoryUsageCount(eventId, categoryId);
+
+      if (usedCount > 0) {
+        toast({
+          title: 'Catégorie utilisée',
+          description: `Cette catégorie est utilisée par ${usedCount} lieu(x). Réaffectez ces lieux avant de la supprimer.`,
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      await saveCategories(
+        categories.filter((category) => category.id !== categoryId),
+        'Catégorie supprimée'
+      );
+    } catch (error) {
+      console.error('[PoiCategoriesCard] category usage check failed', error);
+      toast({
+        title: 'Erreur',
+        description: "Impossible de vérifier l'utilisation de cette catégorie.",
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -564,7 +588,7 @@ function PoiCategoriesCard() {
                     type="button"
                     variant="outline"
                     disabled={saving}
-                    onClick={() => removeCategory(category.id)}
+                    onClick={() => void removeCategory(category.id)}
                     className="h-10 rounded-xl font-bold text-destructive hover:text-destructive"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />

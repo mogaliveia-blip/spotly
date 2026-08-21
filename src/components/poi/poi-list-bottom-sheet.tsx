@@ -1,11 +1,11 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { POILite, MainCategory } from '@/lib/types';
-import { categoriesMap } from '@/lib/types';
+import type { EventPoiCategory, POILite } from '@/lib/types';
+import { findEventPoiCategory, getEventPoiCategoryColor, getEventPoiCategoryLabel, resolveCategoryIcon } from '@/lib/event-poi-categories';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { getDistance, cn } from '@/lib/utils';
-import { MapPin, Navigation, Star } from 'lucide-react';
+import { Navigation, Star } from 'lucide-react';
 import { SponsorBadge } from '../sponsor/sponsor-badge';
 import { ScrollArea } from '../ui/scroll-area';
 
@@ -14,7 +14,7 @@ interface PoiListBottomSheetProps {
   onSelectPoi: (poi: POILite) => void;
   selectedPoiId: string | null;
   userLocation: { lat: number; lng: number } | null;
-  categoryFilter: MainCategory | 'all';
+  categories: EventPoiCategory[];
   isVisible?: boolean;
 }
 
@@ -23,7 +23,7 @@ export function PoiListBottomSheet({
   onSelectPoi,
   selectedPoiId,
   userLocation,
-  categoryFilter,
+  categories,
   isVisible = true,
 }: PoiListBottomSheetProps) {
   const sortedPois = useMemo(() => {
@@ -77,11 +77,11 @@ export function PoiListBottomSheet({
               </div>
             ) : (
               sortedPois.map((poi) => {
-                const categoryData = categoriesMap[poi.mainCategory];
-                const CategoryIcon = categoryData?.icon || MapPin;
+                const categoryData = findEventPoiCategory(categories, poi.categoryId);
+                const CategoryIcon = resolveCategoryIcon(categoryData?.icon);
                 const isSelected = selectedPoiId === poi.id;
                 const sponsorIsActive = isSponsorActive(poi as any);
-                const subCatLabel = categoryData?.subCategories[poi.subCategory] || poi.subCategory;
+                const categoryLabel = getEventPoiCategoryLabel(categories, poi.categoryId);
 
                 return (
                   <button
@@ -98,7 +98,7 @@ export function PoiListBottomSheet({
                   >
                     <div className={cn(
                       "p-3 rounded-2xl shadow-sm shrink-0 transition-colors",
-                      isSelected ? "bg-background text-primary" : (categoryData?.color || "bg-muted text-muted-foreground")
+                      isSelected ? "bg-background text-primary" : getEventPoiCategoryColor(categories, poi.categoryId)
                     )}>
                       <CategoryIcon size={20} />
                     </div>
@@ -120,7 +120,7 @@ export function PoiListBottomSheet({
                           isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
                         )}>
                           <span className="flex items-center gap-1">
-                            {subCatLabel}
+                            {categoryLabel}
                           </span>
                           {poi.averageRating > 0 && (
                             <span className="flex items-center gap-1 text-accent">

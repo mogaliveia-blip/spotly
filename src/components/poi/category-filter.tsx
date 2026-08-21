@@ -1,25 +1,27 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { categoriesMap } from '@/lib/types';
-import type { MainCategory } from '@/lib/types';
+import type { EventPoiCategory } from '@/lib/types';
+import { resolveCategoryIcon } from '@/lib/event-poi-categories';
 import { ListFilter } from 'lucide-react';
 
 interface CategoryFilterProps {
-  selectedCategory: MainCategory | 'all';
-  onSelectCategory: (category: MainCategory | 'all') => void;
+  categories: EventPoiCategory[];
+  selectedCategoryId: string | 'all';
+  onSelectCategory: (categoryId: string | 'all') => void;
 }
 
 export function CategoryFilter({
-  selectedCategory,
+  categories,
+  selectedCategoryId,
   onSelectCategory,
 }: CategoryFilterProps) {
   const allCategories = [
     { id: 'all', label: 'Tous', icon: ListFilter },
-    ...Object.entries(categoriesMap).map(([id, { label, icon }]) => ({
-      id,
-      label,
-      icon,
+    ...categories.map((category) => ({
+      id: category.id,
+      label: category.label,
+      icon: resolveCategoryIcon(category.icon),
     })),
   ];
 
@@ -33,12 +35,12 @@ export function CategoryFilter({
             <Button
               key={category.id}
               variant={
-                selectedCategory === category.id ? 'default' : 'outline'
+                selectedCategoryId === category.id ? 'default' : 'outline'
               }
               size="sm"
               className="h-9 rounded-full px-4 whitespace-nowrap"
               onClick={() =>
-                onSelectCategory(category.id as MainCategory | 'all')
+                onSelectCategory(category.id)
               }
             >
               <Icon className="mr-2 h-4 w-4" />

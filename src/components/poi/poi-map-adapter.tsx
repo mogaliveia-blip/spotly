@@ -1,7 +1,7 @@
 'use client'
 
 import { POIMap } from './poi-map'
-import type { POILite } from '@/lib/types'
+import type { EventPoiCategory, POILite } from '@/lib/types'
 import { useEffect, useState } from 'react'
 import { mapsConfig } from '@/lib/firebase-config'
 
@@ -9,12 +9,14 @@ export function POIMapAdapter({
   selectedPoiId,
   onSelectPoiId,
   pois,
+  categories,
   onCrash,
   isListVisible
 }: {
   selectedPoiId: string | null
   onSelectPoiId: (poiId: string | null) => void
   pois: POILite[]
+  categories: EventPoiCategory[]
   onCrash?: () => void
   isListVisible: boolean
 }) {
@@ -42,6 +44,7 @@ export function POIMapAdapter({
         selectedPoiId={selectedPoiId}
         onSelectPoiId={onSelectPoiId}
         pois={pois as any}
+        categories={categories}
         isListVisible={isListVisible}
       />
     </div>

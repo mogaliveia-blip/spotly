@@ -23,10 +23,9 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Loader2, MapPin, Crosshair, ImagePlus, X } from 'lucide-react';
-import type { POI, MainCategory, SubCategory, POISponsor } from '@/lib/types';
-import { categoriesMap } from '@/lib/types';
+import type { POI, POISponsor } from '@/lib/types';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
 import { mapsConfig } from '@/lib/firebase-config';
@@ -73,16 +72,10 @@ async function compressImage(file: File): Promise<File> {
   }
 }
 
-const mainCategories = Object.keys(categoriesMap) as [MainCategory, ...MainCategory[]];
-const allSubCategories = Object.values(categoriesMap).flatMap((main) =>
-  Object.keys(main.subCategories)
-) as [SubCategory, ...SubCategory[]];
-
 const formSchema = z.object({
     title: z.string().min(3, 'Titre trop court'),
     description: z.string().min(10, 'Description trop courte'),
-    mainCategory: z.enum(mainCategories),
-    subCategory: z.enum(allSubCategories),
+    categoryId: z.string().trim().min(1, 'Catégorie requise').max(80, 'Catégorie invalide'),
     location: z.object({ lat: z.number(), lng: z.number() }),
     headerPhotoUrl: z.string().optional(),
     galleryUrls: z.array(z.object({ url: z.string(), path: z.string() })).max(MAX_GALLERY_PHOTOS, GALLERY_LIMIT_MESSAGE).optional(),
@@ -94,12 +87,6 @@ const formSchema = z.object({
         endDate: z.date().optional(),
     }).optional().default({ enabled: false, level: 'standard', priority: 0 }),
 }).refine(data => {
-    if (data.mainCategory && data.subCategory) {
-        const valid = categoriesMap[data.mainCategory]?.subCategories;
-        return valid && Object.keys(valid).includes(data.subCategory);
-    }
-    return true;
-}, { message: 'Sous-catégorie invalide', path: ['subCategory'] }).refine(data => {
     const startDate = data.sponsor?.startDate;
     const endDate = data.sponsor?.endDate;
     return !startDate || !endDate || startDate <= endDate;
@@ -195,19 +182,23 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   const [pageIsLoading, setPageIsLoading] = useState(true);
   const { userLocation, loading: geoLoading } = useGeolocation();
   const { role: globalRole } = useAuth();
-  const { userRole } = useEvent();
+  const { event, userRole } = useEvent();
 
   const isEditMode = !!poiId;
   const canManageSponsor = globalRole === 'owner' || userRole === 'admin' || userRole === 'editor';
   const prefix = eventSlug ? `/${eventSlug}` : '';
+  const eventCategories = useMemo(
+    () => (event?.poiCategories ?? []).filter((category) => category.id.trim() && category.label.trim()),
+    [event?.poiCategories]
+  );
+  const hasConfiguredCategories = eventCategories.length > 0;
 
   const form = useForm<POIFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: '',
       description: '',
-      mainCategory: 'programmation',
-      subCategory: 'concert_headliner',
+      categoryId: '',
       location: userLocation || { lat: -21.3393, lng: 55.4781 },
       headerPhotoUrl: '',
       galleryUrls: [],
@@ -215,7 +206,6 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
     },
   });
 
-  const selectedMainCategory = form.watch('mainCategory');
   const selectedLocation = form.watch('location');
   const headerPhotoUrl = form.watch('headerPhotoUrl');
   const sponsorEnabled = form.watch('sponsor.enabled');
@@ -227,13 +217,6 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   const loadedPoiKeyRef = useRef<string | null>(null);
   const initialLocationAppliedRef = useRef(false);
   const newGalleryImagesRef = useRef<NewGalleryImage[]>([]);
-
-  useEffect(() => {
-    if (!isEditMode) {
-      const valid = categoriesMap[selectedMainCategory]?.subCategories;
-      if (valid) form.setValue('subCategory', Object.keys(valid)[0] as SubCategory);
-    }
-  }, [selectedMainCategory, isEditMode, form]);
 
   useEffect(() => {
     if (!poiId) return;
@@ -256,7 +239,7 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
             startDate: data.sponsor?.startDate ? (data.sponsor.startDate as any).toDate?.() || new Date(data.sponsor.startDate) : undefined,
             endDate: data.sponsor?.endDate ? (data.sponsor.endDate as any).toDate?.() || new Date(data.sponsor.endDate) : undefined,
           };
-          form.reset({ ...data, sponsor: sponsorSafe } as POIFormValues);
+          form.reset({ ...data, categoryId: data.categoryId ?? '', sponsor: sponsorSafe } as POIFormValues);
           setExistingGalleryUrls(data.galleryUrls ?? []);
         } else {
           router.push(`${prefix}/pois`);
@@ -352,6 +335,22 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
       return;
     }
 
+    const selectedCategoryExists = eventCategories.some((category) => category.id === values.categoryId);
+    if (!selectedCategoryExists) {
+      form.setError('categoryId', {
+        type: 'manual',
+        message: "Choisissez une catégorie configurée pour cet événement."
+      });
+      toast({
+        title: 'Catégorie invalide',
+        description: hasConfiguredCategories
+          ? "La catégorie sélectionnée n'existe plus pour cet événement."
+          : "Aucune catégorie n'est configurée pour cet événement.",
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setFormIsLoading(true);
     let targetId = poiId;
     const storagePrefix = eventId && eventId !== 'default-event' ? `events/${eventId}/` : '';
@@ -364,8 +363,7 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
         const createPayload: Omit<POI, 'id' | 'averageRating' | 'reviewCount'> = {
           title: rest.title,
           description: rest.description,
-          mainCategory: rest.mainCategory,
-          subCategory: rest.subCategory,
+          categoryId: rest.categoryId,
           location: rest.location,
           headerPhotoUrl: '',
           galleryUrls: [],
@@ -447,6 +445,8 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
 
   const galleryPhotoCount = existingGalleryUrls.length + newGalleryImages.length;
   const canAddGalleryPhotos = galleryPhotoCount < MAX_GALLERY_PHOTOS;
+  const selectedCategoryId = form.watch('categoryId');
+  const selectedCategoryStillExists = !selectedCategoryId || eventCategories.some((category) => category.id === selectedCategoryId);
 
   return (
     <Form {...form}>
@@ -463,14 +463,45 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
                   <FormField control={form.control} name="description" render={({ field }) => (
                     <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea placeholder="Description détaillée" {...field} rows={5} className="rounded-2xl" /></FormControl><FormMessage /></FormItem>
                   )} />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="mainCategory" render={({ field }) => (
-                      <FormItem><FormLabel>Catégorie</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger></FormControl><SelectContent>{mainCategories.map(c => <SelectItem key={c} value={c}>{categoriesMap[c].label}</SelectItem>)}</SelectContent></Select></FormItem>
-                    )} />
-                    <FormField control={form.control} name="subCategory" render={({ field }) => (
-                      <FormItem><FormLabel>Type</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger></FormControl><SelectContent>{categoriesMap[selectedMainCategory]?.subCategories && Object.entries(categoriesMap[selectedMainCategory].subCategories).map(([v, l]) => <SelectItem key={v} value={v}>{l as string}</SelectItem>)}</SelectContent></Select></FormItem>
-                    )} />
-                  </div>
+                  {!hasConfiguredCategories && (
+                    <div className="rounded-2xl border border-dashed bg-muted/10 p-4">
+                      <p className="text-sm font-semibold">Aucune catégorie n'est configurée pour cet événement.</p>
+                      <p className="mt-1 text-sm text-muted-foreground">Configurez les catégories avant de créer ou modifier un lieu.</p>
+                      {eventSlug && (
+                        <Button type="button" variant="outline" className="mt-3 rounded-xl font-bold" onClick={() => router.push(`${prefix}/admin`)}>
+                          Configurer les catégories
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  <FormField control={form.control} name="categoryId" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Catégorie</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={!hasConfiguredCategories}>
+                        <FormControl>
+                          <SelectTrigger className="rounded-xl">
+                            <SelectValue placeholder="Choisir une catégorie" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {eventCategories.map((category) => (
+                            <SelectItem key={category.id} value={category.id}>{category.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {!selectedCategoryStillExists && (
+                        <FormDescription className="text-destructive">
+                          La catégorie enregistrée sur ce lieu n'existe plus. Choisissez une nouvelle catégorie.
+                        </FormDescription>
+                      )}
+                      {isEditMode && hasConfiguredCategories && !selectedCategoryId && (
+                        <FormDescription className="text-destructive">
+                          Cet ancien lieu n'a pas encore de catégorie personnalisée. Choisissez une catégorie avant de sauvegarder.
+                        </FormDescription>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )} />
                 </CardContent>
               </Card>
 
@@ -586,7 +617,7 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
                   </div>
                 </CardContent>
               </Card>
-              <Button type="submit" disabled={formIsLoading} className="w-full h-14 rounded-2xl font-bold text-lg shadow-xl">
+              <Button type="submit" disabled={formIsLoading || !hasConfiguredCategories} className="w-full h-14 rounded-2xl font-bold text-lg shadow-xl">
                 {formIsLoading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
                 {isEditMode ? 'Mettre à jour' : 'Créer le lieu'}
               </Button>

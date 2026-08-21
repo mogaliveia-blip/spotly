@@ -29,7 +29,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams, useParams } from 'next/navigation';
 import { Button } from '../ui/button';
 import { useEffect, useState, useMemo } from 'react';
-import type { POI, MainCategory, EventRole } from '@/lib/types';
+import type { POI, EventRole } from '@/lib/types';
 import { fetchPois, DEFAULT_EVENT_ID } from '@/lib/data';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { getDistance } from '@/lib/utils';
@@ -39,7 +39,12 @@ import { ScrollArea } from '../ui/scroll-area';
 import { AuthDialog } from '../auth/auth-dialog';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { SponsorBadge } from '../sponsor/sponsor-badge';
-import { categoriesMap } from '@/lib/types';
+import {
+  findEventPoiCategory,
+  getEventPoiCategoryColor,
+  getUsedEventPoiCategories,
+  resolveCategoryIcon
+} from '@/lib/event-poi-categories';
 import {
   Select,
   SelectContent,
@@ -55,13 +60,13 @@ function POISidebarList() {
   const [loading, setLoading] = useState(true);
 
   const { userLocation } = useGeolocation();
-  const { eventId, loading: eventLoading } = useEvent();
+  const { event, eventId, loading: eventLoading } = useEvent();
   const { setOpenMobile, isMobile } = useSidebar();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const selectedPoiId = searchParams.get('poi');
-  const categoryFilter = (searchParams.get('category') as MainCategory | null) || 'all';
+  const categoryFilter = searchParams.get('category') || 'all';
 
   useEffect(() => {
     if (eventLoading || eventId === DEFAULT_EVENT_ID) {
@@ -106,7 +111,7 @@ function POISidebarList() {
 
   const sortedAndFilteredPois = useMemo(() => {
     const filteredByCategory = pois.filter(
-      (p) => categoryFilter === 'all' || p.mainCategory === categoryFilter
+      (p) => categoryFilter === 'all' || p.categoryId === categoryFilter
     );
 
     const activeSponsors: POI[] = [];
@@ -133,6 +138,11 @@ function POISidebarList() {
     return [...activeSponsors, ...otherPois];
   }, [pois, categoryFilter, userLocation]);
 
+  const usedCategories = useMemo(
+    () => getUsedEventPoiCategories(event?.poiCategories, pois),
+    [event?.poiCategories, pois]
+  );
+
   if (eventLoading) {
     return (
       <div className="px-3 space-y-3">
@@ -157,8 +167,8 @@ function POISidebarList() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all" className="text-xs">Toutes les catégories</SelectItem>
-            {Object.entries(categoriesMap).map(([key, { label }]) => (
-              <SelectItem key={key} value={key} className="text-xs">{label}</SelectItem>
+            {usedCategories.map((category) => (
+              <SelectItem key={category.id} value={category.id} className="text-xs">{category.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -170,8 +180,8 @@ function POISidebarList() {
 
       <div className="flex flex-col gap-2 px-3">
         {sortedAndFilteredPois.map((poi) => {
-          const categoryData = categoriesMap[poi.mainCategory];
-          const CategoryIcon = categoryData?.icon || MapPin;
+          const categoryData = findEventPoiCategory(event?.poiCategories, poi.categoryId);
+          const CategoryIcon = resolveCategoryIcon(categoryData?.icon);
           const isSelected = selectedPoiId === poi.id;
 
           return (
@@ -189,7 +199,7 @@ function POISidebarList() {
             >
               <div className={cn(
                 "p-1.5 rounded-full shadow-sm shrink-0 mt-0.5",
-                isSelected ? "bg-white/20 text-white" : (categoryData?.color || "bg-background text-primary")
+                isSelected ? "bg-white/20 text-white" : getEventPoiCategoryColor(event?.poiCategories, poi.categoryId)
               )}>
                 <CategoryIcon size={16} />
               </div>

@@ -1,17 +1,18 @@
 'use client';
 
-import type { POI, POILite } from '@/lib/types';
+import type { EventPoiCategory, POI, POILite } from '@/lib/types';
 import { Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { useEffect, useMemo } from 'react';
+import type { ElementType } from 'react';
 import { User, Crosshair, MapPin } from 'lucide-react';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
 import { Button } from '../ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { categoriesMap } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { useToast } from '@/hooks/use-toast';
+import { getEventPoiCategoryColor, resolveCategoryIcon } from '@/lib/event-poi-categories';
 
 type POIAny = POILite | POI;
 
@@ -21,6 +22,7 @@ function POIMarkerContent({
   isSelected,
   isMobile,
   sponsorIsActive,
+  icon: Icon,
   onSelect
 }: {
   poi: POIAny;
@@ -28,6 +30,7 @@ function POIMarkerContent({
   isSelected: boolean;
   isMobile: boolean;
   sponsorIsActive: boolean;
+  icon: ElementType;
   onSelect: () => void;
 }) {
   const iconSize = isMobile ? 18 : 20;
@@ -64,7 +67,7 @@ function POIMarkerContent({
           isSelected && "scale-110 ring-2 ring-accent shadow-lg"
         )}
       >
-        <MapPin size={iconSize} strokeWidth={2.75} className={cn("drop-shadow-sm", sponsorIsActive ? "text-amber-500" : colorClass)} />
+        <Icon size={iconSize} strokeWidth={2.75} className={cn("drop-shadow-sm", sponsorIsActive ? "text-amber-500" : colorClass)} />
       </div>
       <div
         className={cn(
@@ -83,11 +86,13 @@ function POIMarkerContent({
 
 function MapController({
   pois,
+  categories,
   onSelectPoiId,
   selectedPoiId,
   isListVisible
 }: {
   pois: POIAny[];
+  categories: EventPoiCategory[];
   onSelectPoiId: (poiId: string | null) => void;
   selectedPoiId: string | null;
   isListVisible: boolean;
@@ -157,7 +162,8 @@ function MapController({
     return pois.map((poi) => {
       const isSelected = selectedPoiId === poi.id;
       const sponsorIsActive = isSponsorActive(poi as any);
-      let colorClass = categoriesMap[poi.mainCategory]?.markerColor || 'text-primary';
+      const CategoryIcon = resolveCategoryIcon(categories.find((category) => category.id === poi.categoryId)?.icon);
+      let colorClass = getEventPoiCategoryColor(categories, poi.categoryId);
       if (sponsorIsActive) colorClass = 'text-amber-500';
       if (isSelected) colorClass = 'text-accent';
 
@@ -176,12 +182,13 @@ function MapController({
             isSelected={isSelected}
             isMobile={isMobile}
             sponsorIsActive={sponsorIsActive}
+            icon={CategoryIcon}
             onSelect={() => onSelectPoiId(poi.id)}
           />
         </AdvancedMarker>
       );
     });
-  }, [pois, selectedPoiId, isMobile, onSelectPoiId]);
+  }, [pois, categories, selectedPoiId, isMobile, onSelectPoiId]);
 
   return (
     <>
@@ -210,11 +217,13 @@ export function POIMap({
   selectedPoiId,
   onSelectPoiId,
   pois,
+  categories,
   isListVisible
 }: {
   selectedPoiId: string | null;
   onSelectPoiId: (poiId: string | null) => void;
   pois: POIAny[];
+  categories: EventPoiCategory[];
   isListVisible: boolean;
 }) {
   const { userLocation, loading: geoLoading } = useGeolocation();
@@ -241,6 +250,7 @@ export function POIMap({
       >
         <MapController
           pois={pois}
+          categories={categories}
           onSelectPoiId={onSelectPoiId}
           selectedPoiId={selectedPoiId}
           isListVisible={isListVisible}

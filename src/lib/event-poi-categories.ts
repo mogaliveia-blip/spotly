@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
+import type { EventPoiCategory } from './types'
 import {
   Activity,
   Bed,
@@ -88,8 +89,63 @@ export const spotlyPoiCategorySuggestions: Array<{
   { label: 'Activité', icon: 'activity' }
 ]
 
+export const UNCATEGORIZED_POI_LABEL = 'Sans catégorie'
+
+export const eventPoiCategoryColorPalette = [
+  'text-violet-500',
+  'text-orange-500',
+  'text-blue-500',
+  'text-green-500',
+  'text-pink-500',
+  'text-teal-500',
+  'text-amber-500',
+  'text-cyan-500'
+]
+
 export function resolveCategoryIcon(icon: string | undefined): LucideIcon {
   return categoryIconMap[(icon || 'map-pin') as EventPoiCategoryIconKey] || MapPin
+}
+
+export function findEventPoiCategory(
+  categories: EventPoiCategory[] | undefined,
+  categoryId: string | undefined
+): EventPoiCategory | undefined {
+  if (!categoryId) return undefined
+  return categories?.find((category) => category.id === categoryId)
+}
+
+export function getEventPoiCategoryLabel(
+  categories: EventPoiCategory[] | undefined,
+  categoryId: string | undefined
+): string {
+  return findEventPoiCategory(categories, categoryId)?.label || UNCATEGORIZED_POI_LABEL
+}
+
+export function getEventPoiCategoryColor(
+  categories: EventPoiCategory[] | undefined,
+  categoryId: string | undefined
+): string {
+  if (!categories || !categoryId) return 'text-primary'
+
+  const index = categories.findIndex((category) => category.id === categoryId)
+  if (index < 0) return 'text-primary'
+
+  return eventPoiCategoryColorPalette[index % eventPoiCategoryColorPalette.length]
+}
+
+export function getUsedEventPoiCategories<T extends { categoryId?: string }>(
+  categories: EventPoiCategory[] | undefined,
+  pois: T[]
+): EventPoiCategory[] {
+  if (!categories?.length || pois.length === 0) return []
+
+  const usedCategoryIds = new Set(
+    pois
+      .map((poi) => poi.categoryId)
+      .filter((categoryId): categoryId is string => typeof categoryId === 'string' && categoryId.trim().length > 0)
+  )
+
+  return categories.filter((category) => usedCategoryIds.has(category.id))
 }
 
 export function normalizeCategoryLabel(label: string): string {

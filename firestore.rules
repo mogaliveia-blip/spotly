@@ -212,6 +212,13 @@ service cloud.firestore {
         );
     }
 
+    function hasValidPoiCategoryId() {
+      return "categoryId" in request.resource.data &&
+        request.resource.data.categoryId is string &&
+        request.resource.data.categoryId.size() > 0 &&
+        request.resource.data.categoryId.size() <= 80;
+    }
+
     function hasValidEventMetadataFields() {
       return (
         !("description" in request.resource.data) ||
@@ -398,6 +405,7 @@ service cloud.firestore {
 
       allow create, update: if
         isAdminOrEditor(eventId) &&
+        hasValidPoiCategoryId() &&
         hasValidPoiGalleryLimit();
 
       allow delete: if
@@ -416,6 +424,7 @@ service cloud.firestore {
 
       allow create, update: if
         isAdminOrEditor(eventId) &&
+        hasValidPoiCategoryId() &&
         hasValidPoiGalleryLimit();
 
       allow delete: if
