@@ -140,6 +140,12 @@ export const categoriesMap: Record<
   }
 }
 
+export type EventPoiCategory = {
+  id: string
+  label: string
+  icon: string
+}
+
 export interface POISponsor {
   enabled: boolean
   level: 'standard' | 'premium' | 'official'
@@ -234,6 +240,7 @@ export interface AppEvent {
   region?: string
   country?: string
   defaultMapCenter?: { lat: number; lng: number }
+  poiCategories?: EventPoiCategory[]
   branding?: {
     primaryColor?: string
     accentColor?: string

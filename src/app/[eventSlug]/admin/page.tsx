@@ -12,7 +12,16 @@ import {
   uploadFile,
   deleteFileByPath
 } from '@/lib/data';
-import type { AppConfig, EventPrivateLink, EventVisibility, MarketingConfig } from '@/lib/types';
+import type { AppConfig, EventPoiCategory, EventPrivateLink, EventVisibility, MarketingConfig } from '@/lib/types';
+import {
+  EVENT_POI_CATEGORY_LABEL_MAX_LENGTH,
+  MAX_EVENT_POI_CATEGORIES,
+  getComparableCategoryLabel,
+  normalizeCategoryLabel,
+  resolveCategoryIcon,
+  spotlyPoiCategorySuggestions,
+  supportedCategoryIcons
+} from '@/lib/event-poi-categories';
 import { compressImageForUpload } from '@/lib/image-compression';
 import {
   buildPrivateEventUrl,
@@ -28,7 +37,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Copy, KeyRound, Loader2, ImagePlus, Plus, Share2, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Copy, KeyRound, Loader2, ImagePlus, Plus, Share2, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -305,6 +314,350 @@ function EventDetailsCard() {
         {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Sauvegarder
       </Button>
+    </div>
+  );
+}
+
+function createCategoryId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `cat_${crypto.randomUUID()}`;
+  }
+
+  return `cat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function hasDuplicateCategoryLabel(categories: EventPoiCategory[], label: string, currentId?: string): boolean {
+  const comparable = getComparableCategoryLabel(label);
+  return categories.some((category) => (
+    category.id !== currentId &&
+    getComparableCategoryLabel(category.label) === comparable
+  ));
+}
+
+function PoiCategoriesCard() {
+  const { event, eventId } = useEvent();
+  const { toast } = useToast();
+  const [categories, setCategories] = useState<EventPoiCategory[]>(event?.poiCategories ?? []);
+  const [customLabel, setCustomLabel] = useState('');
+  const [customIcon, setCustomIcon] = useState(supportedCategoryIcons[0].key);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setCategories(event?.poiCategories ?? []);
+    setCustomLabel('');
+    setCustomIcon(supportedCategoryIcons[0].key);
+  }, [event?.id, event?.poiCategories]);
+
+  const validateCategories = (nextCategories: EventPoiCategory[]): boolean => {
+    if (nextCategories.length > MAX_EVENT_POI_CATEGORIES) {
+      toast({
+        title: 'Limite atteinte',
+        description: `${MAX_EVENT_POI_CATEGORIES} catégories maximum par événement.`,
+        variant: 'destructive'
+      });
+      return false;
+    }
+
+    const seen = new Set<string>();
+    for (const category of nextCategories) {
+      const label = normalizeCategoryLabel(category.label);
+      if (!label) {
+        toast({ title: 'Libellé requis', variant: 'destructive' });
+        return false;
+      }
+      if (label.length > EVENT_POI_CATEGORY_LABEL_MAX_LENGTH) {
+        toast({
+          title: 'Libellé trop long',
+          description: `${EVENT_POI_CATEGORY_LABEL_MAX_LENGTH} caractères maximum.`,
+          variant: 'destructive'
+        });
+        return false;
+      }
+
+      const comparable = getComparableCategoryLabel(label);
+      if (seen.has(comparable)) {
+        toast({
+          title: 'Catégorie déjà existante',
+          description: 'Deux catégories ne peuvent pas avoir le même libellé.',
+          variant: 'destructive'
+        });
+        return false;
+      }
+      seen.add(comparable);
+    }
+
+    return true;
+  };
+
+  const saveCategories = async (nextCategories: EventPoiCategory[], successTitle: string): Promise<boolean> => {
+    const normalizedCategories = nextCategories.map((category) => ({
+      ...category,
+      label: normalizeCategoryLabel(category.label)
+    }));
+
+    if (!validateCategories(normalizedCategories)) return false;
+
+    setSaving(true);
+    try {
+      await updateEventDetails(eventId, { poiCategories: normalizedCategories });
+      setCategories(normalizedCategories);
+      toast({ title: successTitle });
+      return true;
+    } catch (error) {
+      console.error('[PoiCategoriesCard] update failed', error);
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de sauvegarder les catégories.',
+        variant: 'destructive'
+      });
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addCategory = async (label: string, icon: string): Promise<boolean> => {
+    const normalizedLabel = normalizeCategoryLabel(label);
+    if (!normalizedLabel) {
+      toast({ title: 'Libellé requis', variant: 'destructive' });
+      return false;
+    }
+
+    if (hasDuplicateCategoryLabel(categories, normalizedLabel)) {
+      toast({
+        title: 'Catégorie déjà existante',
+        description: 'Ce libellé est déjà utilisé pour cet événement.',
+        variant: 'destructive'
+      });
+      return false;
+    }
+
+    return saveCategories([
+      ...categories,
+      {
+        id: createCategoryId(),
+        label: normalizedLabel,
+        icon
+      }
+    ], 'Catégorie ajoutée');
+  };
+
+  const updateCategory = (categoryId: string, patch: Partial<EventPoiCategory>) => {
+    setCategories((current) => current.map((category) => (
+      category.id === categoryId ? { ...category, ...patch } : category
+    )));
+  };
+
+  const moveCategory = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= categories.length) return;
+
+    const nextCategories = [...categories];
+    const [category] = nextCategories.splice(index, 1);
+    nextCategories.splice(targetIndex, 0, category);
+    void saveCategories(nextCategories, 'Ordre mis à jour');
+  };
+
+  const removeCategory = (categoryId: string) => {
+    void saveCategories(
+      categories.filter((category) => category.id !== categoryId),
+      'Catégorie supprimée'
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border bg-muted/10 p-4">
+        <p className="text-sm text-muted-foreground">
+          Personnalisez les catégories utilisées pour organiser les lieux de votre événement.
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          La protection contre la suppression d'une catégorie utilisée sera activée lorsque les POI référenceront ces catégories.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {categories.length === 0 && (
+          <div className="rounded-2xl border border-dashed bg-muted/10 px-4 py-8 text-center text-sm text-muted-foreground">
+            Aucune catégorie personnalisée.
+          </div>
+        )}
+
+        {categories.map((category, index) => {
+          const Icon = resolveCategoryIcon(category.icon);
+
+          return (
+            <div key={category.id} className="rounded-2xl border p-3">
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-end">
+                <div className="space-y-2">
+                  <Label htmlFor={`category-label-${category.id}`}>Libellé</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-primary">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <Input
+                      id={`category-label-${category.id}`}
+                      value={category.label}
+                      maxLength={EVENT_POI_CATEGORY_LABEL_MAX_LENGTH}
+                      onChange={(event) => updateCategory(category.id, { label: event.target.value })}
+                      className="min-w-0 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor={`category-icon-${category.id}`}>Icône</Label>
+                  <Select value={category.icon} onValueChange={(value) => updateCategory(category.id, { icon: value })}>
+                    <SelectTrigger id={`category-icon-${category.id}`} className="rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {supportedCategoryIcons.map((icon) => {
+                        const OptionIcon = resolveCategoryIcon(icon.key);
+                        return (
+                          <SelectItem key={icon.key} value={icon.key}>
+                            <span className="inline-flex items-center gap-2">
+                              <OptionIcon className="h-4 w-4" />
+                              {icon.label}
+                            </span>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex flex-wrap gap-2 md:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Monter la catégorie"
+                    disabled={saving || index === 0}
+                    onClick={() => moveCategory(index, -1)}
+                    className="h-10 w-10 rounded-xl"
+                  >
+                    <ChevronUp className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Descendre la catégorie"
+                    disabled={saving || index === categories.length - 1}
+                    onClick={() => moveCategory(index, 1)}
+                    className="h-10 w-10 rounded-xl"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={saving}
+                    onClick={() => void saveCategories(categories, 'Catégorie mise à jour')}
+                    className="h-10 rounded-xl font-bold"
+                  >
+                    <Check className="mr-2 h-4 w-4" />
+                    Sauver
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={saving}
+                    onClick={() => removeCategory(category.id)}
+                    className="h-10 rounded-xl font-bold text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Supprimer
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="space-y-3 rounded-2xl border p-4">
+        <div>
+          <h3 className="font-bold">Suggestions Spotly</h3>
+          <p className="text-sm text-muted-foreground">Chaque suggestion ajoutée reçoit son propre identifiant stable.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {spotlyPoiCategorySuggestions.map((suggestion) => {
+            const Icon = resolveCategoryIcon(suggestion.icon);
+            return (
+              <Button
+                key={`${suggestion.label}-${suggestion.icon}`}
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={saving || categories.length >= MAX_EVENT_POI_CATEGORIES}
+                onClick={() => void addCategory(suggestion.label, suggestion.icon)}
+                className="h-9 rounded-full"
+              >
+                <Icon className="mr-2 h-4 w-4" />
+                {suggestion.label}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-2xl border p-4">
+        <div>
+          <h3 className="font-bold">Ajouter une catégorie</h3>
+          <p className="text-sm text-muted-foreground">Libellé obligatoire, {EVENT_POI_CATEGORY_LABEL_MAX_LENGTH} caractères maximum.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-end">
+          <div className="space-y-2">
+            <Label htmlFor="custom-category-label">Libellé</Label>
+            <Input
+              id="custom-category-label"
+              value={customLabel}
+              maxLength={EVENT_POI_CATEGORY_LABEL_MAX_LENGTH}
+              onChange={(event) => setCustomLabel(event.target.value)}
+              placeholder="Ex: Brunch"
+              className="rounded-xl"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="custom-category-icon">Icône</Label>
+            <Select value={customIcon} onValueChange={(value) => setCustomIcon(value as typeof customIcon)}>
+              <SelectTrigger id="custom-category-icon" className="rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {supportedCategoryIcons.map((icon) => {
+                  const Icon = resolveCategoryIcon(icon.key);
+                  return (
+                    <SelectItem key={icon.key} value={icon.key}>
+                      <span className="inline-flex items-center gap-2">
+                        <Icon className="h-4 w-4" />
+                        {icon.label}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            type="button"
+            disabled={saving || categories.length >= MAX_EVENT_POI_CATEGORIES || !customLabel.trim()}
+            onClick={async () => {
+              const didAdd = await addCategory(customLabel, customIcon);
+              if (didAdd) {
+                setCustomLabel('');
+                setCustomIcon(supportedCategoryIcons[0].key);
+              }
+            }}
+            className="h-10 rounded-xl font-bold"
+          >
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+            Ajouter
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -915,6 +1268,16 @@ export default function AdminPage() {
             </CardHeader>
             <CardContent className="pt-6">
               <AppConfigCard />
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[2rem] border-muted/60 shadow-sm overflow-hidden lg:col-span-2">
+            <CardHeader className="bg-primary/5">
+              <CardTitle>Catégories des lieux</CardTitle>
+              <CardDescription>Personnalisez les catégories utilisées pour organiser les lieux de votre événement.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <PoiCategoriesCard />
             </CardContent>
           </Card>
 
