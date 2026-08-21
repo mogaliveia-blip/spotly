@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 import {
   onDocumentCreated,
   onDocumentDeleted,
@@ -8,9 +9,10 @@ import {
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 
-initializeApp();
+const app = initializeApp();
 
 const db = getFirestore();
+const storageBucket = getStorage(app).bucket();
 const region = 'europe-west1';
 const reviewDocument = 'events/{eventId}/pois/{poiId}/reviews/{reviewId}';
 const privateAccessTokenBytes = 32;
@@ -40,6 +42,7 @@ type EventDocumentData = {
   visibility?: unknown;
   privateAccessTokenHash?: unknown;
   privateAccessVersion?: unknown;
+  deletionRequestedBy?: unknown;
 };
 
 type PrivateLinkDocumentData = {
@@ -51,6 +54,10 @@ type PrivateLinkDocumentData = {
   revokedBy?: unknown;
   title?: unknown;
   description?: unknown;
+};
+
+type EventDeletePermission = {
+  eventExists: boolean;
 };
 
 function hashPrivateAccessToken(eventId: string, token: string): string {
@@ -82,6 +89,17 @@ function normalizeOptionalText(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
   return normalized || null;
+}
+
+function normalizeEventId(value: unknown): string {
+  if (typeof value !== 'string') return '';
+
+  const eventId = value.trim();
+  if (!eventId || eventId.length > 128 || eventId.includes('/')) {
+    return '';
+  }
+
+  return eventId;
 }
 
 function toDate(value: unknown): Date | null {
@@ -120,6 +138,64 @@ async function assertEventAdmin(eventId: string, uid: string): Promise<EventDocu
   }
 
   return eventData;
+}
+
+async function assertEventDeletePermission(eventId: string, uid: string): Promise<EventDeletePermission> {
+  const [eventSnap, userSnap, memberSnap] = await Promise.all([
+    db.doc(`events/${eventId}`).get(),
+    db.doc(`users/${uid}`).get(),
+    db.doc(`events/${eventId}/members/${uid}`).get()
+  ]);
+
+  const isOwner = userSnap.data()?.role === 'owner';
+
+  if (!eventSnap.exists) {
+    if (isOwner) {
+      return { eventExists: false };
+    }
+
+    throw new HttpsError('not-found', 'EVENT_NOT_FOUND');
+  }
+
+  const eventData = eventSnap.data() as EventDocumentData;
+  const deletionRequestedBy = typeof eventData.deletionRequestedBy === 'string'
+    ? eventData.deletionRequestedBy
+    : '';
+  const isAdmin =
+    eventData.adminId === uid ||
+    memberSnap.data()?.role === 'admin' ||
+    isOwner;
+
+  if (!isAdmin && deletionRequestedBy !== uid) {
+    throw new HttpsError('permission-denied', 'EVENT_ADMIN_REQUIRED');
+  }
+
+  return { eventExists: true };
+}
+
+async function markEventDeletionStarted(eventId: string, uid: string): Promise<void> {
+  await db.doc(`events/${eventId}`).set({
+    deletionRequestedBy: uid,
+    deletionRequestedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+}
+
+async function deleteEventChildCollections(eventId: string): Promise<number> {
+  const eventRef = db.doc(`events/${eventId}`);
+  const childCollections = await eventRef.listCollections();
+
+  await Promise.all(
+    childCollections.map((childCollection) => db.recursiveDelete(childCollection))
+  );
+
+  return childCollections.length;
+}
+
+async function deleteEventStoragePrefix(eventId: string): Promise<void> {
+  await storageBucket.deleteFiles({
+    prefix: `events/${eventId}/`,
+    force: true
+  });
 }
 
 function readReviewParams(params: Record<string, string>): ReviewParams {
@@ -396,6 +472,51 @@ export const redeemPrivateEventAccess = onCall(
       expiresAt: expiresAt.toISOString(),
       ...(linkDoc ? { linkId: linkDoc.id } : { accessVersion: legacyAccessVersion })
     };
+  }
+);
+
+export const deleteEventCompletely = onCall(
+  privateAccessCallableOptions,
+  async (request) => {
+    const uid = request.auth?.uid;
+    const eventId = normalizeEventId(request.data?.eventId);
+
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
+    }
+
+    if (!eventId) {
+      throw new HttpsError('invalid-argument', 'EVENT_ID_REQUIRED');
+    }
+
+    const permission = await assertEventDeletePermission(eventId, uid);
+
+    try {
+      if (permission.eventExists) {
+        await markEventDeletionStarted(eventId, uid);
+      }
+
+      const deletedChildCollectionCount = await deleteEventChildCollections(eventId);
+      await deleteEventStoragePrefix(eventId);
+      await db.doc(`events/${eventId}`).delete();
+
+      return {
+        deleted: true,
+        eventId,
+        eventExisted: permission.eventExists,
+        deletedChildCollectionCount
+      };
+    } catch (error) {
+      console.error('[deleteEventCompletely] cleanup failed', {
+        eventId,
+        uid,
+        eventExisted: permission.eventExists,
+        errorCode: (error as { code?: unknown })?.code ?? null,
+        errorMessage: (error as { message?: unknown })?.message ?? null
+      });
+
+      throw new HttpsError('internal', 'EVENT_DELETE_FAILED');
+    }
   }
 );
 

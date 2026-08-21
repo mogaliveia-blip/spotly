@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
-import { deleteEvent, fetchAllEvents, fetchUserEvents, updateEventStatus, updateEventVisibility } from '@/lib/data';
+import { fetchAllEvents, fetchUserEvents, updateEventStatus, updateEventVisibility } from '@/lib/data';
+import { deleteEventCompletely } from '@/lib/event-deletion';
 import type { AppEvent, EventRole, EventStatus, EventVisibility } from '@/lib/types';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -179,7 +180,7 @@ export default function MyEventsPage() {
     setDeletingEventId(eventToDelete.id);
 
     try {
-      await deleteEvent(eventToDelete.id);
+      await deleteEventCompletely(eventToDelete.id);
       setEvents((currentEvents) => currentEvents.filter((event) => event.id !== eventToDelete.id));
       toast({
         title: 'Événement supprimé',

@@ -1072,31 +1072,3 @@ export async function deletePoi(poiId: string, eventId: string): Promise<void> {
     throw serverError
   }
 }
-
-export async function deleteEvent(eventId: string): Promise<void> {
-  const eventRef = doc(db, 'events', eventId)
-
-  try {
-    await updateDoc(eventRef, { updatedAt: serverTimestamp() })
-
-    const poisSnap = await getDocs(collection(db, dbPaths.pois(eventId)))
-
-    for (const poiDoc of poisSnap.docs) {
-      await deletePoi(poiDoc.id, eventId)
-    }
-
-    await deleteCollectionDocs(dbPaths.poisPublic(eventId))
-    await deleteCollectionDocs(dbPaths.config(eventId))
-    await deleteCollectionDocs(dbPaths.members(eventId))
-
-    await deleteStorageFolder(`events/${eventId}/poi-images`).catch((error: unknown) => {
-      console.warn('Could not delete event storage folder:', error)
-    })
-
-    await deleteDoc(eventRef)
-  } catch (serverError: unknown) {
-    const permissionError = new FirestorePermissionError({ path: eventRef.path, operation: 'delete' })
-    errorEmitter.emit('permission-error', permissionError)
-    throw serverError
-  }
-}
