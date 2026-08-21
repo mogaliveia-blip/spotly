@@ -27,6 +27,7 @@ Chaque document représente un festival ou un espace unique.
 *   `status` (enum) : `'draft' | 'published' | 'archived'`.
 *   `createdAt` (timestamp) : Date de création.
 *   `updatedAt` (timestamp) : Dernière mise à jour.
+*   `poiCategories` (array) : Catégories POI configurées pour l'événement. Chaque entrée contient `{ id, label, icon }`.
 
 ### Sous-collection : Membres
 **Chemin :** `/events/{eventId}/members/{userId}`  
@@ -60,8 +61,7 @@ Données complètes des lieux (réservé aux membres ou visiteurs si publié).
 *   `description` (string) : Description détaillée.
 *   `headerPhotoUrl` (string) : Image principale.
 *   `location` (geopoint/obj) : `{ lat: number, lng: number }`.
-*   `mainCategory` (string) : Catégorie principale.
-*   `subCategory` (string) : Type précis du POI.
+*   `categoryId` (string) : Identifiant stable d'une catégorie définie dans `events/{eventId}.poiCategories`.
 *   `averageRating` (number) : Note moyenne.
 *   `reviewCount` (number) : Nombre total d'avis.
 *   `galleryUrls` (array) : Liste d'objets `{ url: string, path: string }`.
@@ -80,6 +80,7 @@ Données complètes des lieux (réservé aux membres ou visiteurs si publié).
 ### Sous-collection : Points d'Intérêt (Public / Lite)
 **Chemin :** `/events/{eventId}/pois_public/{poiId}`  
 Projection allégée synchronisée pour un chargement rapide de la carte par les visiteurs.
+Contient notamment `categoryId` pour résoudre label et icône via le document Event déjà chargé.
 
 ---
 

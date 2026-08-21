@@ -788,13 +788,8 @@ export async function fetchPoisLite(eventId: string): Promise<POILite[]> {
       !poi.location ||
       typeof poi.location.lat !== 'number' ||
       typeof poi.location.lng !== 'number' ||
-      (
-        typeof poi.categoryId !== 'string' &&
-        (
-          typeof poi.mainCategory !== 'string' ||
-          typeof poi.subCategory !== 'string'
-        )
-      )
+      typeof poi.categoryId !== 'string' ||
+      !poi.categoryId.trim()
     ))
 
     if (hasInvalidPoi) {
@@ -970,23 +965,12 @@ export async function createPoi(
         title: fullPoiData.title,
         description: fullPoiData.description,
         location: fullPoiData.location,
+        categoryId: fullPoiData.categoryId,
         averageRating: 0,
         reviewCount: 0,
         headerPhotoUrl: fullPoiData.headerPhotoUrl,
         galleryUrls: fullPoiData.galleryUrls
       };
-
-      if (fullPoiData.categoryId) {
-        liteData.categoryId = fullPoiData.categoryId;
-      }
-
-      if (fullPoiData.mainCategory) {
-        liteData.mainCategory = fullPoiData.mainCategory;
-      }
-
-      if (fullPoiData.subCategory) {
-        liteData.subCategory = fullPoiData.subCategory;
-      }
       
       if (fullPoiData.sponsor) {
         liteData.sponsor = fullPoiData.sponsor;
@@ -1036,23 +1020,12 @@ export async function updatePoi(
         title: updatedData.title,
         description: updatedData.description,
         location: updatedData.location,
+        categoryId: updatedData.categoryId,
         averageRating: updatedData.averageRating,
         reviewCount: updatedData.reviewCount,
         headerPhotoUrl: updatedData.headerPhotoUrl,
         galleryUrls: updatedData.galleryUrls
       };
-
-      if (updatedData.categoryId) {
-        publicData.categoryId = updatedData.categoryId;
-      }
-
-      if (updatedData.mainCategory) {
-        publicData.mainCategory = updatedData.mainCategory;
-      }
-
-      if (updatedData.subCategory) {
-        publicData.subCategory = updatedData.subCategory;
-      }
 
       if ('sponsor' in sanitizedPoiData) {
         publicData.sponsor = (sanitizedPoiData as any).sponsor;

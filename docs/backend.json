@@ -31,8 +31,7 @@
       "properties": {
         "title": { "type": "string" },
         "description": { "type": "string" },
-        "mainCategory": { "type": "string" },
-        "subCategory": { "type": "string" },
+        "categoryId": { "type": "string" },
         "location": {
           "type": "object",
           "properties": {
