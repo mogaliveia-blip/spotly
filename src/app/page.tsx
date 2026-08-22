@@ -29,6 +29,26 @@ type EventsLoadStatus = 'loading' | 'refreshing' | 'success' | 'error';
 
 let publishedEventsMemoryCache: { events: AppEvent[]; loadedAt: number } | null = null;
 
+function EventCoverImage({ event }: { event: AppEvent }) {
+  const [hasImageError, setHasImageError] = useState(false);
+  const eventCoverUrl = event.eventCoverUrl?.trim();
+
+  if (!eventCoverUrl || hasImageError) return null;
+
+  return (
+    <div className="relative aspect-video w-full overflow-hidden">
+      <Image
+        src={eventCoverUrl}
+        alt={`Couverture de ${event.name}`}
+        fill
+        sizes="(max-width: 639px) calc(100vw - 2rem), 560px"
+        className="object-cover"
+        onError={() => setHasImageError(true)}
+      />
+    </div>
+  );
+}
+
 function normalizeSearchValue(value?: string): string {
   return value?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim() ?? '';
 }
@@ -271,6 +291,7 @@ export default function PortalPage() {
     return (
       <Link key={event.id} href={`/${event.slug}/dashboard`} className="group">
         <Card className="rounded-[2.5rem] overflow-hidden border-muted shadow-sm group-hover:shadow-2xl group-hover:-translate-y-1 transition-all duration-300">
+          <EventCoverImage event={event} />
           <CardHeader className="bg-primary/5 p-8">
             <div className="flex justify-between items-start mb-4">
               <div className="p-3 rounded-2xl bg-white shadow-sm text-primary">
