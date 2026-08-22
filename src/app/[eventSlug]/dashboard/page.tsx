@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { headers } from 'next/headers'
 
 import { DashboardClient } from './dashboard-client'
 import { fetchEventBySlug, fetchPublicPoiMetadataById, isPubliclyAccessibleEvent, type PublicPoiMetadata } from '@/lib/data'
@@ -32,8 +31,7 @@ function normalizeText(value: string | undefined, fallback: string, maxLength: n
   return `${normalized.slice(0, maxLength - 1).trim()}…`
 }
 
-function getPoiImageUrl(poi: PublicPoiMetadata | undefined, useCrawlerSafeFallback: boolean): string {
-  if (useCrawlerSafeFallback) return SPOTLY_IMAGE_URL
+function getPoiImageUrl(poi: PublicPoiMetadata | undefined): string {
   return poi?.headerPhotoUrl || poi?.galleryUrls?.[0]?.url || SPOTLY_IMAGE_URL
 }
 
@@ -101,8 +99,6 @@ export async function generateMetadata({
 }: DashboardPageProps): Promise<Metadata> {
   const { eventSlug } = await params
   const resolvedSearchParams = await searchParams
-  const userAgent = (await headers()).get('user-agent') || ''
-  const useCrawlerSafeImage = /WhatsApp/i.test(userAgent)
   const poiId = getSingleSearchParam(resolvedSearchParams.poi)
   const dashboardUrl = buildDashboardUrl(eventSlug, poiId)
 
@@ -146,7 +142,7 @@ export async function generateMetadata({
       title,
       description,
       url: dashboardUrl,
-      imageUrl: getPoiImageUrl(poi, useCrawlerSafeImage),
+      imageUrl: getPoiImageUrl(poi),
     })
   } catch (error) {
     console.error('[Dashboard Metadata] generation failed', {
