@@ -51,11 +51,13 @@ function buildMetadata({
   description,
   url,
   imageUrl,
+  robots,
 }: {
   title: string
   description: string
   url: string
   imageUrl: string
+  robots?: Metadata['robots']
 }): Metadata {
   const usesFallbackImage = imageUrl === SPOTLY_IMAGE_URL
   const image = {
@@ -91,6 +93,7 @@ function buildMetadata({
       description,
       images: [image],
     },
+    ...(robots ? { robots } : {}),
   }
 }
 
@@ -122,6 +125,10 @@ export async function generateMetadata({
           description,
           url: eventDashboardUrl,
           imageUrl: getEventImageUrl(privatePreviewEvent),
+          robots: {
+            index: false,
+            follow: false,
+          },
         })
       }
 
@@ -130,6 +137,10 @@ export async function generateMetadata({
         description: SPOTLY_DESCRIPTION,
         url: eventDashboardUrl,
         imageUrl: SPOTLY_IMAGE_URL,
+        robots: {
+          index: false,
+          follow: false,
+        },
       })
     }
 
@@ -152,6 +163,10 @@ export async function generateMetadata({
         description: normalizeText(undefined, `Découvrez ${event.name} sur Spotly.`, 180),
         url: dashboardUrl,
         imageUrl: SPOTLY_IMAGE_URL,
+        robots: {
+          index: false,
+          follow: true,
+        },
       })
     }
 
@@ -163,6 +178,10 @@ export async function generateMetadata({
       description,
       url: dashboardUrl,
       imageUrl: getPoiImageUrl(poi),
+      robots: {
+        index: false,
+        follow: true,
+      },
     })
   } catch (error) {
     console.error('[Dashboard Metadata] generation failed', {
@@ -177,6 +196,10 @@ export async function generateMetadata({
       description: SPOTLY_DESCRIPTION,
       url: dashboardUrl,
       imageUrl: SPOTLY_IMAGE_URL,
+      robots: {
+        index: false,
+        follow: false,
+      },
     })
   }
 }

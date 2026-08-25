@@ -1,8 +1,17 @@
 import Link from 'next/link';
+import type { Metadata } from 'next';
 import { ArrowLeft, Mail, MessageCircle, Mountain } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+
+export const metadata: Metadata = {
+  title: 'Contact | Spotly',
+  description: 'Parlez-nous de votre événement et découvrez comment Spotly peut vous aider à présenter ses lieux sur une carte interactive.',
+  alternates: {
+    canonical: 'https://spotly.anavastudio.fr/contact',
+  },
+}
 
 const whatsappMessage = 'Bonjour, je viens de découvrir Spotly et je souhaiterais parler de la création d’un événement.';
 const whatsappUrl = `https://wa.me/33781456221?text=${encodeURIComponent(whatsappMessage)}`;

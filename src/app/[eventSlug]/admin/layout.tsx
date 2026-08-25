@@ -1,7 +1,5 @@
 import type { Metadata } from 'next'
 
-import DashboardClientLayout from './dashboard-client-layout'
-
 export const metadata: Metadata = {
   robots: {
     index: false,
@@ -9,10 +7,10 @@ export const metadata: Metadata = {
   },
 }
 
-export default function DashboardLayout({
+export default function EventAdminLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return <DashboardClientLayout>{children}</DashboardClientLayout>
+  return children
 }
