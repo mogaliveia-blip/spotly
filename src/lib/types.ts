@@ -96,6 +96,7 @@ export interface AppEvent {
   adminId: string
   status: EventStatus
   visibility: EventVisibility
+  privatePreviewEnabled?: boolean
   privateAccessTokenHash?: string
   privateAccessVersion?: number
   privateAccessTokenUpdatedAt?: Date

@@ -233,6 +233,10 @@ service cloud.firestore {
           request.resource.data.eventCoverUrl is string &&
           request.resource.data.eventCoverUrl.size() <= 2048
         )
+      ) &&
+      (
+        !("privatePreviewEnabled" in request.resource.data) ||
+        request.resource.data.privatePreviewEnabled is bool
       );
     }
 

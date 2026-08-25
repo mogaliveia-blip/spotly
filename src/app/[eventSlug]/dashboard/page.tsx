@@ -2,10 +2,11 @@ import type { Metadata } from 'next'
 
 import { DashboardClient } from './dashboard-client'
 import { fetchEventBySlug, fetchPublicPoiMetadataById, isPubliclyAccessibleEvent, type PublicPoiMetadata } from '@/lib/data'
+import { fetchPrivateEventPreviewBySlugAndToken } from '@/lib/private-event-preview.server'
 
 type DashboardPageProps = {
   params: Promise<{ eventSlug: string }>
-  searchParams: Promise<{ poi?: string | string[] }>
+  searchParams: Promise<{ poi?: string | string[]; privateAccess?: string | string[] }>
 }
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://spotly.anavastudio.fr'
@@ -100,15 +101,34 @@ export async function generateMetadata({
   const { eventSlug } = await params
   const resolvedSearchParams = await searchParams
   const poiId = getSingleSearchParam(resolvedSearchParams.poi)
+  const privateAccessToken = getSingleSearchParam(resolvedSearchParams.privateAccess)
   const dashboardUrl = buildDashboardUrl(eventSlug, poiId)
+  const eventDashboardUrl = buildDashboardUrl(eventSlug, null)
 
   try {
     const event = await fetchEventBySlug(eventSlug)
     if (!isPubliclyAccessibleEvent(event)) {
+      const privatePreviewEvent = await fetchPrivateEventPreviewBySlugAndToken(eventSlug, privateAccessToken)
+      if (privatePreviewEvent) {
+        const title = `${privatePreviewEvent.name} | ${SPOTLY_TITLE}`
+        const description = normalizeText(
+          privatePreviewEvent.description,
+          `Découvrez ${privatePreviewEvent.name} sur Spotly.`,
+          180
+        )
+
+        return buildMetadata({
+          title,
+          description,
+          url: eventDashboardUrl,
+          imageUrl: getEventImageUrl(privatePreviewEvent),
+        })
+      }
+
       return buildMetadata({
         title: SPOTLY_TITLE,
         description: SPOTLY_DESCRIPTION,
-        url: dashboardUrl,
+        url: eventDashboardUrl,
         imageUrl: SPOTLY_IMAGE_URL,
       })
     }

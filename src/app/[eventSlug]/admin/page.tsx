@@ -9,6 +9,7 @@ import {
   fetchMarketingConfig,
   updateMarketingConfig,
   updateEventDetails,
+  updateEventPrivatePreviewEnabled,
   fetchPoiCategoryUsageCount,
   uploadFile,
   deleteFileByPath
@@ -38,9 +39,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Check, ChevronDown, ChevronUp, Copy, KeyRound, Loader2, ImagePlus, Plus, Share2, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Copy, HelpCircle, KeyRound, Loader2, ImagePlus, Plus, Share2, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import Image from 'next/image';
@@ -943,6 +945,8 @@ function PrivateAccessCard() {
   const [links, setLinks] = useState<EventPrivateLink[]>([]);
   const [linksLoading, setLinksLoading] = useState(false);
   const [busyAction, setBusyAction] = useState<'create' | string | null>(null);
+  const [previewSaving, setPreviewSaving] = useState(false);
+  const [privatePreviewEnabled, setPrivatePreviewEnabled] = useState(event?.privatePreviewEnabled !== false);
   const [linkTitle, setLinkTitle] = useState('');
   const [linkDescription, setLinkDescription] = useState('');
   const [generatedLinkShareData, setGeneratedLinkShareData] = useState<{ title?: string; description?: string } | null>(null);
@@ -979,6 +983,10 @@ function PrivateAccessCard() {
     loadLinks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, isPrivate]);
+
+  useEffect(() => {
+    setPrivatePreviewEnabled(event?.privatePreviewEnabled !== false);
+  }, [event?.id, event?.privatePreviewEnabled]);
 
   const formatDate = (value?: Date) => {
     if (!value) return '—';
@@ -1105,6 +1113,33 @@ function PrivateAccessCard() {
     }
   };
 
+  const handlePrivatePreviewChange = async (checked: boolean) => {
+    if (!eventId) return;
+
+    const previousValue = privatePreviewEnabled;
+    setPrivatePreviewEnabled(checked);
+    setPreviewSaving(true);
+
+    try {
+      await updateEventPrivatePreviewEnabled(eventId, checked);
+      toast({ title: 'Aperçu du lien privé mis à jour' });
+    } catch (error) {
+      setPrivatePreviewEnabled(previousValue);
+      console.error('[PrivateAccessCard] private preview update failed', {
+        eventId,
+        errorCode: (error as any)?.code ?? null,
+        errorMessage: (error as any)?.message ?? null,
+      });
+      toast({
+        title: 'Erreur',
+        description: "Impossible de sauvegarder l'aperçu du lien privé.",
+        variant: 'destructive'
+      });
+    } finally {
+      setPreviewSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="rounded-xl border p-4 bg-muted/10 space-y-2">
@@ -1115,6 +1150,37 @@ function PrivateAccessCard() {
         <p className="text-sm text-muted-foreground">
           Crée des liens de consultation lecture seule. Les tokens ne sont jamais stockés en clair.
         </p>
+      </div>
+
+      <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
+        <div className="min-w-0 space-y-1">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="private-preview-enabled">Autoriser l'aperçu du lien privé</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Informations sur l'aperçu du lien privé"
+                  className="h-7 w-7 rounded-full text-muted-foreground"
+                >
+                  <HelpCircle className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] text-sm leading-relaxed">
+                Lorsque cette option est activée, le nom, la description et la photo de couverture peuvent apparaître dans WhatsApp, Messages et d'autres applications de partage. Cela ne donne pas accès à l'événement. Ces informations peuvent rester temporairement dans le cache de ces services après la révocation du lien.
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+        <Switch
+          id="private-preview-enabled"
+          checked={privatePreviewEnabled}
+          onCheckedChange={handlePrivatePreviewChange}
+          disabled={previewSaving}
+          aria-label="Autoriser l'aperçu du lien privé"
+        />
       </div>
 
       {!isPrivate && (

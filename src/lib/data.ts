@@ -496,6 +496,12 @@ export async function updateEventVisibility(eventId: string, visibility: EventVi
   });
 }
 
+export async function updateEventPrivatePreviewEnabled(eventId: string, privatePreviewEnabled: boolean): Promise<void> {
+  await updateDoc(doc(db, 'events', eventId), {
+    privatePreviewEnabled
+  });
+}
+
 export const dbPaths = {
   pois: (eventId: string) => eventId === DEFAULT_EVENT_ID ? 'pois' : `events/${eventId}/pois`,
   poisPublic: (eventId: string) => eventId === DEFAULT_EVENT_ID ? 'pois_public' : `events/${eventId}/pois_public`,
