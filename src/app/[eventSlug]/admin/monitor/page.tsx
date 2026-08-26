@@ -26,6 +26,7 @@ import { fr } from 'date-fns/locale';
 import { mapsConfig } from '@/lib/firebase-config';
 import { Button } from '@/components/ui/button';
 import { useEvent } from '@/providers/event-provider';
+import { canAccessPlatformAdmin } from '@/lib/access-control';
 
 interface MonitorStats {
   totalPois: number;
@@ -70,14 +71,15 @@ export default function MonitorPage() {
     const [loading, setLoading] = useState(true);
     const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
     const isInitialLoad = useRef(true);
+    const isOwner = canAccessPlatformAdmin(globalRole);
 
     const fetchData = useCallback(async (isManualRefresh = false) => {
-        if (eventLoading) return;
+        if (eventLoading || !isOwner) return;
         if (!isManualRefresh) setLoading(true);
 
         try {
             const [users, pois, marketingConfig] = await Promise.all([
-                globalRole === 'owner' ? fetchUsers() : Promise.resolve([]),
+                fetchUsers(),
                 fetchPois(eventId),
                 fetchMarketingConfig(eventId),
             ]);
@@ -108,18 +110,18 @@ export default function MonitorPage() {
         } finally {
             setLoading(false);
         }
-    }, [eventId, eventLoading, globalRole]);
+    }, [eventId, eventLoading, isOwner]);
 
     useEffect(() => {
         if (authLoading || eventLoading) return;
-        if (globalRole !== 'owner' && userRole !== 'admin') {
-            router.replace('/dashboard');
+        if (!isOwner) {
+            router.replace('/admin/events');
             return;
         }
         fetchData();
         const intervalId = setInterval(() => fetchData(), 60000);
         return () => clearInterval(intervalId);
-    }, [globalRole, userRole, authLoading, eventLoading, router, fetchData]);
+    }, [isOwner, authLoading, eventLoading, router, fetchData]);
 
     const poisDelta = stats && prevStats ? stats.totalPois - prevStats.totalPois : 0;
     const reviewsDelta = stats && prevStats ? stats.totalReviews - prevStats.totalReviews : 0;

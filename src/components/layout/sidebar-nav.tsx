@@ -290,7 +290,7 @@ export function SidebarNav() {
       href: `${prefix}/admin/monitor`,
       icon: Monitor,
       label: 'Supervision',
-      visible: !!eventSlug && canManageCurrentEvent,
+      visible: !!eventSlug && canAccessPlatformAdmin(globalRole),
       auth: true,
     },
     {

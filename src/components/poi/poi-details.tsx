@@ -129,7 +129,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
 
     setPoi(prev => {
       if (!prev) return initialPoi;
-      if (isFullPoi(prev) && prev.id === initialPoi.id) return prev;
+      if (prev.id === initialPoi.id && isFullPoi(prev) && !isFullPoi(initialPoi)) return prev;
       return initialPoi;
     });
   
@@ -150,6 +150,11 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
       )
       .finally(() => setReviewsLoading(false));
   }, [initialPoi, reviewsEnabled, reviews.length, eventId]);
+
+  useEffect(() => {
+    if (selectedIndex === null) return;
+    if (selectedIndex >= allImages.length) setSelectedIndex(null);
+  }, [allImages.length, selectedIndex]);
 
   const handleReviewAdded = useCallback((newReview: Review) => {
     setReviews(prev => [newReview, ...prev]);

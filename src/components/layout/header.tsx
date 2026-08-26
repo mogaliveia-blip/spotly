@@ -59,11 +59,15 @@ export function Header() {
   const showPlatformAdmin = canAccessPlatformAdmin(globalRole);
 
   const navItems = [
-    { href: `${prefix}/dashboard`, icon: LayoutDashboard, label: 'Carte' },
+    ...(eventSlug ? [
+      { href: `${prefix}/dashboard`, icon: LayoutDashboard, label: 'Carte' },
+    ] : []),
     ...(eventSlug && canManageCurrentEvent ? [
         { href: `${prefix}/pois`, icon: MapPin, label: 'Lieux' },
         { href: `${prefix}/admin/members`, icon: UsersRound, label: 'Équipe' },
         { href: `${prefix}/admin`, icon: Users, label: 'Réglages' },
+    ] : []),
+    ...(eventSlug && showPlatformAdmin ? [
         { href: `${prefix}/admin/monitor`, icon: Monitor, label: 'Supervision' },
     ] : []),
     ...(showPlatformAdmin ? [

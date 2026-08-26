@@ -240,59 +240,11 @@ service cloud.firestore {
       );
     }
 
-    function isValidPoiCategory(category) {
-      return category is map &&
-        category.keys().hasOnly([
-          "id",
-          "label",
-          "icon"
-        ]) &&
-        category.keys().hasAll([
-          "id",
-          "label",
-          "icon"
-        ]) &&
-        category.id is string &&
-        category.id.size() > 0 &&
-        category.id.size() <= 80 &&
-        category.label is string &&
-        category.label.size() > 0 &&
-        category.label.size() <= 40 &&
-        category.icon is string &&
-        category.icon.size() > 0 &&
-        category.icon.size() <= 40;
-    }
-
-    function hasValidPoiCategoryAt(categories, index) {
-      return categories.size() <= index ||
-        isValidPoiCategory(categories[index]);
-    }
-
     function hasValidPoiCategories() {
       return !("poiCategories" in request.resource.data) ||
         (
           request.resource.data.poiCategories is list &&
-          request.resource.data.poiCategories.size() <= 20 &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 0) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 1) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 2) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 3) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 4) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 5) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 6) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 7) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 8) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 9) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 10) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 11) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 12) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 13) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 14) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 15) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 16) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 17) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 18) &&
-          hasValidPoiCategoryAt(request.resource.data.poiCategories, 19)
+          request.resource.data.poiCategories.size() <= 20
         );
     }
 

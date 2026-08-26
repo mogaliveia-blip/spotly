@@ -23,7 +23,7 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, MapPin, Crosshair, ImagePlus, X } from 'lucide-react';
 import type { POI, POISponsor } from '@/lib/types';
 import { useGeolocation } from '@/providers/geolocation-provider';
@@ -34,6 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useAuth } from '@/hooks/use-auth-user';
 import { useEvent } from '@/providers/event-provider';
 import { Switch } from '@/components/ui/switch';
+import { PoiLocationSearch } from './poi-location-search';
 
 const MAX_GALLERY_PHOTOS = 3;
 const GALLERY_LIMIT_MESSAGE = "Vous pouvez ajouter jusqu'à 3 photos dans la galerie.";
@@ -164,10 +165,25 @@ interface POIFormProps {
   eventSlug?: string;
 }
 
-function MapController() {
+function MapController({
+  selectedLocation,
+  placeSelectionCount,
+}: {
+  selectedLocation: { lat: number; lng: number };
+  placeSelectionCount: number;
+}) {
   const { userLocation } = useGeolocation();
   const mapRef = useMap();
+  const lastPlaceSelectionCountRef = useRef(placeSelectionCount);
   const handleRecenter = () => { if (mapRef && userLocation) mapRef.panTo(userLocation); };
+
+  useEffect(() => {
+    if (!mapRef || placeSelectionCount === lastPlaceSelectionCountRef.current) return;
+
+    lastPlaceSelectionCountRef.current = placeSelectionCount;
+    mapRef.panTo(selectedLocation);
+  }, [mapRef, placeSelectionCount, selectedLocation]);
+
   return userLocation ? (
     <div className="absolute bottom-4 left-4 z-10">
       <Button size="icon" onClick={handleRecenter} type="button"><Crosshair className="h-5 w-5" /></Button>
@@ -209,6 +225,7 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   const selectedLocation = form.watch('location');
   const headerPhotoUrl = form.watch('headerPhotoUrl');
   const sponsorEnabled = form.watch('sponsor.enabled');
+  const [placeSelectionCount, setPlaceSelectionCount] = useState(0);
 
   const [headerImageFile, setHeaderImageFile] = useState<File | null>(null);
   const [headerPreviewUrl, setHeaderPreviewUrl] = useState<string | null>(null);
@@ -441,6 +458,15 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
     });
   }
 
+  const handlePlaceSelected = useCallback((location: { lat: number; lng: number }) => {
+    form.setValue('location', location, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: form.formState.isSubmitted,
+    });
+    setPlaceSelectionCount((count) => count + 1);
+  }, [form]);
+
   if (pageIsLoading) return <div className="p-12 text-center animate-pulse">Chargement de l'éditeur...</div>;
 
   const galleryPhotoCount = existingGalleryUrls.length + newGalleryImages.length;
@@ -606,13 +632,16 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
             </div>
 
             <div className="space-y-6">
-              <Card className="rounded-[2rem] border-muted/60 overflow-hidden">
+              <Card className="rounded-[2rem] border-muted/60">
                 <CardHeader><CardTitle>Emplacement</CardTitle><CardDescription>Cliquez sur la carte pour placer le marqueur.</CardDescription></CardHeader>
                 <CardContent className="p-0">
-                  <div className="h-[400px] w-full relative">
+                  <div className="relative z-20 p-4 pt-0">
+                    <PoiLocationSearch locationBias={selectedLocation} onPlaceSelected={handlePlaceSelected} />
+                  </div>
+                  <div className="relative h-[400px] w-full overflow-hidden rounded-b-[2rem]">
                     <Map defaultCenter={selectedLocation} defaultZoom={15} mapId={mapsConfig.mapId} onClick={e => e.detail.latLng && form.setValue('location', e.detail.latLng)}>
                       <AdvancedMarker position={selectedLocation}><MapPin className="text-primary h-8 w-8" /></AdvancedMarker>
-                      <MapController />
+                      <MapController selectedLocation={selectedLocation} placeSelectionCount={placeSelectionCount} />
                     </Map>
                   </div>
                 </CardContent>
