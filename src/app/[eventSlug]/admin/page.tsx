@@ -341,12 +341,14 @@ function PoiCategoriesCard() {
   const { event, eventId } = useEvent();
   const { toast } = useToast();
   const [categories, setCategories] = useState<EventPoiCategory[]>(event?.poiCategories ?? []);
+  const [savedCategories, setSavedCategories] = useState<EventPoiCategory[]>(event?.poiCategories ?? []);
   const [customLabel, setCustomLabel] = useState('');
   const [customIcon, setCustomIcon] = useState(supportedCategoryIcons[0].key);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setCategories(event?.poiCategories ?? []);
+    setSavedCategories(event?.poiCategories ?? []);
     setCustomLabel('');
     setCustomIcon(supportedCategoryIcons[0].key);
   }, [event?.id, event?.poiCategories]);
@@ -404,6 +406,7 @@ function PoiCategoriesCard() {
     try {
       await updateEventDetails(eventId, { poiCategories: normalizedCategories });
       setCategories(normalizedCategories);
+      setSavedCategories(normalizedCategories);
       toast({ title: successTitle });
       return true;
     } catch (error) {
@@ -449,6 +452,16 @@ function PoiCategoriesCard() {
     setCategories((current) => current.map((category) => (
       category.id === categoryId ? { ...category, ...patch } : category
     )));
+  };
+
+  const isCategoryDirty = (category: EventPoiCategory): boolean => {
+    const savedCategory = savedCategories.find((saved) => saved.id === category.id);
+    if (!savedCategory) return false;
+
+    return (
+      normalizeCategoryLabel(category.label) !== normalizeCategoryLabel(savedCategory.label) ||
+      category.icon !== savedCategory.icon
+    );
   };
 
   const moveCategory = (index: number, direction: -1 | 1) => {
@@ -511,9 +524,10 @@ function PoiCategoriesCard() {
 
         {categories.map((category, index) => {
           const Icon = resolveCategoryIcon(category.icon);
+          const categoryDirty = isCategoryDirty(category);
 
           return (
-            <div key={category.id} className="rounded-2xl border p-3">
+            <div key={category.id} className="rounded-2xl border p-2 sm:p-3">
               <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-end">
                 <div className="space-y-2">
                   <Label htmlFor={`category-label-${category.id}`}>Libellé</Label>
@@ -553,7 +567,7 @@ function PoiCategoriesCard() {
                   </Select>
                 </div>
 
-                <div className="flex flex-wrap gap-2 md:justify-end">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap md:justify-end">
                   <Button
                     type="button"
                     variant="outline"
@@ -561,7 +575,7 @@ function PoiCategoriesCard() {
                     aria-label="Monter la catégorie"
                     disabled={saving || index === 0}
                     onClick={() => moveCategory(index, -1)}
-                    className="h-10 w-10 rounded-xl"
+                    className="h-10 w-full rounded-xl sm:w-10"
                   >
                     <ChevronUp className="h-4 w-4" />
                   </Button>
@@ -572,28 +586,29 @@ function PoiCategoriesCard() {
                     aria-label="Descendre la catégorie"
                     disabled={saving || index === categories.length - 1}
                     onClick={() => moveCategory(index, 1)}
-                    className="h-10 w-10 rounded-xl"
+                    className="h-10 w-full rounded-xl sm:w-10"
                   >
                     <ChevronDown className="h-4 w-4" />
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={saving}
+                    disabled={saving || !categoryDirty}
                     onClick={() => void saveCategories(categories, 'Catégorie mise à jour')}
-                    className="h-10 rounded-xl font-bold"
+                    className="h-10 w-full rounded-xl font-bold sm:w-auto"
+                    aria-label="Enregistrer les modifications apportées à cette catégorie"
                   >
-                    <Check className="mr-2 h-4 w-4" />
-                    Sauver
+                    <Check className="hidden h-4 w-4 sm:mr-2 sm:block" />
+                    Enregistrer
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
                     disabled={saving}
                     onClick={() => void removeCategory(category.id)}
-                    className="h-10 rounded-xl font-bold text-destructive hover:text-destructive"
+                    className="h-10 w-full rounded-xl font-bold text-destructive hover:text-destructive sm:w-auto"
                   >
-                    <Trash2 className="mr-2 h-4 w-4" />
+                    <Trash2 className="hidden h-4 w-4 sm:mr-2 sm:block" />
                     Supprimer
                   </Button>
                 </div>
@@ -1366,7 +1381,7 @@ export default function AdminPage() {
               <CardTitle>Catégories des lieux</CardTitle>
               <CardDescription>Personnalisez les catégories utilisées pour organiser les lieux de votre événement.</CardDescription>
             </CardHeader>
-            <CardContent className="pt-6">
+            <CardContent className="px-3 pt-6 sm:px-6">
               <PoiCategoriesCard />
             </CardContent>
           </Card>

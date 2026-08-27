@@ -405,16 +405,16 @@ export default function MyEventsPage() {
                         </Button>
                       )}
                       {eventSlug && canOpenSettings ? (
-                        <Button variant="secondary" size="sm" asChild className="rounded-xl h-12 gap-2 font-bold">
+                        <Button variant="secondary" size="sm" asChild className="rounded-xl h-12 gap-2 font-bold transition-colors hover:bg-primary/10 hover:text-primary">
                            <Link href={`/${eventSlug}/admin`}>
                               <Settings className="h-4 w-4" />
-                              Modifier
+                              Réglages
                            </Link>
                         </Button>
                       ) : (
                         <Button variant="secondary" size="sm" disabled className="rounded-xl h-12 gap-2 font-bold" title={settingsDisabledReason ?? undefined}>
                           <Settings className="h-4 w-4" />
-                          Modifier
+                          Réglages
                         </Button>
                       )}
                       {isPlatformOwner && eventSlug && (
