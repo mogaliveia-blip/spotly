@@ -107,7 +107,7 @@ export function Header() {
         </Link>
       </div>
 
-      <nav className="hidden md:flex items-center gap-1 md:gap-2 ml-4">
+      <nav className="hidden xl:flex items-center gap-1 md:gap-2 ml-4">
         {filteredNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
@@ -123,8 +123,8 @@ export function Header() {
               )}
             >
               <Link href={item.href}>
-                <Icon className="h-4 w-4 md:mr-2" />
-                <span className="hidden md:inline">{item.label}</span>
+                <Icon className="h-4 w-4 xl:mr-2" />
+                <span className="hidden xl:inline">{item.label}</span>
               </Link>
             </Button>
           );
@@ -132,7 +132,7 @@ export function Header() {
       </nav>
 
       <div className="ml-auto flex items-center gap-2 md:gap-3">
-        <EventShareButton showLabel={false} className="md:hidden rounded-xl" />
+        <EventShareButton showLabel={false} className="xl:hidden rounded-xl" />
         {user && <div className="hidden sm:block"><EventSwitcher /></div>}
         {!user ? (
           <AuthDialog
@@ -148,7 +148,7 @@ export function Header() {
         {(user || filteredNavItems.length > 0) && (
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden h-11 w-11 rounded-xl" aria-label="Ouvrir le menu">
+              <Button variant="ghost" size="icon" className="xl:hidden h-11 w-11 rounded-xl" aria-label="Ouvrir le menu">
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
