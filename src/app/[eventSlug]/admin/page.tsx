@@ -620,7 +620,7 @@ function PoiCategoriesCard() {
 
       <div className="space-y-3 rounded-2xl border p-4">
         <div>
-          <h3 className="font-bold">Suggestions Spotly</h3>
+          <h3 className="font-bold">Suggestions Un Instant Ici</h3>
           <p className="text-sm text-muted-foreground">Chaque suggestion ajoutée reçoit son propre identifiant stable.</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1029,7 +1029,7 @@ function PrivateAccessCard() {
         title: title || undefined,
         description: description || undefined
       });
-      const url = buildPrivateEventUrl(event.slug, result.token, window.location.origin);
+      const url = buildPrivateEventUrl(event.slug, result.token);
       setPrivateUrl(url);
       setGeneratedLinkShareData({
         title: title || undefined,
@@ -1085,7 +1085,7 @@ function PrivateAccessCard() {
     if (!privateUrl || typeof navigator === 'undefined' || typeof navigator.share !== 'function') return;
 
     try {
-      const title = generatedLinkShareData?.title || 'Lien privé Spotly';
+      const title = generatedLinkShareData?.title || 'Lien privé Un Instant Ici';
       const description = generatedLinkShareData?.description;
 
       await navigator.share({

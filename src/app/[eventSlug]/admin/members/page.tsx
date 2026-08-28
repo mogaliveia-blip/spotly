@@ -96,7 +96,7 @@ export default function EventMembersPage() {
       toast({ title: 'Invitation réussie', description: `L'utilisateur a été ajouté à l'équipe.` });
     } catch (error: any) {
       const message = error.message === 'USER_NOT_FOUND' 
-        ? "Aucun utilisateur trouvé avec cet e-mail. Il doit d'abord créer un compte Spotly."
+        ? "Aucun utilisateur trouvé avec cet e-mail. Il doit d'abord créer un compte Un Instant Ici."
         : "Une erreur est survenue lors de l'invitation.";
       toast({ title: 'Erreur', description: message, variant: 'destructive' });
     } finally {
@@ -153,7 +153,7 @@ export default function EventMembersPage() {
                 Inviter un collaborateur
               </CardTitle>
               <CardDescription>
-                L'utilisateur doit déjà posséder un compte sur la plateforme Spotly.
+                L'utilisateur doit déjà posséder un compte sur la plateforme Un Instant Ici.
               </CardDescription>
             </CardHeader>
             <CardContent>

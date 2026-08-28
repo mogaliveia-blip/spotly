@@ -116,7 +116,7 @@ export function PwaInstallAssistant() {
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <h2 className="text-base font-bold leading-tight">Installez Spotly</h2>
+                  <h2 className="text-base font-bold leading-tight">Installez Un Instant Ici</h2>
                   <p className="mt-1 text-sm leading-snug text-muted-foreground">
                     Retrouvez plus facilement vos événements depuis votre écran d'accueil.
                   </p>

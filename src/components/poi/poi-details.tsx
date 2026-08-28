@@ -163,7 +163,7 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
   const handleShare = useCallback(async () => {
     if (!event || !shareAllowed || typeof window === 'undefined') return;
 
-    const shareUrl = buildPoiShareUrl(event, poi, window.location.origin);
+    const shareUrl = buildPoiShareUrl(event, poi);
     const shareText = event.name ? `${poi.title} - ${event.name}` : poi.title;
 
     setShareLoading(true);

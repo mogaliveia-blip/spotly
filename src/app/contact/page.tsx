@@ -6,19 +6,19 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
 export const metadata: Metadata = {
-  title: 'Contact | Spotly',
-  description: 'Parlez-nous de votre événement et découvrez comment Spotly peut vous aider à présenter ses lieux sur une carte interactive.',
+  title: 'Contact | Un Instant Ici',
+  description: 'Parlez-nous de votre événement et découvrez comment Un Instant Ici peut vous aider à présenter ses lieux sur une carte interactive.',
   alternates: {
-    canonical: 'https://spotly.anavastudio.fr/contact',
+    canonical: 'https://uninstantici.com/contact',
   },
 }
 
-const whatsappMessage = 'Bonjour, je viens de découvrir Spotly et je souhaiterais parler de la création d’un événement.';
+const whatsappMessage = 'Bonjour, je viens de découvrir Un Instant Ici et je souhaiterais parler de la création d’un événement.';
 const whatsappUrl = `https://wa.me/33781456221?text=${encodeURIComponent(whatsappMessage)}`;
-const emailSubject = 'Projet d’événement Spotly';
+const emailSubject = 'Projet d’événement Un Instant Ici';
 const emailBody = `Bonjour,
 
-Je viens de découvrir Spotly et je souhaiterais vous parler de mon projet d’événement.`;
+Je viens de découvrir Un Instant Ici et je souhaiterais vous parler de mon projet d’événement.`;
 const emailUrl = `mailto:contact@anavastudio.fr?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
 
 export default function ContactPage() {
@@ -30,7 +30,7 @@ export default function ContactPage() {
           className="inline-flex h-11 items-center gap-2 rounded-xl border bg-background/90 px-3 shadow-sm transition hover:bg-accent active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Mountain className="h-6 w-6 text-primary" />
-          <span className="text-lg font-bold tracking-tight text-primary">Spotly</span>
+          <span className="text-base font-bold tracking-tight text-primary sm:text-lg">Un Instant Ici</span>
         </Link>
       </header>
 
@@ -40,7 +40,7 @@ export default function ContactPage() {
             <Button asChild variant="ghost" size="sm" className="mx-auto rounded-xl text-muted-foreground">
               <Link href="/">
                 <ArrowLeft className="h-4 w-4" />
-                Retour à Spotly
+                Retour à Un Instant Ici
               </Link>
             </Button>
 
@@ -52,7 +52,7 @@ export default function ContactPage() {
                 Parlons de votre événement
               </h1>
               <p className="mx-auto max-w-md text-base font-medium leading-relaxed text-muted-foreground sm:text-lg">
-                Vous préparez un événement et souhaitez utiliser Spotly ? Expliquez-nous votre projet, nous verrons ensemble comment créer votre espace.
+                Vous préparez un événement et souhaitez utiliser Un Instant Ici ? Expliquez-nous votre projet, nous verrons ensemble comment créer votre espace.
               </p>
             </div>
 

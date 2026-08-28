@@ -36,7 +36,7 @@ export function SpotlyMapPreview() {
     <div
       className="relative mx-auto h-[210px] w-full max-w-[520px] overflow-hidden rounded-[2rem] border border-muted bg-card shadow-sm sm:h-[280px] lg:h-[390px]"
       role="img"
-      aria-label="Aperçu illustratif d'une carte Spotly avec plusieurs lieux d'événement et un point d'intérêt sélectionné."
+      aria-label="Aperçu illustratif d'une carte Un Instant Ici avec plusieurs lieux d'événement et un point d'intérêt sélectionné."
     >
       <div className="absolute inset-0 bg-[linear-gradient(120deg,hsl(var(--primary)/0.08),transparent_38%,hsl(var(--accent)/0.08)),linear-gradient(0deg,hsl(var(--muted)/0.45),hsl(var(--card)))]" />
 
@@ -66,7 +66,7 @@ export function SpotlyMapPreview() {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,transparent_0,hsl(var(--card)/0)_50%,hsl(var(--background)/0.35)_100%)]" />
 
       <div className="absolute left-4 top-4 rounded-full border bg-white/90 px-3 py-1.5 text-xs font-bold text-primary shadow-sm backdrop-blur-sm sm:left-5 sm:top-5">
-        Exemple Spotly
+        Exemple Un Instant Ici
       </div>
 
       {pois.map((poi) => {

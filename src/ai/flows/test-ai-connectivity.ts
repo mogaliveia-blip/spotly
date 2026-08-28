@@ -20,7 +20,7 @@ const testAIFlow = ai.defineFlow(
   },
   async (input) => {
     const {text} = await ai.generate({
-      prompt: `Dis bonjour à ${input || 'l\'utilisateur'} et confirme que toi (Gemini) tu es bien connecté au projet Spotly. Sois concis, amical et en français.`,
+      prompt: `Dis bonjour à ${input || 'l\'utilisateur'} et confirme que toi (Gemini) tu es bien connecté au projet Un Instant Ici. Sois concis, amical et en français.`,
     });
     return text;
   }

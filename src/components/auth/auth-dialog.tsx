@@ -53,12 +53,12 @@ export function AuthDialog({ trigger, initialView = 'login' }: AuthDialogProps) 
   const getDescription = () => {
     switch (view) {
       case 'signup':
-        return 'Rejoignez Spotly pour explorer des événements';
+        return 'Rejoignez Un Instant Ici pour explorer des événements';
       case 'passwordReset':
         return 'Entrez votre e-mail pour recevoir un lien de réinitialisation.';
       case 'login':
       default:
-        return 'Connectez-vous à votre compte Spotly';
+        return 'Connectez-vous à votre compte Un Instant Ici';
     }
   };
 

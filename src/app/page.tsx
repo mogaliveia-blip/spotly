@@ -2,9 +2,9 @@ import type { Metadata } from 'next'
 
 import PortalPage from './portal-client'
 
-const SITE_URL = 'https://spotly.anavastudio.fr'
-const HOME_TITLE = 'Spotly | Carte interactive pour vos événements'
-const HOME_DESCRIPTION = 'Créez et partagez la carte interactive de votre événement : lieux, points d’intérêt, informations, avis et accès public ou privé. Spotly est une création Anava Studio.'
+const SITE_URL = 'https://uninstantici.com'
+const HOME_TITLE = 'Un Instant Ici | Carte interactive pour vos événements'
+const HOME_DESCRIPTION = 'Créez et partagez la carte interactive de votre événement : lieux, points d’intérêt, informations, avis et accès public ou privé. Un Instant Ici est une création Anava Studio.'
 const HOME_IMAGE_URL = `${SITE_URL}/og-default.png`
 
 export const metadata: Metadata = {
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     title: HOME_TITLE,
     description: HOME_DESCRIPTION,
     url: `${SITE_URL}/`,
-    siteName: 'Spotly',
+    siteName: 'Un Instant Ici',
     type: 'website',
     images: [
       {
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
 const spotlyJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'WebApplication',
-  name: 'Spotly',
+  name: 'Un Instant Ici',
   url: SITE_URL,
   description: HOME_DESCRIPTION,
   applicationCategory: 'EventApplication',

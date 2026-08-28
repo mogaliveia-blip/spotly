@@ -291,7 +291,7 @@ export default function MyEventsPage() {
             </h1>
             <p className="text-muted-foreground">
               {isPlatformOwner
-                ? 'Supervision globale des événements de la plateforme Spotly.'
+                ? 'Supervision globale des événements de la plateforme Un Instant Ici.'
                 : 'Gestion de vos espaces et festivals personnels.'}
             </p>
           </div>

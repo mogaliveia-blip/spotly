@@ -1,6 +1,6 @@
 {
-  "name": "Spotly",
-  "short_name": "Spotly",
+  "name": "Un Instant Ici",
+  "short_name": "Un Instant Ici",
   "description": "Votre guide d'événements",
   "start_url": "/",
   "scope": "/",

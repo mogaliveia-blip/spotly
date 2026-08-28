@@ -406,7 +406,7 @@ export default function PortalPage() {
             className="inline-flex h-11 items-center gap-2 rounded-xl border bg-background/90 px-3 shadow-sm transition hover:bg-accent active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Mountain className="h-6 w-6 text-primary" />
-            <span className="text-lg font-semibold">Spotly</span>
+            <span className="text-base font-semibold sm:text-lg">Un Instant Ici</span>
           </Link>
           {user && (
             <div className="flex items-center gap-2">
@@ -441,7 +441,7 @@ export default function PortalPage() {
             <div className="relative z-10 flex h-full flex-col items-center justify-center text-center p-4">
                <div className="bg-black/50 p-8 rounded-[2rem] backdrop-blur-md shadow-2xl border border-white/10 max-w-2xl">
                   <h1 className="text-4xl font-black tracking-tight sm:text-5xl md:text-6xl text-white">
-                      Spotly
+                      Un Instant Ici
                   </h1>
                   <p className="mt-4 text-lg text-white/90 font-medium">
                       Bientôt disponible. L'application officielle pour ne rien manquer de vos festivals préférés.
@@ -462,9 +462,9 @@ export default function PortalPage() {
 
          <footer className="py-8 border-t mt-auto">
             <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-              <p>© {new Date().getFullYear()} Spotly. Tous droits réservés.</p>
+              <p>© {new Date().getFullYear()} Un Instant Ici. Tous droits réservés.</p>
               <p className="mt-2">
-                Spotly est une création{' '}
+                Un Instant Ici est une création{' '}
                 <a href="https://anavastudio.fr" target="_blank" rel="noopener noreferrer" className="font-medium underline underline-offset-4 hover:text-primary">
                   Anava Studio
                 </a>
@@ -496,7 +496,7 @@ export default function PortalPage() {
           className="inline-flex h-11 items-center gap-2 rounded-xl border bg-background/90 px-3 shadow-sm transition hover:bg-accent active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Mountain className="h-6 w-6 text-primary" />
-          <span className="text-lg font-bold tracking-tight text-primary">Spotly</span>
+          <span className="text-sm font-bold tracking-tight text-primary sm:text-lg">Un Instant Ici</span>
         </Link>
         <div className="flex items-center gap-3">
           {user ? (
@@ -546,7 +546,7 @@ export default function PortalPage() {
               {!user && (
                 <div className="mx-auto flex max-w-md flex-col items-center gap-2 lg:mx-0 lg:items-start">
                   <p className="text-sm font-medium leading-relaxed text-muted-foreground">
-                    Vous organisez un événement ? Nous pouvons créer votre espace Spotly avec vous.
+                    Vous organisez un événement ? Nous pouvons créer votre espace Un Instant Ici avec vous.
                   </p>
                   <Button asChild variant="link" size="sm" className="h-auto px-2 font-bold lg:-ml-2">
                     <Link href="/contact">Parler de mon événement</Link>
@@ -674,13 +674,13 @@ export default function PortalPage() {
           <div className="flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="flex items-center gap-2">
               <Mountain className="h-6 w-6 text-primary" />
-              <span className="text-lg font-bold">Spotly</span>
+              <span className="text-lg font-bold">Un Instant Ici</span>
             </div>
             
             <div className="text-sm text-muted-foreground">
-              <p>© {new Date().getFullYear()} Spotly. Votre guide événementiel.</p>
+              <p>© {new Date().getFullYear()} Un Instant Ici. Votre guide événementiel.</p>
               <p className="mt-2 text-center md:text-left">
-                Spotly est une création{' '}
+                Un Instant Ici est une création{' '}
                 <a href="https://anavastudio.fr" target="_blank" rel="noopener noreferrer" className="font-medium underline underline-offset-4 hover:text-primary">
                   Anava Studio
                 </a>

@@ -11,9 +11,10 @@ import { EventProvider } from '@/providers/event-provider'
 import { PwaInstallAssistant } from '@/components/pwa/install-assistant'
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://spotly.anavastudio.fr'),
-  title: 'Spotly',
+  metadataBase: new URL('https://uninstantici.com'),
+  title: 'Un Instant Ici',
   description: "Votre guide pour les points d'intérêt de l'événement.",
+  applicationName: 'Un Instant Ici',
   icons: {
     icon: {
       url: '/icon/favicon.svg',

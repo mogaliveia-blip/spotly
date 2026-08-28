@@ -103,7 +103,7 @@ export function Header() {
           <div className="rounded-xl bg-primary/10 p-1.5 transition-colors">
             <Mountain className="h-5 w-5 text-primary" />
           </div>
-          <h1 className="text-lg font-bold tracking-tight text-primary">Spotly</h1>
+          <h1 className="text-sm font-bold tracking-tight text-primary sm:text-lg">Un Instant Ici</h1>
         </Link>
       </div>
 
@@ -156,7 +156,7 @@ export function Header() {
               <SheetHeader className="px-5 pb-3 pt-[calc(env(safe-area-inset-top)+1.25rem)] text-left border-b">
                 <SheetTitle className="flex items-center gap-2 text-base">
                   <Mountain className="h-5 w-5 text-primary" />
-                  Spotly
+                  Un Instant Ici
                 </SheetTitle>
               </SheetHeader>
 

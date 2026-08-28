@@ -21,14 +21,14 @@ export function SpotlyQrReminder() {
         <CardContent className="space-y-4 p-5 text-center">
           <div className="mx-auto inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-widest text-primary">
             <Mountain className="h-3.5 w-3.5" />
-            Spotly mobile
+            Un Instant Ici mobile
           </div>
           <div className="space-y-2">
             <h2 id="spotly-qr-title" className="text-xl font-black tracking-tight">
-              Spotly sur votre téléphone
+              Un Instant Ici sur votre téléphone
             </h2>
             <p className="text-sm font-medium leading-relaxed text-muted-foreground">
-              Scannez le QR Code pour découvrir les événements près de chez vous et installer Spotly sur votre écran d'accueil.
+              Scannez le QR Code pour découvrir les événements près de chez vous et installer Un Instant Ici sur votre écran d'accueil.
             </p>
           </div>
 
@@ -42,16 +42,16 @@ export function SpotlyQrReminder() {
             <DialogContent className="max-w-[calc(100vw-2rem)] rounded-[2rem] p-5">
               <DialogHeader className="text-center">
                 <DialogTitle className="text-2xl font-black tracking-tight">
-                  QR code Spotly
+                  QR code Un Instant Ici
                 </DialogTitle>
                 <DialogDescription>
-                  Scannez ce QR code depuis un autre appareil pour ouvrir Spotly.
+                  Scannez ce QR code depuis un autre appareil pour ouvrir Un Instant Ici.
                 </DialogDescription>
               </DialogHeader>
               <div className="mx-auto rounded-3xl border bg-white p-4 shadow-sm">
                 <Image
                   src="/spotly-qr-code.png"
-                  alt="QR Code officiel Spotly vers https://spotly.anavastudio.fr/"
+                  alt="QR Code officiel Un Instant Ici vers https://uninstantici.com/"
                   width={220}
                   height={220}
                   className="h-[220px] w-[220px]"

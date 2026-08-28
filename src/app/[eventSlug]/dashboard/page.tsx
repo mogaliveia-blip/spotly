@@ -9,8 +9,8 @@ type DashboardPageProps = {
   searchParams: Promise<{ poi?: string | string[]; privateAccess?: string | string[] }>
 }
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://spotly.anavastudio.fr'
-const SPOTLY_TITLE = 'Spotly'
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://uninstantici.com'
+const SPOTLY_TITLE = 'Un Instant Ici'
 const SPOTLY_DESCRIPTION = "Votre guide pour les points d'intérêt de l'événement."
 const SPOTLY_IMAGE_URL = new URL('/og-default.png', SITE_URL).toString()
 const SPOTLY_IMAGE_WIDTH = 1200
@@ -116,7 +116,7 @@ export async function generateMetadata({
         const title = `${privatePreviewEvent.name} | ${SPOTLY_TITLE}`
         const description = normalizeText(
           privatePreviewEvent.description,
-          `Découvrez ${privatePreviewEvent.name} sur Spotly.`,
+          `Découvrez ${privatePreviewEvent.name} sur Un Instant Ici.`,
           180
         )
 
@@ -146,7 +146,7 @@ export async function generateMetadata({
 
     if (!poiId) {
       const title = `${event.name} | ${SPOTLY_TITLE}`
-      const description = normalizeText(event.description, `Découvrez ${event.name} sur Spotly.`, 180)
+      const description = normalizeText(event.description, `Découvrez ${event.name} sur Un Instant Ici.`, 180)
       return buildMetadata({
         title,
         description,
@@ -160,7 +160,7 @@ export async function generateMetadata({
       const title = `${event.name} | ${SPOTLY_TITLE}`
       return buildMetadata({
         title,
-        description: normalizeText(undefined, `Découvrez ${event.name} sur Spotly.`, 180),
+        description: normalizeText(undefined, `Découvrez ${event.name} sur Un Instant Ici.`, 180),
         url: dashboardUrl,
         imageUrl: SPOTLY_IMAGE_URL,
         robots: {

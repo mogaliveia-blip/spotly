@@ -1,6 +1,6 @@
 import type { AppEvent } from './types'
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://spotly.anavastudio.fr'
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://uninstantici.com'
 
 type ShareableEvent = Pick<AppEvent, 'name' | 'slug' | 'description' | 'status' | 'visibility'>
 
@@ -14,7 +14,7 @@ export function buildEventShareUrl(event: Pick<AppEvent, 'slug'>): string {
 
 export function buildEventShareText(event: ShareableEvent): string {
   const description = event.description?.trim()
-  return description ? `${event.name}\n\n${description}` : `Découvrez ${event.name} sur Spotly.`
+  return description ? `${event.name}\n\n${description}` : `Découvrez ${event.name} sur Un Instant Ici.`
 }
 
 export async function copyTextWithFallback(text: string): Promise<void> {

@@ -7,6 +7,7 @@ import type { EventPrivateLink } from './types'
 const PRIVATE_ACCESS_PARAM = 'privateAccess'
 const PRIVATE_ACCESS_EVENT_STORAGE_PREFIX = 'spotly.privateAccess.eventId.'
 const PRIVATE_ACCESS_TOKEN_SESSION_PREFIX = 'spotly.privateAccess.token.'
+const SITE_URL = 'https://uninstantici.com'
 
 type RotatePrivateEventTokenResult = {
   linkId: string
@@ -58,8 +59,8 @@ export function removePrivateAccessTokenFromUrl(): void {
   window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
 }
 
-export function buildPrivateEventUrl(eventSlug: string, token: string, origin: string): string {
-  const url = new URL(`/${eventSlug}/dashboard`, origin)
+export function buildPrivateEventUrl(eventSlug: string, token: string): string {
+  const url = new URL(`/${eventSlug}/dashboard`, SITE_URL)
   url.searchParams.set(PRIVATE_ACCESS_PARAM, token)
   return url.toString()
 }

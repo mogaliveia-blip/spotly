@@ -833,7 +833,7 @@ export default function AdminPage() {
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">Administration Plateforme</h1>
           <p className="text-muted-foreground">
-            Console réservée aux owners pour valider les comptes, gérer les owners plateforme et superviser Spotly.
+            Console réservée aux owners pour valider les comptes, gérer les owners plateforme et superviser Un Instant Ici.
           </p>
         </div>
 

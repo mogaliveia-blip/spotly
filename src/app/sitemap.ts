@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next'
 
-const SITE_URL = 'https://spotly.anavastudio.fr'
+const SITE_URL = 'https://uninstantici.com'
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = new Date()
