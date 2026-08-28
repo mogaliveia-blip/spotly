@@ -50,8 +50,8 @@ export function SpotlyQrReminder() {
               </DialogHeader>
               <div className="mx-auto rounded-3xl border bg-white p-4 shadow-sm">
                 <Image
-                  src="/spotly-qr-code.png"
-                  alt="QR Code officiel Un Instant Ici vers https://uninstantici.com/"
+                  src="/uninstantici-qr-code.png"
+                  alt="QR code Un Instant Ici"
                   width={220}
                   height={220}
                   className="h-[220px] w-[220px]"
