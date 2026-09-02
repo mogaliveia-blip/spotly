@@ -94,16 +94,20 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 flex h-16 items-center gap-3 border-b bg-background/95 backdrop-blur-sm px-3 md:px-6 shrink-0 shadow-sm">
-      <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-50 flex h-16 items-center gap-1 border-b bg-background/95 backdrop-blur-sm px-2 sm:gap-3 sm:px-3 md:px-6 shrink-0 shadow-sm">
+      <div className="flex min-w-0 items-center">
         <Link
           href="/"
-          className="inline-flex h-11 items-center gap-2 rounded-xl border bg-background/90 px-3 shadow-sm transition hover:bg-accent active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-11 min-w-0 items-center gap-1 rounded-xl border bg-background/90 px-2 shadow-sm transition hover:bg-accent active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:gap-2 sm:px-3"
         >
-          <div className="rounded-xl bg-primary/10 p-1.5 transition-colors">
+          <div className="shrink-0 rounded-xl bg-primary/10 p-1.5 transition-colors">
             <Mountain className="h-5 w-5 text-primary" />
           </div>
-          <h1 className="text-sm font-bold tracking-tight text-primary sm:text-lg">Un Instant Ici</h1>
+          <h1 className="hidden text-xs font-bold leading-4 tracking-tight text-primary min-[360px]:block min-[430px]:text-sm sm:text-lg sm:leading-7">
+            <span className="block whitespace-nowrap min-[430px]:inline">Un Instant</span>
+            {' '}
+            <span className="block whitespace-nowrap min-[430px]:inline">Ici</span>
+          </h1>
         </Link>
       </div>
 
@@ -131,7 +135,7 @@ export function Header() {
         })}
       </nav>
 
-      <div className="ml-auto flex items-center gap-2 md:gap-3">
+      <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2 md:gap-3">
         <EventShareButton showLabel={false} className="xl:hidden rounded-xl" />
         {user && <div className="hidden sm:block"><EventSwitcher /></div>}
         {!user ? (

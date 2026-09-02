@@ -31,7 +31,7 @@ const defaultMarketingConfig: MarketingConfig = {
 }
 
 const SECONDARY_CONFIG_TIMEOUT_MS = 3000
-const POI_LOAD_TIMEOUT_MS = 8000
+const POI_SLOW_LOADING_DELAY_MS = 8000
 const POI_STALE_MS = 30000
 const POI_RETRY_DELAY_MS = 900
 
@@ -61,6 +61,7 @@ export function DashboardClient() {
 
   const [pois, setPois] = useState<POILite[]>([])
   const [poiLoadStatus, setPoiLoadStatus] = useState<PoiLoadStatus>('loading')
+  const [isPoiLoadingSlow, setIsPoiLoadingSlow] = useState(false)
   const [poiLoadError, setPoiLoadError] = useState<string | null>(null)
   const [lastPoiLoadedAt, setLastPoiLoadedAt] = useState<number | null>(null)
   const [marketingConfig, setMarketingConfig] = useState<MarketingConfig | null>(null)
@@ -87,20 +88,10 @@ export function DashboardClient() {
     [pathname]
   )
 
-  const readPoisWithTimeout = useCallback((resolvedEventId: string) => {
-    let timeoutId: number | undefined
-    const timeout = new Promise<never>((_, reject) => {
-      timeoutId = window.setTimeout(() => reject(new Error('POI_LOAD_TIMEOUT')), POI_LOAD_TIMEOUT_MS)
-    })
-
-    return Promise.race([fetchPoisLite(resolvedEventId), timeout]).finally(() => {
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
-    })
-  }, [])
-
   const loadPois = useCallback(async (reason: 'initial' | 'retry' | 'resume' = 'initial') => {
     if (!eventId || eventId === DEFAULT_EVENT_ID || eventLoading) {
       setPoiLoadStatus('loading')
+      setIsPoiLoadingSlow(false)
       return
     }
 
@@ -123,21 +114,31 @@ export function DashboardClient() {
     }
 
     setPoiLoadStatus('loading')
+    setIsPoiLoadingSlow(false)
     setPoiLoadError(null)
+    const slowLoadingTimeoutId = window.setTimeout(() => {
+      if (
+        latestEventIdRef.current === eventId &&
+        activePoiRequestRef.current?.eventId === eventId &&
+        activePoiRequestRef.current?.requestId === requestId
+      ) {
+        setIsPoiLoadingSlow(true)
+      }
+    }, POI_SLOW_LOADING_DELAY_MS)
 
     try {
       let poiData: POILite[]
 
       try {
-        poiData = await readPoisWithTimeout(eventId)
+        poiData = await fetchPoisLite(eventId)
       } catch {
         await new Promise((resolve) => window.setTimeout(resolve, POI_RETRY_DELAY_MS))
-        poiData = await readPoisWithTimeout(eventId)
+        poiData = await fetchPoisLite(eventId)
       }
 
       if (poiData.length === 0 && !hadValidPois) {
         await new Promise((resolve) => window.setTimeout(resolve, POI_RETRY_DELAY_MS))
-        poiData = await readPoisWithTimeout(eventId)
+        poiData = await fetchPoisLite(eventId)
       }
 
       if (
@@ -150,6 +151,7 @@ export function DashboardClient() {
       }
 
       const loadedAt = Date.now()
+      setIsPoiLoadingSlow(false)
       if (poiData.length === 0 && hadValidPois) {
         setPois(cachedPois.length > 0 ? cachedPois : currentPois)
         setPoiLoadStatus('error')
@@ -174,17 +176,15 @@ export function DashboardClient() {
       }
 
       setPoiLoadStatus('error')
-      setPoiLoadError(
-        error?.message === 'POI_LOAD_TIMEOUT'
-          ? 'Le chargement des lieux prend trop de temps. Vérifiez votre connexion puis réessayez.'
-          : 'Impossible de charger les lieux de cet événement.'
-      )
+      setIsPoiLoadingSlow(false)
+      setPoiLoadError('Impossible de charger les lieux. Vérifiez votre connexion puis réessayez.')
     } finally {
+      window.clearTimeout(slowLoadingTimeoutId)
       if (activePoiRequestRef.current?.eventId === eventId && activePoiRequestRef.current?.requestId === requestId) {
         activePoiRequestRef.current = null
       }
     }
-  }, [eventId, eventLoading, readPoisWithTimeout])
+  }, [eventId, eventLoading])
 
   useEffect(() => {
     latestPoisRef.current = pois
@@ -237,6 +237,7 @@ export function DashboardClient() {
     if (eventLoading || eventId === DEFAULT_EVENT_ID) {
       activePoiRequestRef.current = null
       setPoiLoadStatus('loading')
+      setIsPoiLoadingSlow(false)
       setPoiLoadError(null)
       setMarketingConfig(null)
       setHeroVisible(false)
@@ -466,7 +467,9 @@ export function DashboardClient() {
               <div className="flex items-center gap-3">
                 <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
                 <div>
-                  <div className="font-semibold">Chargement des lieux</div>
+                  <div className="font-semibold">
+                    {isPoiLoadingSlow ? 'Le chargement des lieux prend un peu plus de temps…' : 'Chargement des lieux…'}
+                  </div>
                   {pois.length > 0 && (
                     <div className="mt-1 text-muted-foreground">Les lieux déjà chargés restent affichés pendant l’actualisation.</div>
                   )}
