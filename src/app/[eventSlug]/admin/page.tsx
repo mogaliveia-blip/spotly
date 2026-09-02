@@ -31,6 +31,11 @@ import {
   revokePrivateEventLink,
   rotatePrivateEventToken
 } from '@/lib/private-event-access';
+import {
+  forgetPrivateLinkOnDevice,
+  getStoredPrivateLinksForEvent,
+  storePrivateLinkOnDevice
+} from '@/lib/private-link-local-storage';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -39,7 +44,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Check, ChevronDown, ChevronUp, Copy, HelpCircle, KeyRound, Loader2, ImagePlus, Plus, Share2, Trash2 } from 'lucide-react';
+import { Ban, Check, ChevronDown, ChevronUp, Copy, HelpCircle, KeyRound, Loader2, ImagePlus, Plus, Share2, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -965,9 +970,11 @@ function PrivateAccessCard() {
   const [linkTitle, setLinkTitle] = useState('');
   const [linkDescription, setLinkDescription] = useState('');
   const [generatedLinkShareData, setGeneratedLinkShareData] = useState<{ title?: string; description?: string } | null>(null);
+  const [generatedLinkId, setGeneratedLinkId] = useState<string | null>(null);
+  const [generatedLinkStoredLocally, setGeneratedLinkStoredLocally] = useState(false);
+  const [localShareUrls, setLocalShareUrls] = useState<Map<string, string>>(new Map());
 
   const isPrivate = event?.visibility === 'private';
-  const canSharePrivateUrl = !!privateUrl && typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
   const loadLinks = async () => {
     if (!eventId || !isPrivate) {
@@ -1000,6 +1007,16 @@ function PrivateAccessCard() {
   }, [eventId, isPrivate]);
 
   useEffect(() => {
+    setLocalShareUrls(new Map(
+      getStoredPrivateLinksForEvent(eventId).map((link) => [link.linkId, link.shareUrl])
+    ));
+    setPrivateUrl(null);
+    setGeneratedLinkId(null);
+    setGeneratedLinkShareData(null);
+    setGeneratedLinkStoredLocally(false);
+  }, [eventId]);
+
+  useEffect(() => {
     setPrivatePreviewEnabled(event?.privatePreviewEnabled !== false);
   }, [event?.id, event?.privatePreviewEnabled]);
 
@@ -1030,7 +1047,15 @@ function PrivateAccessCard() {
         description: description || undefined
       });
       const url = buildPrivateEventUrl(event.slug, result.token);
+      const storedLocally = storePrivateLinkOnDevice({
+        eventId,
+        linkId: result.linkId,
+        shareUrl: url
+      });
       setPrivateUrl(url);
+      setGeneratedLinkId(result.linkId);
+      setGeneratedLinkStoredLocally(storedLocally);
+      setLocalShareUrls((currentUrls) => new Map(currentUrls).set(result.linkId, url));
       setGeneratedLinkShareData({
         title: title || undefined,
         description: description || undefined
@@ -1046,9 +1071,9 @@ function PrivateAccessCard() {
 
       toast({
         title: 'Lien privé généré',
-        description: copied
-          ? 'Le lien a été copié. Il ne sera plus affiché après fermeture de cette page.'
-          : "Le lien est affiché ci-dessous. Il ne sera plus affiché après fermeture de cette page."
+        description: storedLocally
+          ? (copied ? 'Le lien a été copié et mémorisé sur cet appareil.' : 'Le lien est mémorisé sur cet appareil.')
+          : (copied ? 'Le lien a été copié, mais sa mémorisation locale a échoué.' : "Le lien est affiché ci-dessous, mais sa mémorisation locale a échoué.")
       });
     } catch (error) {
       console.error('[PrivateAccessCard] create failed', {
@@ -1066,11 +1091,9 @@ function PrivateAccessCard() {
     }
   };
 
-  const handleCopy = async () => {
-    if (!privateUrl) return;
-
+  const handleCopy = async (shareUrl: string) => {
     try {
-      await navigator.clipboard.writeText(privateUrl);
+      await navigator.clipboard.writeText(shareUrl);
       toast({ title: 'Lien copié' });
     } catch {
       toast({
@@ -1081,17 +1104,23 @@ function PrivateAccessCard() {
     }
   };
 
-  const handleShare = async () => {
-    if (!privateUrl || typeof navigator === 'undefined' || typeof navigator.share !== 'function') return;
+  const handleShare = async (shareUrl: string, title?: string, description?: string) => {
+    if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
+      toast({
+        title: 'Partage indisponible',
+        description: 'Utilisez Copier le lien.',
+        variant: 'destructive'
+      });
+      return;
+    }
 
     try {
-      const title = generatedLinkShareData?.title || 'Lien privé Un Instant Ici';
-      const description = generatedLinkShareData?.description;
+      const shareTitle = title || 'Lien privé Un Instant Ici';
 
       await navigator.share({
-        title,
-        text: description ? `${title}\n\n${description}` : title,
-        url: privateUrl
+        title: shareTitle,
+        text: description ? `${shareTitle}\n\n${description}` : shareTitle,
+        url: shareUrl
       });
     } catch (error) {
       if ((error as any)?.name === 'AbortError') return;
@@ -1107,10 +1136,24 @@ function PrivateAccessCard() {
     setBusyAction(linkId);
     try {
       await revokePrivateEventLink(eventId, linkId);
+      const localCopyRemoved = forgetPrivateLinkOnDevice(eventId, linkId);
+      setLocalShareUrls((currentUrls) => {
+        const nextUrls = new Map(currentUrls);
+        nextUrls.delete(linkId);
+        return nextUrls;
+      });
+      if (generatedLinkId === linkId) {
+        setPrivateUrl(null);
+        setGeneratedLinkId(null);
+        setGeneratedLinkShareData(null);
+        setGeneratedLinkStoredLocally(false);
+      }
       await loadLinks();
       toast({
         title: 'Lien privé révoqué',
-        description: 'Seul ce lien privé est invalidé.'
+        description: localCopyRemoved
+          ? 'Seul ce lien privé est invalidé. Sa copie locale a été supprimée.'
+          : "Seul ce lien privé est invalidé. Sa copie locale n'a pas pu être supprimée."
       });
     } catch (error) {
       console.error('[PrivateAccessCard] revoke failed', {
@@ -1126,6 +1169,27 @@ function PrivateAccessCard() {
     } finally {
       setBusyAction(null);
     }
+  };
+
+  const handleForget = (linkId: string) => {
+    const forgotten = forgetPrivateLinkOnDevice(eventId, linkId);
+    setLocalShareUrls((currentUrls) => {
+      const nextUrls = new Map(currentUrls);
+      nextUrls.delete(linkId);
+      return nextUrls;
+    });
+    if (generatedLinkId === linkId) {
+      setPrivateUrl(null);
+      setGeneratedLinkId(null);
+      setGeneratedLinkShareData(null);
+      setGeneratedLinkStoredLocally(false);
+    }
+    toast({
+      title: 'Lien oublié sur cet appareil',
+      description: forgotten
+        ? 'Le lien reste actif et révocable.'
+        : "L'URL a été retirée de cette session. Le stockage local du navigateur n'est pas disponible."
+    });
   };
 
   const handlePrivatePreviewChange = async (checked: boolean) => {
@@ -1209,19 +1273,24 @@ function PrivateAccessCard() {
           <Label htmlFor="private-event-url">Lien généré</Label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input id="private-event-url" value={privateUrl} readOnly className="rounded-xl font-mono text-xs" />
-            <Button type="button" variant="outline" className="h-10 shrink-0 rounded-xl" onClick={handleCopy}>
+            <Button type="button" variant="outline" className="h-10 shrink-0 rounded-xl" onClick={() => handleCopy(privateUrl)}>
               <Copy className="mr-2 h-4 w-4" />
               Copier le lien
             </Button>
-            {canSharePrivateUrl && (
-              <Button type="button" variant="outline" className="h-10 shrink-0 rounded-xl" onClick={handleShare}>
-                <Share2 className="mr-2 h-4 w-4" />
-                Partager
-              </Button>
-            )}
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 shrink-0 rounded-xl"
+              onClick={() => handleShare(privateUrl, generatedLinkShareData?.title, generatedLinkShareData?.description)}
+            >
+              <Share2 className="mr-2 h-4 w-4" />
+              Partager
+            </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Ce lien est affiché une seule fois. Créer un nouveau lien ne révoque pas les précédents.
+            {generatedLinkStoredLocally
+              ? 'Ce lien est mémorisé uniquement sur cet appareil. Créer un nouveau lien ne révoque pas les précédents.'
+              : "Ce lien n'a pas pu être mémorisé sur cet appareil. Copiez-le avant de quitter cette page."}
           </p>
         </div>
       )}
@@ -1270,7 +1339,7 @@ function PrivateAccessCard() {
               <TableHead>Création</TableHead>
               <TableHead>Statut</TableHead>
               <TableHead>Expiration</TableHead>
-              <TableHead className="w-[120px] text-right">Action</TableHead>
+              <TableHead className="min-w-[380px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1291,6 +1360,7 @@ function PrivateAccessCard() {
             {!linksLoading && links.map((link) => {
               const status = getLinkStatus(link);
               const canRevoke = status === 'Actif';
+              const localShareUrl = canRevoke ? localShareUrls.get(link.id) : undefined;
 
               return (
                 <TableRow key={link.id}>
@@ -1301,22 +1371,66 @@ function PrivateAccessCard() {
                         {link.description}
                       </div>
                     )}
+                    {canRevoke && !localShareUrl && (
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Lien non mémorisé sur cet appareil.
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-sm">{formatDate(link.createdAt)}</TableCell>
                   <TableCell className="whitespace-nowrap text-sm">{status}</TableCell>
                   <TableCell className="whitespace-nowrap text-sm">{formatDate(link.expiresAt)}</TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRevoke(link.id)}
-                      disabled={!canRevoke || busyAction !== null}
-                      className="h-9 rounded-xl"
-                    >
-                      {busyAction === link.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                      Révoquer
-                    </Button>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {localShareUrl && (
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCopy(localShareUrl)}
+                            disabled={busyAction !== null}
+                            className="h-9 rounded-xl"
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copier
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleShare(localShareUrl, link.title, link.description)}
+                            disabled={busyAction !== null}
+                            className="h-9 rounded-xl"
+                          >
+                            <Share2 className="mr-2 h-4 w-4" />
+                            Partager
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleForget(link.id)}
+                            disabled={busyAction !== null}
+                            className="h-9 rounded-xl"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Oublier sur cet appareil
+                          </Button>
+                        </>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRevoke(link.id)}
+                        disabled={!canRevoke || busyAction !== null}
+                        className="h-9 rounded-xl"
+                      >
+                        {busyAction === link.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Ban className="mr-2 h-4 w-4" />}
+                        Révoquer
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               );
