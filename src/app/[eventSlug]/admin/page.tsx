@@ -44,13 +44,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Ban, Check, ChevronDown, ChevronUp, Copy, HelpCircle, KeyRound, Loader2, ImagePlus, Plus, Share2, Trash2 } from 'lucide-react';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Ban, Check, ChevronDown, ChevronUp, Copy, HelpCircle, KeyRound, Loader2, ImagePlus, Plus, QrCode, Share2, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import Image from 'next/image';
+import { QRCodeSVG } from 'qrcode.react';
 import { useEvent } from '@/providers/event-provider';
 
 const EVENT_DESCRIPTION_MAX_LENGTH = 400;
@@ -958,6 +960,63 @@ function MarketingConfigCard() {
   );
 }
 
+interface PrivateLinkQrDialogProps {
+  disabled: boolean;
+  shareUrl: string;
+  title: string;
+  onCopy: (shareUrl: string) => void;
+}
+
+function PrivateLinkQrDialog({ disabled, shareUrl, title, onCopy }: PrivateLinkQrDialogProps) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+          className="h-9 rounded-xl"
+          aria-label={`Afficher le QR code pour ${title}`}
+        >
+          <QrCode className="mr-2 h-4 w-4" />
+          QR code
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-sm rounded-xl p-5 sm:p-6">
+        <DialogHeader className="px-7 text-center sm:text-center">
+          <DialogTitle className="break-words">{title}</DialogTitle>
+          <DialogDescription>
+            Scannez ce QR code pour ouvrir l'accès privé.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="mx-auto flex w-full max-w-[296px] items-center justify-center bg-white p-2">
+          <QRCodeSVG
+            value={shareUrl}
+            size={280}
+            level="M"
+            marginSize={4}
+            bgColor="#ffffff"
+            fgColor="#000000"
+            className="block h-auto w-full"
+            role="img"
+            aria-label={`QR code du lien privé ${title}`}
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <Button type="button" variant="outline" onClick={() => onCopy(shareUrl)} className="rounded-xl">
+            <Copy className="mr-2 h-4 w-4" />
+            Copier le lien
+          </Button>
+          <DialogClose asChild>
+            <Button type="button" className="rounded-xl">Fermer</Button>
+          </DialogClose>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PrivateAccessCard() {
   const { event, eventId } = useEvent();
   const { toast } = useToast();
@@ -1406,6 +1465,12 @@ function PrivateAccessCard() {
                             <Share2 className="mr-2 h-4 w-4" />
                             Partager
                           </Button>
+                          <PrivateLinkQrDialog
+                            disabled={busyAction !== null}
+                            shareUrl={localShareUrl}
+                            title={link.title?.trim() || 'Lien privé'}
+                            onCopy={handleCopy}
+                          />
                           <Button
                             type="button"
                             variant="outline"
