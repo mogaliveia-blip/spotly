@@ -260,6 +260,28 @@ service cloud.firestore {
         ]);
     }
 
+    // Les champs économiques et d'autorité sont pilotés par l'owner ou,
+    // à terme, par des Functions utilisant l'Admin SDK. Leur absence sur un
+    // Event historique n'empêche pas la modification des champs métier.
+    function doesNotEditProtectedEventFields() {
+      return isOwner() ||
+        !request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasAny([
+            "createdBy",
+            "adminId",
+            "commercial",
+            "capabilities",
+            "coveredEndDate",
+            "payment",
+            "paymentId",
+            "paymentProvider",
+            "deletionRequestedBy",
+            "deletionRequestedAt"
+          ]);
+    }
+
     function canCreateEvent() {
       return isOwner();
     }
@@ -298,6 +320,7 @@ service cloud.firestore {
         isValidEventStatus(request.resource.data.status) &&
         isValidEventVisibility(request.resource.data.visibility) &&
         doesNotEditPrivateAccessFields() &&
+        doesNotEditProtectedEventFields() &&
         hasValidEventMetadataFields() &&
         hasValidPoiCategories();
 
@@ -309,6 +332,18 @@ service cloud.firestore {
     }
 
     match /events/{eventId}/privateLinks/{linkId} {
+      allow read, write: if false;
+    }
+
+    /* =========================
+       RÉSERVATIONS SERVEUR FUTURES
+    ========================= */
+
+    match /freeDraftSlots/{userId} {
+      allow read, write: if false;
+    }
+
+    match /eventSlugs/{normalizedSlug} {
       allow read, write: if false;
     }
 

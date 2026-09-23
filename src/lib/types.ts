@@ -87,15 +87,49 @@ export interface MarketingConfig {
 export type EventStatus = 'draft' | 'published' | 'paused'
 export type EventVisibility = 'public' | 'private'
 
+/**
+ * Droit commercial attaché à un Event, indépendant de son statut éditorial et
+ * de sa visibilité. Un nouvel Event réel devra toujours recevoir ce résumé via
+ * un flux serveur. Il reste optionnel pendant la transition des démos.
+ *
+ * Ce résumé peut être exposé avec le document Event : aucune donnée de paiement
+ * sensible ne doit y être stockée.
+ */
+export type CommercialOfferCode = 'free_draft' | 'private' | 'public'
+export type CommercialEntitlementState = 'active' | 'revoked'
+
+export interface EventCommercial {
+  offerCode: CommercialOfferCode
+  offerVersion: number
+  state: CommercialEntitlementState
+  grantedAt: Date
+  purchasedAt?: Date
+  coveredFrom?: Date
+  coveredEndDate?: Date
+  eventStartDateAtPurchase?: Date
+  eventEndDateAtPurchase?: Date
+}
+
+export interface EventCapabilities {
+  /** Absent ou différent de true : partenariat désactivé. */
+  partnershipEnabled?: boolean
+}
+
 export interface AppEvent {
   id: string
   name: string
   slug: string
   description?: string
   eventCoverUrl?: string
+  /** UID historique du créateur. Ce champ n'accorde aucune permission. */
+  createdBy?: string
+  /** Autorité héritée conservée jusqu'à la migration vers members comme source. */
   adminId: string
   status: EventStatus
   visibility: EventVisibility
+  /** Optionnel uniquement pendant la transition des Events de démonstration. */
+  commercial?: EventCommercial
+  capabilities?: EventCapabilities
   privatePreviewEnabled?: boolean
   privateAccessTokenHash?: string
   privateAccessVersion?: number
@@ -117,6 +151,18 @@ export interface AppEvent {
     primaryColor?: string
     accentColor?: string
   }
+}
+
+/** Futur verrou serveur /freeDraftSlots/{uid}. */
+export interface FreeDraftSlot {
+  eventId: string
+  reservedAt: Date
+}
+
+/** Future réservation serveur /eventSlugs/{normalizedSlug}. */
+export interface EventSlugReservation {
+  eventId: string
+  reservedAt: Date
 }
 
 export type EventRole = 'admin' | 'editor'

@@ -9,7 +9,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --import tsx --test src/lib/*.test.ts",
+    "test:rules": "firebase --config firebase.test.json emulators:exec --only firestore \"node --test tests/firestore-rules.test.mjs\""
   },
   "dependencies": {
     "@genkit-ai/google-genai": "^1.20.0",
@@ -59,6 +61,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
     "@playwright/test": "^1.62.1",
     "@types/node": "^20",
     "@types/react": "^19.2.1",
