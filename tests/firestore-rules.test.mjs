@@ -148,3 +148,35 @@ describe('future server-only reservation collections', () => {
     await assertFails(setDoc(slugRef, { eventId: EVENT_ID, reservedAt: new Date() }))
   })
 })
+
+describe('Event creation authority', () => {
+  function directEventData(adminId) {
+    return {
+      name: 'Création directe interdite',
+      slug: `direct-${adminId}`,
+      adminId,
+      status: 'draft',
+      visibility: 'private',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+  }
+
+  it('denies a global user creating an Event directly', async () => {
+    const userDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+
+    await assertFails(setDoc(
+      doc(userDb, 'events', 'direct-user-event'),
+      directEventData(ADMIN_UID)
+    ))
+  })
+
+  it('denies the global owner creating an Event directly', async () => {
+    const ownerDb = testEnv.authenticatedContext(OWNER_UID).firestore()
+
+    await assertFails(setDoc(
+      doc(ownerDb, 'events', 'direct-owner-event'),
+      directEventData(OWNER_UID)
+    ))
+  })
+})

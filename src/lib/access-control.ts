@@ -15,7 +15,7 @@ export function canManageEvent(globalRole: UserRole | null, eventRole?: EventRol
 }
 
 export function canCreateEvent(globalRole: UserRole | null): boolean {
-  return canAccessPlatformAdmin(globalRole)
+  return globalRole === 'user' || globalRole === 'owner'
 }
 
 export function canAccessMyEvents({
@@ -23,5 +23,9 @@ export function canAccessMyEvents({
   eventRole,
   hasEventMembership = false,
 }: MyEventsAccessInput): boolean {
-  return canAccessPlatformAdmin(globalRole) || eventRole === 'admin' || eventRole === 'editor' || hasEventMembership
+  return globalRole === 'user' ||
+    canAccessPlatformAdmin(globalRole) ||
+    eventRole === 'admin' ||
+    eventRole === 'editor' ||
+    hasEventMembership
 }

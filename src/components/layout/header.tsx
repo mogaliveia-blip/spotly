@@ -19,7 +19,7 @@ import { auth } from '@/lib/firebase';
 import { useEffect, useState } from 'react';
 
 export function Header() {
-  const { user, role: globalRole } = useAuth();
+  const { user, firebaseUser, role: globalRole } = useAuth();
   const { userRole } = useEvent();
   const pathname = usePathname();
   const params = useParams();
@@ -51,7 +51,7 @@ export function Header() {
   }, [user, globalRole]);
 
   const canManageCurrentEvent = canManageEvent(globalRole, userRole);
-  const showMyEvents = !!user && canAccessMyEvents({
+  const showMyEvents = !!user && !firebaseUser?.isAnonymous && canAccessMyEvents({
     globalRole,
     eventRole: userRole,
     hasEventMembership,

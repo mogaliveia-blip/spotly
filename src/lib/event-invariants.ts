@@ -1,6 +1,6 @@
 import type { EventStatus, EventVisibility } from './types'
 
-/** Valeurs du futur flux autonome ; le flux owner actuel n'est pas branché ici. */
+/** Références partagées du flux autonome ; l'autorité finale reste la Function. */
 export const AUTONOMOUS_EVENT_INITIAL_STATUS: EventStatus = 'draft'
 export const AUTONOMOUS_EVENT_INITIAL_VISIBILITY: EventVisibility = 'private'
 
@@ -12,7 +12,7 @@ export function normalizeEventSlug(value: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
-/** Invariant à appliquer par la future Function createEventDraft. */
+/** Invariant applicatif miroir ; createEventDraft revalide toujours côté serveur. */
 export function hasValidRequiredEventDateRange(
   startDate: Date | null | undefined,
   endDate: Date | null | undefined

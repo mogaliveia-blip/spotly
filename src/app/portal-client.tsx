@@ -96,13 +96,13 @@ export default function PortalPage() {
   const [hasEventMembership, setHasEventMembership] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState(ALL_DEPARTMENTS_VALUE);
-  const { user, role: globalRole } = useAuth();
+  const { user, firebaseUser, role: globalRole } = useAuth();
   const eventRequestSeqRef = useRef(0);
   const activeEventsRequestRef = useRef<number | null>(null);
   const latestEventsRef = useRef<AppEvent[]>(publishedEventsMemoryCache?.events ?? []);
 
   const effectiveConfig = config ?? defaultConfig;
-  const showMyEvents = !!user && canAccessMyEvents({ globalRole, hasEventMembership });
+  const showMyEvents = !!user && !firebaseUser?.isAnonymous && canAccessMyEvents({ globalRole, hasEventMembership });
   const showPlatformAdmin = canAccessPlatformAdmin(globalRole);
 
   const departments = useMemo(() => {

@@ -8,6 +8,11 @@ import {
 } from 'firebase-functions/v2/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
+import {
+  CreateEventDraftError,
+  createEventDraftTransaction,
+  deleteEventDocumentAndReservations
+} from './event-drafts';
 
 const app = initializeApp();
 
@@ -37,9 +42,15 @@ type ReviewParams = {
 
 type EventDocumentData = {
   adminId?: unknown;
+  createdBy?: unknown;
+  creationRequestId?: unknown;
   slug?: unknown;
   status?: unknown;
   visibility?: unknown;
+  commercial?: {
+    offerCode?: unknown;
+    state?: unknown;
+  };
   privateAccessTokenHash?: unknown;
   privateAccessVersion?: unknown;
   deletionRequestedBy?: unknown;
@@ -58,6 +69,7 @@ type PrivateLinkDocumentData = {
 
 type EventDeletePermission = {
   eventExists: boolean;
+  eventData?: EventDocumentData;
 };
 
 function hashPrivateAccessToken(eventId: string, token: string): string {
@@ -170,7 +182,28 @@ async function assertEventDeletePermission(eventId: string, uid: string): Promis
     throw new HttpsError('permission-denied', 'EVENT_ADMIN_REQUIRED');
   }
 
-  return { eventExists: true };
+  return { eventExists: true, eventData };
+}
+
+function createEventDraftHttpsError(error: CreateEventDraftError): HttpsError {
+  const codeByReason = {
+    EMAIL_VERIFICATION_REQUIRED: 'failed-precondition',
+    EVENT_CREATE_FORBIDDEN: 'permission-denied',
+    FREE_DRAFT_EXISTS: 'failed-precondition',
+    INVALID_DATES: 'invalid-argument',
+    INVALID_NAME: 'invalid-argument',
+    INVALID_PAYLOAD: 'invalid-argument',
+    INVALID_REQUEST_ID: 'invalid-argument',
+    INVALID_SLUG: 'invalid-argument',
+    INVALID_TIMEZONE: 'invalid-argument',
+    REQUEST_ID_CONFLICT: 'already-exists',
+    SLUG_TAKEN: 'already-exists',
+    USER_PROFILE_REQUIRED: 'failed-precondition'
+  } as const;
+
+  return new HttpsError(codeByReason[error.reason], error.reason, {
+    reason: error.reason
+  });
 }
 
 async function markEventDeletionStarted(eventId: string, uid: string): Promise<void> {
@@ -251,6 +284,45 @@ async function recalculatePoiReviewStats({ eventId, poiId }: ReviewParams): Prom
     }
   });
 }
+
+export const createEventDraft = onCall(
+  privateAccessCallableOptions,
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'UNAUTHENTICATED', {
+        reason: 'UNAUTHENTICATED'
+      });
+    }
+
+    try {
+      return await createEventDraftTransaction(
+        db,
+        {
+          uid,
+          emailVerified: request.auth?.token.email_verified === true,
+          email: typeof request.auth?.token.email === 'string' ? request.auth.token.email : null,
+          displayName: typeof request.auth?.token.name === 'string' ? request.auth.token.name : null,
+          photoURL: typeof request.auth?.token.picture === 'string' ? request.auth.token.picture : null
+        },
+        request.data
+      );
+    } catch (error) {
+      if (error instanceof CreateEventDraftError) {
+        throw createEventDraftHttpsError(error);
+      }
+
+      console.error('[createEventDraft] transaction failed', {
+        uid,
+        errorCode: (error as { code?: unknown })?.code ?? null,
+        errorMessage: (error as { message?: unknown })?.message ?? null
+      });
+      throw new HttpsError('internal', 'EVENT_CREATE_FAILED', {
+        reason: 'EVENT_CREATE_FAILED'
+      });
+    }
+  }
+);
 
 export const rotatePrivateEventToken = onCall(
   privateAccessCallableOptions,
@@ -498,7 +570,7 @@ export const deleteEventCompletely = onCall(
 
       const deletedChildCollectionCount = await deleteEventChildCollections(eventId);
       await deleteEventStoragePrefix(eventId);
-      await db.doc(`events/${eventId}`).delete();
+      await deleteEventDocumentAndReservations(db, eventId, permission.eventData);
 
       return {
         deleted: true,

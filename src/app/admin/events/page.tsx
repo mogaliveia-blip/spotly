@@ -71,7 +71,7 @@ function getValidEventSlug(event: AppEvent): string | null {
 }
 
 export default function MyEventsPage() {
-  const { user, loading: authLoading, role: globalRole } = useAuth();
+  const { user, firebaseUser, loading: authLoading, role: globalRole } = useAuth();
   const { toast } = useToast();
   const [events, setEvents] = useState<AppEventWithRole[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,8 +84,9 @@ export default function MyEventsPage() {
   const [hasEventMembership, setHasEventMembership] = useState(false);
   const [accessLoading, setAccessLoading] = useState(true);
   const isPlatformOwner = canAccessPlatformAdmin(globalRole);
-  const canAccessEvents = canAccessMyEvents({ globalRole, hasEventMembership });
-  const canCreateEvents = canCreateEvent(globalRole);
+  const isAuthenticatedAccount = !!firebaseUser && !firebaseUser.isAnonymous;
+  const canAccessEvents = isAuthenticatedAccount && canAccessMyEvents({ globalRole, hasEventMembership });
+  const canCreateEvents = isAuthenticatedAccount && canCreateEvent(globalRole);
 
   const loadEvents = useCallback(async (isManual = false) => {
     if (!user || !canAccessEvents) return;
@@ -204,7 +205,7 @@ export default function MyEventsPage() {
 
     if (authLoading) return;
 
-    if (!user) {
+    if (!user || firebaseUser?.isAnonymous) {
       setHasEventMembership(false);
       setAccessLoading(false);
       return;
@@ -233,7 +234,7 @@ export default function MyEventsPage() {
     return () => {
       isMounted = false;
     };
-  }, [authLoading, user, isPlatformOwner]);
+  }, [authLoading, user, firebaseUser?.isAnonymous, isPlatformOwner]);
 
   useEffect(() => {
     if (user && canAccessEvents && !accessLoading) {
@@ -330,7 +331,7 @@ export default function MyEventsPage() {
             <CardDescription className="mt-2 max-w-sm">
                {isPlatformOwner
                  ? "Aucun événement n'existe encore sur la plateforme."
-                 : "Vous n'êtes membre d'aucun espace événement."}
+                 : "Vous n'avez encore aucun événement. Créez votre premier brouillon gratuitement."}
             </CardDescription>
             {canCreateEvents && <div className="mt-8">
               <CreateEventDialog onEventCreated={() => loadEvents(true)} />

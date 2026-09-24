@@ -241,7 +241,7 @@ function POISidebarList() {
 }
 
 export function SidebarNav() {
-  const { user, role: globalRole } = useAuth();
+  const { user, firebaseUser, role: globalRole } = useAuth();
   const { userRole } = useEvent();
   const pathname = usePathname();
   const params = useParams();
@@ -250,7 +250,7 @@ export function SidebarNav() {
   const prefix = eventSlug ? `/${eventSlug}` : '';
 
   const canManageCurrentEvent = canManageEvent(globalRole, userRole);
-  const showMyEvents = canAccessMyEvents({ globalRole, eventRole: userRole });
+  const showMyEvents = !firebaseUser?.isAnonymous && canAccessMyEvents({ globalRole, eventRole: userRole });
 
   const navItems = [
     {

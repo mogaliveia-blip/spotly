@@ -10,23 +10,29 @@ describe('access-control', () => {
     assert.equal(canCreateEvent('owner'), true)
   })
 
-  it('allows event admins and editors to access my events', () => {
+  it('allows global users, event admins and editors to access my events', () => {
+    assert.equal(canAccessMyEvents({ globalRole: 'user' }), true)
+    assert.equal(canCreateEvent('user'), true)
     assert.equal(canAccessMyEvents({ globalRole: 'user', eventRole: 'admin' }), true)
     assert.equal(canAccessMyEvents({ globalRole: 'user', eventRole: 'editor' }), true)
     assert.equal(canAccessMyEvents({ globalRole: 'user', hasEventMembership: true }), true)
   })
 
-  it('does not treat account approval as an event management permission', () => {
-    assert.equal(canAccessMyEvents({ globalRole: 'user' }), false)
-    assert.equal(canCreateEvent('user'), false)
+  it('does not grant platform administration to a global user', () => {
+    assert.equal(canAccessPlatformAdmin('user'), false)
+    assert.equal(canAccessMyEvents({ globalRole: 'user' }), true)
+    assert.equal(canCreateEvent('user'), true)
   })
 
-  it('denies simple users without approval or event membership', () => {
-    assert.equal(canAccessMyEvents({ globalRole: 'user' }), false)
+  it('keeps membership-based access compatible when no global role is available', () => {
+    assert.equal(canAccessMyEvents({ globalRole: null, eventRole: 'admin' }), true)
+    assert.equal(canAccessMyEvents({ globalRole: null, eventRole: 'editor' }), true)
+    assert.equal(canAccessMyEvents({ globalRole: null, hasEventMembership: true }), true)
   })
 
   it('denies visitors', () => {
     assert.equal(canAccessPlatformAdmin(null), false)
     assert.equal(canAccessMyEvents({ globalRole: null }), false)
+    assert.equal(canCreateEvent(null), false)
   })
 })

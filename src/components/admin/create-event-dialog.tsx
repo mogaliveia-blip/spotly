@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -23,8 +23,8 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { createEvent } from '@/lib/data';
+import { createEventDraft, CreateEventDraftClientError } from '@/lib/event-drafts';
+import { normalizeEventSlug } from '@/lib/event-invariants';
 import { useAuth } from '@/hooks/use-auth-user';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -32,26 +32,18 @@ import { Loader2, PlusCircle } from 'lucide-react';
 import { canCreateEvent } from '@/lib/access-control';
 
 const formSchema = z.object({
-  name: z.string().min(3, 'Le nom doit faire au moins 3 caractères'),
-  slug: z.string().min(3, 'Le slug doit faire au moins 3 caractères').regex(/^[a-z0-9-]+$/, 'Slug invalide (minuscules, chiffres et tirets uniquement)'),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  name: z.string().min(3, 'Le nom doit faire au moins 3 caractères').max(120, 'Le nom est trop long'),
+  slug: z.string().min(3, 'Le slug doit faire au moins 3 caractères').max(80, 'Le slug est trop long').regex(/^[a-z0-9-]+$/, 'Slug invalide (minuscules, chiffres et tirets uniquement)'),
+  startDate: z.string().min(1, 'Date de début requise'),
+  endDate: z.string().min(1, 'Date de fin requise'),
   timezone: z.string().min(1, 'Fuseau horaire requis'),
   city: z.string().max(80, 'Ville trop longue').optional(),
   departmentName: z.string().max(80, 'Département trop long').optional(),
   region: z.string().max(80, 'Région trop longue').optional(),
   country: z.string().max(80, 'Pays trop long').optional(),
-  visibility: z.enum(['public', 'private']),
 }).refine((data) => {
-  if (!data.startDate || !data.endDate) return true;
   return data.startDate <= data.endDate;
 }, { message: 'La date de fin doit être postérieure à la date de début', path: ['endDate'] });
-
-function parseDateInput(value?: string): Date | undefined {
-  if (!value) return undefined;
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? undefined : date;
-}
 
 function optionalText(value?: string): string | undefined {
   const trimmed = value?.trim();
@@ -65,10 +57,11 @@ interface CreateEventDialogProps {
 export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { user, role: globalRole } = useAuth();
+  const requestIdRef = useRef<string | null>(null);
+  const { user, firebaseUser, role: globalRole } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  const canCreate = canCreateEvent(globalRole);
+  const canCreate = !!firebaseUser && !firebaseUser.isAnonymous && canCreateEvent(globalRole);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -81,45 +74,64 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
       city: '',
       departmentName: '',
       region: '',
-      country: 'France',
-      visibility: 'public'
+      country: 'France'
     },
   });
 
   const onNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     form.setValue('name', val);
-    const slug = val
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+    const slug = normalizeEventSlug(val);
     form.setValue('slug', slug, { shouldValidate: true });
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && !loading) requestIdRef.current = null;
+    setOpen(nextOpen);
   };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!user || !canCreate) return;
+    requestIdRef.current ??= crypto.randomUUID();
     setLoading(true);
     try {
-      const event = await createEvent({
+      await firebaseUser.getIdToken(true);
+      await createEventDraft({
+        requestId: requestIdRef.current,
         name: values.name,
         slug: values.slug,
-        adminId: user.uid,
-        startDate: parseDateInput(values.startDate),
-        endDate: parseDateInput(values.endDate),
+        startDate: values.startDate,
+        endDate: values.endDate,
         timezone: values.timezone,
         city: optionalText(values.city),
         departmentName: optionalText(values.departmentName),
         region: optionalText(values.region),
-        country: optionalText(values.country),
-        visibility: values.visibility,
+        country: optionalText(values.country)
       });
-      toast({ title: 'Événement créé !', description: `L'événement ${event.name} est prêt.` });
+      requestIdRef.current = null;
+      toast({ title: 'Événement créé !', description: `L'événement ${values.name} est prêt en brouillon privé.` });
       setOpen(false);
       if (onEventCreated) onEventCreated();
       router.push(`/admin/events`);
     } catch (error) {
-      toast({ title: 'Erreur', description: 'Impossible de créer l\'événement.', variant: 'destructive' });
+      const reason = error instanceof CreateEventDraftClientError ? error.reason : 'EVENT_CREATE_FAILED';
+      const descriptions: Record<string, string> = {
+        EMAIL_VERIFICATION_REQUIRED: 'Vérifiez votre adresse e-mail avant de créer un événement.',
+        FREE_DRAFT_EXISTS: 'Vous disposez déjà d’un brouillon gratuit actif.',
+        SLUG_TAKEN: 'Cette adresse est déjà utilisée. Choisissez un autre slug.',
+        INVALID_DATES: 'Vérifiez les dates de début et de fin.',
+        UNAUTHENTICATED: 'Votre session a expiré. Reconnectez-vous puis réessayez.',
+        USER_PROFILE_REQUIRED: 'Votre profil utilisateur doit être initialisé avant la création.',
+        EVENT_CREATE_FORBIDDEN: 'Ce compte n’est pas autorisé à créer un événement.',
+        INVALID_NAME: 'Vérifiez le nom de l’événement.',
+        INVALID_SLUG: 'Vérifiez le slug de l’événement.',
+        INVALID_TIMEZONE: 'Vérifiez le fuseau horaire.',
+        INVALID_PAYLOAD: 'Certaines informations du formulaire sont invalides.',
+        INVALID_REQUEST_ID: 'La demande de création est invalide. Fermez puis rouvrez le formulaire.',
+        REQUEST_ID_CONFLICT: 'Cette demande de création est déjà utilisée.',
+        EVENT_CREATE_FAILED: 'Impossible de créer l’événement pour le moment.'
+      };
+      toast({ title: 'Création impossible', description: descriptions[reason], variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -128,7 +140,7 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
   if (!canCreate) return null;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button className="gap-2 rounded-2xl font-bold shadow-sm">
           <PlusCircle className="h-4 w-4" />
@@ -203,30 +215,9 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
                   )}
                 />
               </div>
-              <FormField
-                control={form.control}
-                name="visibility"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Visibilité</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="rounded-xl">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="public">Public</SelectItem>
-                        <SelectItem value="private">Privé</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      Un événement privé ne sera pas visible publiquement. Le lien privé sera ajouté dans une prochaine phase.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <p className="rounded-xl border bg-muted/40 p-3 text-sm text-muted-foreground">
+                Le nouvel événement sera créé comme brouillon privé. Vous pourrez modifier sa visibilité plus tard.
+              </p>
               <FormField
                 control={form.control}
                 name="timezone"

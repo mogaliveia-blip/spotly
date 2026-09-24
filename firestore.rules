@@ -270,6 +270,7 @@ service cloud.firestore {
           .affectedKeys()
           .hasAny([
             "createdBy",
+            "creationRequestId",
             "adminId",
             "commercial",
             "capabilities",
@@ -280,10 +281,6 @@ service cloud.firestore {
             "deletionRequestedBy",
             "deletionRequestedAt"
           ]);
-    }
-
-    function canCreateEvent() {
-      return isOwner();
     }
 
     /* =========================
@@ -308,13 +305,8 @@ service cloud.firestore {
         isEventMember(eventId) ||
         hasPrivateAccessGrant(eventId);
 
-      allow create: if
-        canCreateEvent() &&
-        request.resource.data.adminId == getUserId() &&
-        request.resource.data.status == "draft" &&
-        isValidEventVisibility(request.resource.data.visibility) &&
-        hasValidEventMetadataFields() &&
-        hasValidPoiCategories();
+      // Toute création passe désormais par createEventDraft (Admin SDK).
+      allow create: if false;
 
       allow update: if isEventAdmin(eventId) &&
         isValidEventStatus(request.resource.data.status) &&

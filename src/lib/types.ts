@@ -123,6 +123,8 @@ export interface AppEvent {
   eventCoverUrl?: string
   /** UID historique du créateur. Ce champ n'accorde aucune permission. */
   createdBy?: string
+  /** Clé d'idempotence serveur des Events créés par le flux autonome. */
+  creationRequestId?: string
   /** Autorité héritée conservée jusqu'à la migration vers members comme source. */
   adminId: string
   status: EventStatus
@@ -153,13 +155,13 @@ export interface AppEvent {
   }
 }
 
-/** Futur verrou serveur /freeDraftSlots/{uid}. */
+/** Verrou serveur /freeDraftSlots/{uid}. */
 export interface FreeDraftSlot {
   eventId: string
   reservedAt: Date
 }
 
-/** Future réservation serveur /eventSlugs/{normalizedSlug}. */
+/** Réservation serveur /eventSlugs/{normalizedSlug}. */
 export interface EventSlugReservation {
   eventId: string
   reservedAt: Date

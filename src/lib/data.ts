@@ -34,7 +34,8 @@ import type {
   EventMember,
   EventRole,
   EventMemberWithProfile,
-  POISponsor
+  POISponsor,
+  EventCommercial
 } from './types'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
@@ -55,15 +56,41 @@ export function isPubliclyAccessibleEvent(event: AppEvent | null | undefined): e
   return event?.status === 'published' && event.visibility === 'public';
 }
 
+function dateFromFirestore(value: any): Date | undefined {
+  if (value === undefined || value === null) return undefined;
+  const date = value?.toDate ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function commercialFromFirestore(value: any): EventCommercial | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+
+  const grantedAt = dateFromFirestore(value.grantedAt);
+  if (!grantedAt) return undefined;
+
+  return {
+    offerCode: value.offerCode,
+    offerVersion: value.offerVersion,
+    state: value.state,
+    grantedAt,
+    purchasedAt: dateFromFirestore(value.purchasedAt),
+    coveredFrom: dateFromFirestore(value.coveredFrom),
+    coveredEndDate: dateFromFirestore(value.coveredEndDate),
+    eventStartDateAtPurchase: dateFromFirestore(value.eventStartDateAtPurchase),
+    eventEndDateAtPurchase: dateFromFirestore(value.eventEndDateAtPurchase)
+  } as EventCommercial;
+}
+
 function eventFromDoc(d: { id: string; data: () => any }): AppEvent {
   const data = d.data();
   return {
     id: d.id,
     ...data,
-    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
-    updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
-    startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
-    endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
+    createdAt: dateFromFirestore(data.createdAt) ?? new Date(0),
+    updatedAt: dateFromFirestore(data.updatedAt) ?? new Date(0),
+    startDate: dateFromFirestore(data.startDate),
+    endDate: dateFromFirestore(data.endDate),
+    commercial: commercialFromFirestore(data.commercial)
   } as AppEvent;
 }
 
@@ -184,17 +211,11 @@ export async function fetchUserEvents(uid: string): Promise<(AppEvent & { userRo
       try {
         const eventDoc = await getDoc(doc(db, 'events', id));
         if (!eventDoc.exists()) return null;
-        const d = eventDoc.data();
         const membership = memberships.find(m => m.eventId === id);
 
-        return { 
-          id: eventDoc.id, 
-          ...d, 
-          userRole: membership?.role,
-          createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt),
-          updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate() : new Date(d.updatedAt),
-          startDate: d.startDate?.toDate ? d.startDate.toDate() : (d.startDate ? new Date(d.startDate) : undefined),
-          endDate: d.endDate?.toDate ? d.endDate.toDate() : (d.endDate ? new Date(d.endDate) : undefined)
+        return {
+          ...eventFromDoc(eventDoc),
+          userRole: membership?.role
         } as (AppEvent & { userRole?: EventRole });
       } catch (e) {
         return null;
@@ -219,17 +240,7 @@ export async function fetchAllEvents(): Promise<AppEvent[]> {
   try {
     const snap = await getDocs(collection(db, 'events'));
 
-    return snap.docs.map(d => {
-      const data = d.data();
-      return {
-        id: d.id,
-        ...data,
-        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
-        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
-        startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
-        endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
-      } as AppEvent;
-    });
+    return snap.docs.map(eventFromDoc);
   } catch (error) {
     console.error("[Data] fetchAllEvents failed:", error);
     return [];
@@ -245,17 +256,7 @@ export async function fetchPublishedEvents(): Promise<AppEvent[]> {
     const q = query(eventsRef, where('status', '==', 'published'), where('visibility', '==', 'public'));
     const snap = await getDocsFromServer(q);
     
-    return snap.docs.map(d => {
-      const data = d.data();
-      return {
-        id: d.id,
-        ...data,
-        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
-        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
-        startDate: data.startDate?.toDate ? data.startDate.toDate() : (data.startDate ? new Date(data.startDate) : undefined),
-        endDate: data.endDate?.toDate ? data.endDate.toDate() : (data.endDate ? new Date(data.endDate) : undefined)
-      } as AppEvent;
-    });
+    return snap.docs.map(eventFromDoc);
   } catch (error: any) {
     console.error('[Data] fetchPublishedEvents failed', {
       code: error?.code ?? null,
@@ -346,124 +347,6 @@ export async function fetchPlatformMonitorStats(): Promise<PlatformMonitorStats>
       heroEnabledEvents: marketingConfigs.filter((config) => config.heroEnabled).length
     }
   }
-}
-
-/**
- * Crée un nouvel événement et initialise sa structure de données.
- */
-export async function createEvent(data: {
-  name: string;
-  slug: string;
-  adminId: string;
-  startDate?: Date;
-  endDate?: Date;
-  timezone?: string;
-  city?: string;
-  departmentName?: string;
-  region?: string;
-  country?: string;
-  visibility?: EventVisibility;
-}): Promise<AppEvent> {
-  const eventRef = doc(collection(db, 'events'));
-  const id = eventRef.id;
-
-  // On récupère le profil de l'admin pour la redondance dans members
-  const userDoc = await getDoc(doc(db, 'users', data.adminId));
-  const userData = userDoc.data();
-
-  if (userData?.role !== 'owner') {
-    throw new Error('EVENT_CREATE_FORBIDDEN');
-  }
-
-  const eventData: {
-    name: string;
-    slug: string;
-    adminId: string;
-    status: 'draft';
-    visibility: EventVisibility;
-    startDate?: Date;
-    endDate?: Date;
-    timezone: string;
-    city?: string;
-    departmentName?: string;
-    region?: string;
-    country?: string;
-    createdAt: ReturnType<typeof serverTimestamp>;
-    updatedAt: ReturnType<typeof serverTimestamp>;
-  } = {
-    name: data.name,
-    slug: data.slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
-    adminId: data.adminId,
-    status: 'draft' as const,
-    visibility: data.visibility ?? 'public',
-    timezone: data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris',
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  };
-
-  if (data.startDate) {
-    eventData.startDate = data.startDate;
-  }
-
-  if (data.endDate) {
-    eventData.endDate = data.endDate;
-  }
-
-  const locationFields = {
-    city: data.city?.trim(),
-    departmentName: data.departmentName?.trim(),
-    region: data.region?.trim(),
-    country: data.country?.trim()
-  };
-
-  Object.entries(locationFields).forEach(([key, value]) => {
-    if (value) {
-      eventData[key as keyof typeof locationFields] = value;
-    }
-  });
-
-  try {
-    await setDoc(eventRef, eventData);
-
-    const batch = writeBatch(db);
-    const memberRef = doc(db, `events/${id}/members`, data.adminId);
-    batch.set(memberRef, {
-      uid: data.adminId,
-      role: 'admin',
-      displayName: userData?.displayName || 'Créateur',
-      email: userData?.email || '',
-      photoURL: userData?.photoURL || null,
-      joinedAt: serverTimestamp()
-    });
-
-    batch.set(doc(db, `events/${id}/config`, 'main'), {
-      isLandingPageActive: true,
-      reviewsEnabled: true
-    });
-
-    batch.set(doc(db, `events/${id}/config`, 'marketing'), {
-      heroEnabled: false,
-      heroTitle: `Bienvenue à ${data.name}`,
-      heroSubtitle: "Découvrez l'application officielle du festival.",
-      heroImageUrl: 'https://picsum.photos/seed/festival/1200/800',
-      heroCtaText: '',
-      heroCtaMode: 'none'
-    });
-
-    await batch.commit();
-  } catch (error: any) {
-    console.error('[Data] createEvent failed', {
-      code: error?.code,
-      message: error?.message,
-      eventId: id,
-      eventData,
-      adminId: data.adminId
-    });
-
-    throw error;
-  }
-
-  return { id, ...eventData, createdAt: new Date(), updatedAt: new Date() } as AppEvent;
 }
 
 export async function updateEventDetails(
