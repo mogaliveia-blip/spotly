@@ -40,6 +40,7 @@ import type {
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { isSponsorActive } from './sponsor-utils'
+import { getEventMonitorTiming } from './event-time'
 import {
   ref,
   uploadBytes,
@@ -293,20 +294,6 @@ export interface PlatformMonitorStats {
   }
 }
 
-function isEventOngoing(event: AppEvent, now: Date): boolean {
-  if (!event.startDate) return false
-  const endDate = event.endDate ?? event.startDate
-  return event.startDate <= now && endDate >= now
-}
-
-function isEventUpcoming(event: AppEvent, now: Date): boolean {
-  return !!event.startDate && event.startDate > now
-}
-
-function isEventEnded(event: AppEvent, now: Date): boolean {
-  return !!event.endDate && event.endDate < now
-}
-
 export async function fetchPlatformMonitorStats(): Promise<PlatformMonitorStats> {
   const [users, events] = await Promise.all([
     fetchUsers(),
@@ -333,9 +320,9 @@ export async function fetchPlatformMonitorStats(): Promise<PlatformMonitorStats>
       draft: events.filter((event) => event.status === 'draft').length,
       published: events.filter((event) => event.status === 'published').length,
       paused: events.filter((event) => event.status === 'paused').length,
-      ongoing: events.filter((event) => isEventOngoing(event, now)).length,
-      upcoming: events.filter((event) => isEventUpcoming(event, now)).length,
-      ended: events.filter((event) => isEventEnded(event, now)).length
+      ongoing: events.filter((event) => getEventMonitorTiming(event, now) === 'ongoing').length,
+      upcoming: events.filter((event) => getEventMonitorTiming(event, now) === 'upcoming').length,
+      ended: events.filter((event) => getEventMonitorTiming(event, now) === 'ended').length
     },
     content: {
       totalPois: allPois.length,
@@ -351,7 +338,7 @@ export async function fetchPlatformMonitorStats(): Promise<PlatformMonitorStats>
 
 export async function updateEventDetails(
   eventId: string,
-  data: Partial<Pick<AppEvent, 'name' | 'description' | 'eventCoverUrl' | 'startDate' | 'endDate' | 'timezone' | 'city' | 'departmentCode' | 'departmentName' | 'region' | 'country' | 'visibility' | 'poiCategories'>>
+  data: Partial<Pick<AppEvent, 'name' | 'description' | 'eventCoverUrl' | 'city' | 'departmentCode' | 'departmentName' | 'region' | 'country' | 'visibility' | 'poiCategories'>>
 ): Promise<void> {
   const payload: Record<string, unknown> = {};
 

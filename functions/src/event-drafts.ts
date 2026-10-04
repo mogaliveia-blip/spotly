@@ -1,14 +1,13 @@
 import { Firestore } from 'firebase-admin/firestore';
+import { isCalendarRange, isIanaTimezone } from './event-time';
 
 const COMMERCIAL_OFFER_VERSION = 1;
 const EVENT_NAME_MIN_LENGTH = 3;
 const EVENT_NAME_MAX_LENGTH = 120;
 const EVENT_SLUG_MIN_LENGTH = 3;
 const EVENT_SLUG_MAX_LENGTH = 80;
-const TIMEZONE_MAX_LENGTH = 100;
 const OPTIONAL_LOCATION_MAX_LENGTH = 80;
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const CALENDAR_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 export type CreateEventDraftErrorCode =
   | 'EMAIL_VERIFICATION_REQUIRED'
@@ -36,8 +35,8 @@ export type CreateEventDraftPayload = {
   name: string;
   slug: string;
   timezone: string;
-  startDate: string;
-  endDate: string;
+  startDay: string;
+  endDay: string;
   city?: string;
   departmentName?: string;
   region?: string;
@@ -83,8 +82,6 @@ type ValidatedEventDraftPayload = CreateEventDraftPayload & {
   name: string;
   slug: string;
   timezone: string;
-  startDateValue: Date;
-  endDateValue: Date;
 };
 
 const ALLOWED_PAYLOAD_KEYS = new Set([
@@ -92,8 +89,8 @@ const ALLOWED_PAYLOAD_KEYS = new Set([
   'name',
   'slug',
   'timezone',
-  'startDate',
-  'endDate',
+  'startDay',
+  'endDay',
   'city',
   'departmentName',
   'region',
@@ -117,32 +114,6 @@ function requiredTrimmedString(value: unknown): string {
 function optionalTrimmedString(value: unknown): string | undefined {
   const normalized = requiredTrimmedString(value);
   return normalized || undefined;
-}
-
-/**
- * Convertit une date calendrier en midi UTC. Cet instant conserve le jour avec
- * les lectures ISO existantes et évite l'ambiguïté du minuit local du navigateur.
- */
-export function calendarDateToUtcDate(value: unknown): Date | null {
-  if (typeof value !== 'string') return null;
-
-  const match = CALENDAR_DATE_PATTERN.exec(value);
-  if (!match) return null;
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
-
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) {
-    return null;
-  }
-
-  return date;
 }
 
 function validateOptionalLocation(value: unknown): string | undefined {
@@ -179,20 +150,14 @@ export function validateCreateEventDraftPayload(value: unknown): ValidatedEventD
   }
 
   const timezone = requiredTrimmedString(input.timezone);
-  if (!timezone || timezone.length > TIMEZONE_MAX_LENGTH) {
+  if (!isIanaTimezone(timezone)) {
     throw new CreateEventDraftError('INVALID_TIMEZONE');
   }
 
-  const startDate = requiredTrimmedString(input.startDate);
-  const endDate = requiredTrimmedString(input.endDate);
-  const startDateValue = calendarDateToUtcDate(startDate);
-  const endDateValue = calendarDateToUtcDate(endDate);
+  const startDay = requiredTrimmedString(input.startDay);
+  const endDay = requiredTrimmedString(input.endDay);
 
-  if (
-    !startDateValue ||
-    !endDateValue ||
-    endDateValue.getTime() < startDateValue.getTime()
-  ) {
+  if (!isCalendarRange(startDay, endDay)) {
     throw new CreateEventDraftError('INVALID_DATES');
   }
 
@@ -201,10 +166,8 @@ export function validateCreateEventDraftPayload(value: unknown): ValidatedEventD
     name,
     slug,
     timezone,
-    startDate,
-    endDate,
-    startDateValue,
-    endDateValue,
+    startDay,
+    endDay,
     city: validateOptionalLocation(input.city),
     departmentName: validateOptionalLocation(input.departmentName),
     region: validateOptionalLocation(input.region),
@@ -317,8 +280,9 @@ export async function createEventDraftTransaction(
       status: 'draft',
       visibility: 'private',
       timezone: payload.timezone,
-      startDate: payload.startDateValue,
-      endDate: payload.endDateValue,
+      timePrecision: 'date',
+      startDay: payload.startDay,
+      endDay: payload.endDay,
       ...(payload.city ? { city: payload.city } : {}),
       ...(payload.departmentName ? { departmentName: payload.departmentName } : {}),
       ...(payload.region ? { region: payload.region } : {}),

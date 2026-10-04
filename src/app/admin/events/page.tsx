@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/use-auth-user';
 import { fetchAllEvents, fetchUserEvents, updateEventStatus, updateEventVisibility } from '@/lib/data';
 import { deleteEventCompletely } from '@/lib/event-deletion';
 import type { AppEvent, EventRole, EventStatus, EventVisibility } from '@/lib/types';
+import { formatEventDateRange } from '@/lib/event-time';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -54,15 +55,6 @@ function getVisibilityLabel(visibility: EventVisibility): string {
 function getVisibilityAction(visibility: EventVisibility): { label: string; nextVisibility: EventVisibility } {
   if (visibility === 'private') return { label: 'Rendre public', nextVisibility: 'public' };
   return { label: 'Rendre privé', nextVisibility: 'private' };
-}
-
-function formatEventDateRange(event: AppEvent): string {
-  if (!event.startDate && !event.endDate) return 'Dates à définir';
-
-  return [event.startDate, event.endDate]
-    .filter(Boolean)
-    .map((date) => date!.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }))
-    .join(' - ');
 }
 
 function getValidEventSlug(event: AppEvent): string | null {

@@ -54,20 +54,10 @@ import { Textarea } from '@/components/ui/textarea';
 import Image from 'next/image';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEvent } from '@/providers/event-provider';
+import { EventCalendarTimeForm } from '@/components/admin/event-calendar-time-form';
 
 const EVENT_DESCRIPTION_MAX_LENGTH = 400;
 const EVENT_COVER_STORAGE_PATH = (eventId: string) => `events/${eventId}/event-cover/cover.jpg`;
-
-function toDateInputValue(value?: Date): string {
-  if (!value) return '';
-  return value.toISOString().slice(0, 10);
-}
-
-function parseDateInputValue(value: string): Date | undefined {
-  if (!value) return undefined;
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? undefined : date;
-}
 
 function optionalText(value: string): string | undefined {
   const trimmed = value.trim();
@@ -83,9 +73,6 @@ function EventDetailsCard() {
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
   const [coverMarkedForDeletion, setCoverMarkedForDeletion] = useState(false);
-  const [startDate, setStartDate] = useState(toDateInputValue(event?.startDate));
-  const [endDate, setEndDate] = useState(toDateInputValue(event?.endDate));
-  const [timezone, setTimezone] = useState(event?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Europe/Paris');
   const [city, setCity] = useState(event?.city ?? '');
   const [departmentName, setDepartmentName] = useState(event?.departmentName ?? '');
   const [region, setRegion] = useState(event?.region ?? '');
@@ -99,9 +86,6 @@ function EventDetailsCard() {
     setEventCoverUrl(event?.eventCoverUrl ?? '');
     setCoverImageFile(null);
     setCoverMarkedForDeletion(false);
-    setStartDate(toDateInputValue(event?.startDate));
-    setEndDate(toDateInputValue(event?.endDate));
-    setTimezone(event?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Europe/Paris');
     setCity(event?.city ?? '');
     setDepartmentName(event?.departmentName ?? '');
     setRegion(event?.region ?? '');
@@ -122,15 +106,6 @@ function EventDetailsCard() {
 
   const handleSave = async () => {
     if (!event) return;
-
-    if (startDate && endDate && startDate > endDate) {
-      toast({
-        title: 'Dates invalides',
-        description: 'La date de fin doit être postérieure à la date de début.',
-        variant: 'destructive'
-      });
-      return;
-    }
 
     const locationValues = [city, departmentName, region, country];
     if (locationValues.some((value) => value.trim().length > 80)) {
@@ -171,9 +146,6 @@ function EventDetailsCard() {
         name: name.trim(),
         description: trimmedDescription || undefined,
         eventCoverUrl: nextEventCoverUrl,
-        startDate: parseDateInputValue(startDate),
-        endDate: parseDateInputValue(endDate),
-        timezone: timezone.trim() || 'Europe/Paris',
         city: optionalText(city),
         departmentName: optionalText(departmentName),
         region: optionalText(region),
@@ -273,20 +245,7 @@ function EventDetailsCard() {
           )}
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="event-start-date">Date de début</Label>
-          <Input id="event-start-date" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="rounded-xl" />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="event-end-date">Date de fin</Label>
-          <Input id="event-end-date" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="rounded-xl" />
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="event-timezone">Fuseau horaire</Label>
-        <Input id="event-timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} className="rounded-xl" />
-      </div>
+      {event && <EventCalendarTimeForm event={event} />}
       <div className="space-y-2">
         <Label htmlFor="event-visibility">Visibilité</Label>
         <Select value={visibility} onValueChange={(value) => setVisibility(value as EventVisibility)}>
@@ -322,7 +281,7 @@ function EventDetailsCard() {
       </div>
       <Button onClick={handleSave} disabled={saving || !name.trim()} className="w-full sm:w-auto font-bold rounded-xl h-11">
         {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Sauvegarder
+        Enregistrer les informations
       </Button>
     </div>
   );

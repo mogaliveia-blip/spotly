@@ -11,16 +11,3 @@ export function normalizeEventSlug(value: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 }
-
-/** Invariant applicatif miroir ; createEventDraft revalide toujours côté serveur. */
-export function hasValidRequiredEventDateRange(
-  startDate: Date | null | undefined,
-  endDate: Date | null | undefined
-): boolean {
-  if (!startDate || !endDate) return false
-
-  const startTime = startDate.getTime()
-  const endTime = endDate.getTime()
-
-  return Number.isFinite(startTime) && Number.isFinite(endTime) && endTime >= startTime
-}

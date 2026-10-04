@@ -204,6 +204,41 @@ service cloud.firestore {
       return visibility == "public" || visibility == "private";
     }
 
+    // IANA timezone and real Gregorian dates are validated by the dedicated Function.
+    // Unchanged historical fields remain administrable; even owner clients cannot bypass validation.
+    function doesNotEditEventTimeFields() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        "timePrecision", "startDay", "endDay", "startDate", "endDate", "timezone"
+      ]);
+    }
+
+    function hasValidEventTimeShape() {
+      return !("timePrecision" in request.resource.data) ||
+        (
+          request.resource.data.timezone is string &&
+          request.resource.data.timezone.size() > 0 &&
+          request.resource.data.timezone.size() <= 100 &&
+          (
+            (
+              request.resource.data.timePrecision == "date" &&
+              request.resource.data.startDay is string &&
+              request.resource.data.endDay is string &&
+              request.resource.data.startDay.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$") &&
+              request.resource.data.endDay.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$") &&
+              request.resource.data.startDay <= request.resource.data.endDay &&
+              !("startDate" in request.resource.data) && !("endDate" in request.resource.data)
+            ) ||
+            (
+              request.resource.data.timePrecision == "datetime" &&
+              request.resource.data.startDate is timestamp &&
+              request.resource.data.endDate is timestamp &&
+              request.resource.data.startDate <= request.resource.data.endDate &&
+              !("startDay" in request.resource.data) && !("endDay" in request.resource.data)
+            )
+          )
+        );
+    }
+
     function hasValidPoiGalleryLimit() {
       return !("galleryUrls" in request.resource.data) ||
         (
@@ -309,6 +344,8 @@ service cloud.firestore {
       allow create: if false;
 
       allow update: if isEventAdmin(eventId) &&
+        doesNotEditEventTimeFields() &&
+        hasValidEventTimeShape() &&
         isValidEventStatus(request.resource.data.status) &&
         isValidEventVisibility(request.resource.data.visibility) &&
         doesNotEditPrivateAccessFields() &&

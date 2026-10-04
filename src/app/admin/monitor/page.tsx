@@ -203,7 +203,7 @@ export default function MonitorPage() {
                 <CardDescription>Lecture des dates renseignées sur les événements.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <MetricRow label="En cours" value={stats.events.ongoing} />
+                <MetricRow label="En cours (période renseignée)" value={stats.events.ongoing} />
                 <MetricRow label="À venir" value={stats.events.upcoming} />
                 <MetricRow label="Terminés" value={stats.events.ended} />
               </CardContent>

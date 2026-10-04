@@ -25,7 +25,9 @@ callable `createEventDraft` crée chaque nouvel Event autonome avec :
 - `adminId` conservé provisoirement pour compatibilité ;
 - un membre `members/{uid}` de rôle `admin` ;
 - `status = draft` et `visibility = private` ;
-- `startDate` et `endDate` obligatoires, avec `endDate >= startDate` ;
+- depuis Discovery V1-A, une période calendrier `timePrecision = date`, avec
+  `startDay` et `endDay` obligatoires, inclusifs et `endDay >= startDay`, et un
+  `timezone` IANA valide ;
 - un `commercial` actif, versionné ;
 - des `capabilities` explicites ou sémantiquement désactivées par défaut ;
 - un `creationRequestId` UUID v4 servant également d'identifiant Event ;
@@ -45,10 +47,11 @@ Le flux effectif est :
 Auth et payload → transaction Firestore → Event + membership admin + configs +
 réservation slug + éventuel free draft slot.
 
-Le client n'envoie que `requestId`, `name`, `slug`, `timezone`, `startDate`,
-`endDate` et les champs de localisation facultatifs. Le serveur impose
+Le client n'envoie que `requestId`, `name`, `slug`, `timezone`, `startDay`,
+`endDay` et les champs de localisation facultatifs. Le serveur impose
 `createdBy`, `adminId`, `status = draft`, `visibility = private`, le membership
-`admin`, `commercial`, les timestamps et `partnershipEnabled = false`.
+`admin`, `commercial`, les timestamps de traçabilité, `timePrecision = date`
+et `partnershipEnabled = false`.
 
 Pour un rôle global `user`, le token Auth doit porter
 `email_verified === true`. `isApproved` n'intervient pas. Le global owner dispose
@@ -110,17 +113,30 @@ par la création POI dans ce Sprint.
 
 ## Dates
 
-Le modèle actuel `Date` côté application / `Timestamp` dans Firestore reste en
-place. Les périodes métier (`event.startDate`, `event.endDate`) et commerciale
+Discovery V1-A distingue deux modes temporels exclusifs, avec un `timezone`
+IANA valide :
+
+- calendrier : `timePrecision: 'date'`, `startDay` et `endDay` au format
+  `YYYY-MM-DD`, jours inclusifs avec `startDay <= endDay`, sans `startDate/endDate` ;
+- horaire précis : `timePrecision: 'datetime'`, `startDate` et `endDate`
+  comme instants exacts (`Timestamp` Firestore / `Date` application), avec
+  `startDate <= endDate`, sans `startDay/endDay`.
+
+Les périodes métier de l'Event et commerciale
 (`commercial.coveredFrom`, `commercial.coveredEndDate`) sont indépendantes. Une
-modification de `event.endDate` ne doit jamais prolonger automatiquement la
+modification de la fin métier (`endDay` ou `endDate`) ne doit jamais prolonger automatiquement la
 couverture payée. Aucune tolérance de report arbitraire n'est encodée au Sprint 1.
 
-Le nouveau payload autonome transmet les dates sous forme stricte `YYYY-MM-DD`.
-La Function vérifie la date calendrier réelle et `endDate >= startDate`, puis la
-convertit en un instant stable à midi UTC avant écriture. Firestore stocke cet
-instant comme Timestamp. Les anciennes conversions et les Events existants ne
-sont pas migrés. Les timestamps imbriqués présents dans `commercial` sont
+La création actuelle transmet `startDay/endDay` sous forme stricte `YYYY-MM-DD`.
+La Function vérifie les jours réels, leur ordre et le fuseau, puis enregistre
+directement les chaînes, sans conversion à minuit ou midi UTC. L'édition
+calendrier utilise le même contrat via `updateEventCalendarTime`. La saisie et
+l'édition des heures précises sont différées ; les instants renseignés sont conservés.
+
+Sans `timePrecision`, un Event reste historique et doit être vérifié manuellement.
+Ses anciens Timestamps ne permettent pas d'inférer des heures précises ni une
+compatibilité avec « Maintenant ». Aucune migration automatique n'est introduite.
+Les timestamps imbriqués présents dans `commercial` sont
 reconvertis en `Date` par la couche de lecture applicative.
 
 ## Démonstrations et activation future

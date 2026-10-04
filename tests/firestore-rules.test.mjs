@@ -7,7 +7,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
+import { deleteField, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 
 const PROJECT_ID = 'un-instant-ici-rules-test'
 const EVENT_ID = 'event-sensitive-fields'
@@ -76,8 +76,8 @@ describe('Event protected fields', () => {
     await assertSucceeds(updateDoc(eventRefFor(ADMIN_UID), { name: 'Nouveau nom' }))
   })
 
-  it('allows an Event admin to update endDate', async () => {
-    await assertSucceeds(updateDoc(eventRefFor(ADMIN_UID), {
+  it('requires server validation even for historical temporal fields', async () => {
+    await assertFails(updateDoc(eventRefFor(ADMIN_UID), {
       endDate: new Date('2026-09-20T00:00:00.000Z'),
     }))
   })
@@ -128,6 +128,88 @@ describe('Event protected fields', () => {
 
     const snapshot = await assertSucceeds(getDoc(ownerEventRef))
     assert.equal(snapshot.data().capabilities.partnershipEnabled, true)
+  })
+})
+
+describe('Event temporal contract', () => {
+  async function seedTime(time) {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'events', EVENT_ID), {
+        startDate: deleteField(), endDate: deleteField(), ...time,
+      })
+    })
+  }
+
+  const calendarTime = {
+    timePrecision: 'date', startDay: '2026-10-10', endDay: '2026-10-12', timezone: 'Europe/Paris',
+  }
+
+  it('keeps a calendar Event administrable without altering its dates', async () => {
+    await seedTime(calendarTime)
+    await assertSucceeds(updateDoc(eventRefFor(ADMIN_UID), { name: 'Dates conservées' }))
+    const data = (await getDoc(eventRefFor(ADMIN_UID))).data()
+    assert.equal(data.startDay, '2026-10-10')
+    assert.equal(data.endDay, '2026-10-12')
+    assert.equal('startDate' in data, false)
+  })
+
+  it('keeps an exact-time Event administrable without reinterpreting its instants', async () => {
+    await seedTime({
+      timePrecision: 'datetime', timezone: 'America/New_York',
+      startDate: new Date('2026-11-01T05:30:00Z'), endDate: new Date('2026-11-01T06:30:00Z'),
+    })
+    await assertSucceeds(updateDoc(eventRefFor(ADMIN_UID), { description: 'Heures conservées' }))
+    const data = (await getDoc(eventRefFor(ADMIN_UID))).data()
+    assert.equal(data.startDate.toDate().toISOString(), '2026-11-01T05:30:00.000Z')
+    assert.equal(data.endDate.toDate().toISOString(), '2026-11-01T06:30:00.000Z')
+  })
+
+  it('requires the server for all temporal changes, including owner changes and deletions', async () => {
+    await seedTime(calendarTime)
+    for (const uid of [ADMIN_UID, OWNER_UID]) {
+      for (const change of [
+        { timePrecision: 'datetime' }, { timePrecision: deleteField() },
+        { startDay: '2026-10-11' }, { endDay: '2026-10-13' },
+        { timezone: 'America/New_York' }, { startDate: new Date() }, { endDate: new Date() },
+      ]) {
+        await assertFails(updateDoc(eventRefFor(uid), change))
+      }
+    }
+  })
+
+  it('rejects manifestly incoherent explicit modes on ordinary metadata updates', async () => {
+    for (const time of [
+      { ...calendarTime, timePrecision: 'unknown' },
+      { ...calendarTime, startDay: '10/10/2026' },
+      { ...calendarTime, endDay: '2026-10-09' },
+      { ...calendarTime, endDay: deleteField() },
+      { ...calendarTime, startDate: new Date() },
+      { ...calendarTime, timezone: '' },
+    ]) {
+      await seedTime(time)
+      await assertFails(updateDoc(eventRefFor(ADMIN_UID), { name: 'Interdit' }))
+    }
+  })
+})
+
+describe('exact-time Event invariants', () => {
+  it('rejects inverted instants and competing calendar days', async () => {
+    for (const time of [
+      {
+        startDate: new Date('2026-10-10T18:00:00Z'), endDate: new Date('2026-10-10T16:00:00Z'),
+      },
+      {
+        startDate: new Date('2026-10-10T16:00:00Z'), endDate: new Date('2026-10-10T18:00:00Z'),
+        startDay: '2026-10-10', endDay: '2026-10-10',
+      },
+    ]) {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await updateDoc(doc(context.firestore(), 'events', EVENT_ID), {
+          timePrecision: 'datetime', timezone: 'Europe/Paris', ...time,
+        })
+      })
+      await assertFails(updateDoc(eventRefFor(ADMIN_UID), { name: 'Interdit' }))
+    }
   })
 })
 

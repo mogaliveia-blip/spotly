@@ -13,6 +13,7 @@ import {
   createEventDraftTransaction,
   deleteEventDocumentAndReservations
 } from './event-drafts';
+import { updateEventCalendarTimeTransaction } from './event-time-update';
 
 const app = initializeApp();
 
@@ -322,6 +323,11 @@ export const createEventDraft = onCall(
       });
     }
   }
+);
+
+export const updateEventCalendarTime = onCall(
+  privateAccessCallableOptions,
+  async (request) => updateEventCalendarTimeTransaction(db, request.auth?.uid ?? '', request.data)
 );
 
 export const rotatePrivateEventToken = onCall(

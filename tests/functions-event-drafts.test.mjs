@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict'
 import { after, before, beforeEach, describe, it } from 'node:test'
+import { createRequire } from 'node:module'
 
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing'
-import { deleteApp, getApps, initializeApp } from 'firebase-admin/app'
-import { getFirestore } from 'firebase-admin/firestore'
 
 import eventDraftsModule from '../functions/lib/event-drafts.js'
+import eventTimeUpdateModule from '../functions/lib/event-time-update.js'
+
+const { updateEventCalendarTimeTransaction } = eventTimeUpdateModule
+// Use the Functions SDK instance: FieldValue transforms cannot cross two SDK installations.
+const functionsRequire = createRequire(new URL('../functions/package.json', import.meta.url))
+const { deleteApp, getApps, initializeApp } = functionsRequire('firebase-admin/app')
+const { getFirestore } = functionsRequire('firebase-admin/firestore')
 
 const {
   CreateEventDraftError,
@@ -30,8 +36,8 @@ function payload(overrides = {}) {
     name: 'Festival autonome',
     slug: 'Festival Autonome 2026',
     timezone: 'Europe/Paris',
-    startDate: '2026-09-12',
-    endDate: '2026-09-20',
+    startDay: '2026-09-12',
+    endDay: '2026-09-20',
     city: 'Lorient',
     departmentName: 'Morbihan',
     region: 'Bretagne',
@@ -122,8 +128,12 @@ describe('createEventDraftTransaction', () => {
       { offerCode: 'free_draft', offerVersion: 1, state: 'active' }
     )
     assert.equal(event.commercial.grantedAt.toDate() instanceof Date, true)
-    assert.equal(event.startDate.toDate().toISOString(), '2026-09-12T12:00:00.000Z')
-    assert.equal(event.endDate.toDate().toISOString(), '2026-09-20T12:00:00.000Z')
+    assert.equal(event.timePrecision, 'date')
+    assert.equal(event.startDay, '2026-09-12')
+    assert.equal(event.endDay, '2026-09-20')
+    assert.equal(event.timezone, 'Europe/Paris')
+    assert.equal('startDate' in event, false)
+    assert.equal('endDate' in event, false)
     assert.equal(event.capabilities.partnershipEnabled, false)
 
     assert.deepEqual(
@@ -206,18 +216,18 @@ describe('createEventDraftTransaction', () => {
 
   it('rejects missing, inverted and impossible calendar dates', async () => {
     await expectReason(
-      createEventDraftTransaction(db, identity(), payload({ startDate: undefined })),
+      createEventDraftTransaction(db, identity(), payload({ startDay: undefined })),
       'INVALID_DATES'
     )
     await expectReason(
       createEventDraftTransaction(db, identity(), payload({
-        startDate: '2026-09-21',
-        endDate: '2026-09-20',
+        startDay: '2026-09-21',
+        endDay: '2026-09-20',
       })),
       'INVALID_DATES'
     )
     await expectReason(
-      createEventDraftTransaction(db, identity(), payload({ startDate: '2026-02-30' })),
+      createEventDraftTransaction(db, identity(), payload({ startDay: '2026-02-30' })),
       'INVALID_DATES'
     )
   })
@@ -229,6 +239,26 @@ describe('createEventDraftTransaction', () => {
       })),
       'INVALID_PAYLOAD'
     )
+  })
+
+  it('creates a single calendar day in New York without synthetic instants', async () => {
+    await createEventDraftTransaction(db, identity(), payload({
+      startDay: '2026-10-10', endDay: '2026-10-10', timezone: 'America/New_York',
+    }))
+    const event = (await db.doc(`events/${REQUEST_ID_1}`).get()).data()
+    assert.equal(event.startDay, '2026-10-10')
+    assert.equal(event.endDay, '2026-10-10')
+    assert.equal(event.timezone, 'America/New_York')
+    assert.equal('startDate' in event, false)
+    assert.equal('endDate' in event, false)
+  })
+
+  it('rejects invalid timezones and ambiguous old payloads without reserving anything', async () => {
+    await expectReason(createEventDraftTransaction(db, identity(), payload({ timezone: 'Invalid/Zone' })), 'INVALID_TIMEZONE')
+    await expectReason(createEventDraftTransaction(db, identity(), payload({ startDate: '2026-10-10' })), 'INVALID_PAYLOAD')
+    assert.equal((await db.collection('events').get()).size, 0)
+    assert.equal((await db.doc(`freeDraftSlots/${USER_UID}`).get()).exists, false)
+    assert.equal((await db.collection('eventSlugs').get()).size, 0)
   })
 
   it('repairs a stale free draft slot', async () => {
@@ -251,6 +281,92 @@ describe('createEventDraftTransaction', () => {
 
     assert.equal((await db.collection('events').get()).size, 2)
     assert.equal((await db.doc(`freeDraftSlots/${OWNER_UID}`).get()).exists, false)
+  })
+})
+
+describe('updateEventCalendarTimeTransaction', () => {
+  const time = {
+    eventId: REQUEST_ID_1, timePrecision: 'date',
+    startDay: '2026-10-10', endDay: '2026-10-12', timezone: 'Europe/Paris',
+  }
+
+  it('creates, rereads and edits the same days across browser timezones', async () => {
+    await createEventDraftTransaction(db, identity(), payload({
+      startDay: '2026-10-10', endDay: '2026-10-12',
+    }))
+    const previousTimezone = process.env.TZ
+    try {
+      for (const timezone of ['Europe/Paris', 'America/New_York']) {
+        process.env.TZ = timezone
+        const event = (await db.doc(`events/${REQUEST_ID_1}`).get()).data()
+        await updateEventCalendarTimeTransaction(db, USER_UID, {
+          ...time, startDay: event.startDay, endDay: event.endDay, timezone,
+        })
+        const updated = (await db.doc(`events/${REQUEST_ID_1}`).get()).data()
+        assert.equal(updated.startDay, '2026-10-10')
+        assert.equal(updated.endDay, '2026-10-12')
+        assert.equal(updated.timezone, timezone)
+        assert.equal('startDate' in updated, false)
+        assert.equal('endDate' in updated, false)
+      }
+    } finally {
+      if (previousTimezone === undefined) delete process.env.TZ
+      else process.env.TZ = previousTimezone
+    }
+    await updateEventCalendarTimeTransaction(db, USER_UID, { ...time, endDay: time.startDay })
+    assert.equal((await db.doc(`events/${REQUEST_ID_1}`).get()).data().endDay, '2026-10-10')
+  })
+
+  it('corrects legacy dates only explicitly, preserving content, points and commercial data', async () => {
+    const source = {
+      name: 'Historique', adminId: USER_UID, createdBy: 'someone-else',
+      status: 'published', visibility: 'private',
+      startDate: new Date('2026-10-09T18:00:00Z'), endDate: new Date('2026-10-13T00:00:00Z'),
+      timezone: 'Europe/Paris', commercial: { state: 'active', offerCode: 'free_draft' },
+    }
+    await db.doc(`events/${REQUEST_ID_1}`).set(source)
+    const pointRef = db.doc(`events/${REQUEST_ID_1}/pois/existing-point`)
+    await pointRef.set({ title: 'Point conservé', categoryId: 'stage' })
+    const pointBefore = (await pointRef.get()).data()
+    await updateEventCalendarTimeTransaction(db, USER_UID, time)
+    const after = (await db.doc(`events/${REQUEST_ID_1}`).get()).data()
+    for (const key of ['name', 'adminId', 'createdBy', 'status', 'visibility', 'commercial']) {
+      assert.deepEqual(after[key], source[key])
+    }
+    assert.equal(after.timePrecision, 'date')
+    assert.equal(after.startDay, time.startDay)
+    assert.equal('startDate' in after, false)
+    assert.equal('endDate' in after, false)
+    assert.deepEqual((await pointRef.get()).data(), pointBefore)
+  })
+
+  it('honors admin membership and owner authority, but not editors or createdBy', async () => {
+    await db.doc(`events/${REQUEST_ID_1}`).set({ name: 'Test', adminId: 'legacy-admin', createdBy: USER_UID })
+    await assert.rejects(updateEventCalendarTimeTransaction(db, USER_UID, time), { code: 'permission-denied' })
+    await db.doc(`events/${REQUEST_ID_1}/members/${USER_UID}`).set({ role: 'editor' })
+    await assert.rejects(updateEventCalendarTimeTransaction(db, USER_UID, time), { code: 'permission-denied' })
+    await db.doc(`events/${REQUEST_ID_1}/members/${USER_UID}`).set({ role: 'admin' })
+    await updateEventCalendarTimeTransaction(db, USER_UID, time)
+    await updateEventCalendarTimeTransaction(db, OWNER_UID, { ...time, timezone: 'America/New_York' })
+    assert.equal((await db.doc(`events/${REQUEST_ID_1}`).get()).data().timezone, 'America/New_York')
+  })
+
+  it('rejects unauthenticated calls and missing Events', async () => {
+    await assert.rejects(updateEventCalendarTimeTransaction(db, '', time), { code: 'unauthenticated' })
+    await assert.rejects(updateEventCalendarTimeTransaction(db, OWNER_UID, time), { code: 'not-found' })
+  })
+
+  it('rejects invalid or mixed temporal payloads atomically', async () => {
+    await createEventDraftTransaction(db, identity(), payload())
+    const before = (await db.doc(`events/${REQUEST_ID_1}`).get()).data()
+    for (const changes of [
+      { endDay: '2026-10-09' }, { startDay: '2026-02-30' },
+      { timezone: 'Invalid/Zone' }, { timezone: '+02:00' },
+      { startDate: new Date() }, { timePrecision: 'datetime' }, { commercial: {} },
+    ]) {
+      await assert.rejects(updateEventCalendarTimeTransaction(db, USER_UID, { ...time, ...changes }), { code: 'invalid-argument' })
+      assert.deepEqual((await db.doc(`events/${REQUEST_ID_1}`).get()).data(), before)
+    }
   })
 })
 

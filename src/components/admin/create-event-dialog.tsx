@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { createEventDraft, CreateEventDraftClientError } from '@/lib/event-drafts';
 import { normalizeEventSlug } from '@/lib/event-invariants';
+import { isCalendarDay, isIanaTimezone } from '@/lib/event-time';
 import { useAuth } from '@/hooks/use-auth-user';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -34,16 +35,16 @@ import { canCreateEvent } from '@/lib/access-control';
 const formSchema = z.object({
   name: z.string().min(3, 'Le nom doit faire au moins 3 caractères').max(120, 'Le nom est trop long'),
   slug: z.string().min(3, 'Le slug doit faire au moins 3 caractères').max(80, 'Le slug est trop long').regex(/^[a-z0-9-]+$/, 'Slug invalide (minuscules, chiffres et tirets uniquement)'),
-  startDate: z.string().min(1, 'Date de début requise'),
-  endDate: z.string().min(1, 'Date de fin requise'),
-  timezone: z.string().min(1, 'Fuseau horaire requis'),
+  startDay: z.string().refine(isCalendarDay, 'Date de début invalide'),
+  endDay: z.string().refine(isCalendarDay, 'Date de fin invalide'),
+  timezone: z.string().trim().refine(isIanaTimezone, 'Fuseau horaire IANA invalide'),
   city: z.string().max(80, 'Ville trop longue').optional(),
   departmentName: z.string().max(80, 'Département trop long').optional(),
   region: z.string().max(80, 'Région trop longue').optional(),
   country: z.string().max(80, 'Pays trop long').optional(),
 }).refine((data) => {
-  return data.startDate <= data.endDate;
-}, { message: 'La date de fin doit être postérieure à la date de début', path: ['endDate'] });
+  return data.startDay <= data.endDay;
+}, { message: 'La date de fin doit être postérieure à la date de début', path: ['endDay'] });
 
 function optionalText(value?: string): string | undefined {
   const trimmed = value?.trim();
@@ -68,8 +69,8 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
     defaultValues: {
       name: '',
       slug: '',
-      startDate: '',
-      endDate: '',
+      startDay: '',
+      endDay: '',
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris',
       city: '',
       departmentName: '',
@@ -100,8 +101,8 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
         requestId: requestIdRef.current,
         name: values.name,
         slug: values.slug,
-        startDate: values.startDate,
-        endDate: values.endDate,
+        startDay: values.startDay,
+        endDay: values.endDay,
         timezone: values.timezone,
         city: optionalText(values.city),
         departmentName: optionalText(values.departmentName),
@@ -190,7 +191,7 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="startDate"
+                  name="startDay"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Date de début</FormLabel>
@@ -203,7 +204,7 @@ export function CreateEventDialog({ onEventCreated }: CreateEventDialogProps) {
                 />
                 <FormField
                   control={form.control}
-                  name="endDate"
+                  name="endDay"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Date de fin</FormLabel>

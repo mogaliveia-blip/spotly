@@ -1,5 +1,6 @@
 // src/lib/types.ts
 import type { User as FirebaseUser } from 'firebase/auth'
+import type { EventTime } from './event-time'
 
 export type UserRole = 'user' | 'owner'
 
@@ -115,7 +116,7 @@ export interface EventCapabilities {
   partnershipEnabled?: boolean
 }
 
-export interface AppEvent {
+interface AppEventBase {
   id: string
   name: string
   slug: string
@@ -139,9 +140,6 @@ export interface AppEvent {
   privateAccessTokenRevokedAt?: Date
   createdAt: Date
   updatedAt: Date
-  startDate?: Date
-  endDate?: Date
-  timezone?: string
   city?: string
   departmentCode?: string
   departmentName?: string
@@ -154,6 +152,8 @@ export interface AppEvent {
     accentColor?: string
   }
 }
+
+export type AppEvent = AppEventBase & EventTime
 
 /** Verrou serveur /freeDraftSlots/{uid}. */
 export interface FreeDraftSlot {

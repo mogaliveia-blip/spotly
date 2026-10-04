@@ -7,8 +7,8 @@ export type CreateEventDraftPayload = {
   name: string
   slug: string
   timezone: string
-  startDate: string
-  endDate: string
+  startDay: string
+  endDay: string
   city?: string
   departmentName?: string
   region?: string

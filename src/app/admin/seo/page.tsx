@@ -519,7 +519,7 @@ export default function SeoAdminPage() {
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Définir la politique SEO des événements terminés</AlertTitle>
               <AlertDescription className="space-y-2">
-                <p>Le modèle possède bien startDate et endDate, mais ces champs ne déclenchent aucune règle SEO automatique.</p>
+                <p>Le modèle distingue les jours calendaires (startDay/endDay) des instants précis (startDate/endDate), mais ces champs ne déclenchent aucune règle SEO automatique.</p>
                 <p>À arbitrer plus tard : noindex après la fin, période de grâce, archive si le contenu reste utile, suppression, ou redirection seulement lorsqu’elle est réellement pertinente.</p>
               </AlertDescription>
             </Alert>

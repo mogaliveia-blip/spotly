@@ -29,6 +29,23 @@ Chaque document représente un festival ou un espace unique.
 *   `updatedAt` (timestamp) : Dernière mise à jour.
 *   `poiCategories` (array) : Catégories POI configurées pour l'événement. Chaque entrée contient `{ id, label, icon }`.
 
+### Contrat temporel Event — Discovery V1-A
+
+Deux modes exclusifs, avec un `timezone` IANA validé côté serveur :
+
+*   `timePrecision: 'date'` : `startDay` et `endDay` sont des chaînes `YYYY-MM-DD`, jours calendaires inclusifs, avec `startDay <= endDay`. Aucun `startDate` ou `endDate` n'est stocké.
+*   `timePrecision: 'datetime'` : `startDate` et `endDate` sont des Firestore Timestamps représentant des instants, avec `startDate <= endDate`. Aucun `startDay` ou `endDay` n'est stocké. L'application les lit en `Date` et les affiche dans le fuseau du contenu.
+
+La création et l'édition actuelles saisissent uniquement des jours. L'édition de la période passe par `updateEventCalendarTime` (admin Event, `adminId` historique ou owner) ; les autres informations gardent leur parcours existant. Les règles interdisent les changements temporels directs côté client, y compris pour l'owner. La validation réelle du calendrier et du fuseau appartient aux mutations serveur ; les règles vérifient également la forme du document.
+
+Les instants précis sont reconnus et conservés, mais leur saisie/édition locale est différée. Aucun Timestamp historique ne prouve une précision horaire.
+
+Sans `timePrecision`, un Event reste administrable mais apparaît avec « Dates à vérifier ». Il ne participe pas aux filtres temporels tant que sa période n'a pas été confirmée. Pour les quelques Events de démonstration : vérifier manuellement les jours et le fuseau, puis utiliser « Enregistrer la période ». Cette action retire uniquement les anciens champs temporels et ne touche ni aux Points, ni aux memberships, ni aux droits commerciaux. Aucune migration automatique n'est prévue.
+
+Les helpers communs (`functions/src/event-time.ts`, réexportés dans `src/lib/event-time.ts`) préparent : Aujourd'hui et Date choisie par chevauchement de jours dans le fuseau du contenu ; Ce week-end = samedi/dimanche à venir en semaine, en cours le samedi/dimanche ; Maintenant = uniquement un mode `datetime` valide avec `startDate <= now <= endDate`. Un Event à la journée n'est jamais implicitement « en cours maintenant ».
+
+Lors d'une mise en service ultérieure, coordonner les Functions, les règles et le client : le nouveau payload de création utilise `startDay`/`endDay`, et l'édition exige la nouvelle Function. Aucun déploiement n'est réalisé par ce sprint.
+
 ### Sous-collection : Membres
 **Chemin :** `/events/{eventId}/members/{userId}`  
 Définit qui peut gérer cet événement spécifique.

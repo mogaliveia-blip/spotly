@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/use-auth-user';
 import { Button } from '@/components/ui/button';
 import { fetchAppConfig, DEFAULT_EVENT_ID, fetchPublishedEvents, fetchUserEvents } from '@/lib/data';
 import type { AppConfig, AppEvent } from '@/lib/types';
+import { formatEventDateRange, getEventCalendarRange, getEventTiming } from '@/lib/event-time';
 import { Mountain, ArrowRight, Calendar, Search, MapPin, X } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -62,29 +63,10 @@ function getEventDepartmentFilterValue(event: AppEvent): string | null {
   return event.departmentCode?.trim() || event.departmentName?.trim() || null;
 }
 
-function startOfToday(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
-
-function endOfToday(): Date {
-  const start = startOfToday();
-  return new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
-}
-
-function getEventTiming(event: AppEvent): 'ongoing' | 'upcoming' | 'past' {
-  const todayStart = startOfToday();
-  const todayEnd = endOfToday();
-
-  if (event.endDate && event.endDate < todayStart) return 'past';
-  if (event.startDate && event.startDate > todayEnd) return 'upcoming';
-  return 'ongoing';
-}
-
 function compareEventsByDate(a: AppEvent, b: AppEvent): number {
-  const aTime = a.startDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
-  const bTime = b.startDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
-  return aTime - bTime || a.name.localeCompare(b.name, 'fr');
+  const aDay = getEventCalendarRange(a)?.startDay ?? '9999-12-31';
+  const bDay = getEventCalendarRange(b)?.startDay ?? '9999-12-31';
+  return aDay.localeCompare(bDay) || a.name.localeCompare(b.name, 'fr');
 }
 
 export default function PortalPage() {
@@ -153,16 +135,19 @@ export default function PortalPage() {
     const groups = {
       ongoing: [] as AppEvent[],
       upcoming: [] as AppEvent[],
-      past: [] as AppEvent[]
+      past: [] as AppEvent[],
+      unknown: [] as AppEvent[]
     };
 
+    const now = new Date();
     filteredEvents.forEach((event) => {
-      groups[getEventTiming(event)].push(event);
+      groups[getEventTiming(event, now)].push(event);
     });
 
     groups.ongoing.sort(compareEventsByDate);
     groups.upcoming.sort(compareEventsByDate);
     groups.past.sort((a, b) => compareEventsByDate(b, a));
+    groups.unknown.sort(compareEventsByDate);
 
     return groups;
   }, [filteredEvents]);
@@ -283,10 +268,7 @@ export default function PortalPage() {
   const renderEventCard = (event: AppEvent) => {
     const departmentLabel = getEventDepartmentLabel(event);
     const locationLabel = [event.city, departmentLabel, event.region].filter(Boolean).join(' · ');
-    const dateLabel = [event.startDate, event.endDate]
-      .filter(Boolean)
-      .map((date) => date!.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }))
-      .join(' - ');
+    const dateLabel = formatEventDateRange(event);
 
     return (
       <Link key={event.id} href={`/${event.slug}/dashboard`} className="group">
@@ -631,9 +613,10 @@ export default function PortalPage() {
             ) : events.length > 0 ? (
               filteredEvents.length > 0 ? (
                 <div className="space-y-10">
-                  {renderEventSection('En cours', groupedEvents.ongoing)}
+                  {renderEventSection('Aujourd’hui', groupedEvents.ongoing)}
                   {renderEventSection('À venir', groupedEvents.upcoming)}
                   {renderEventSection('Terminés', groupedEvents.past)}
+                  {renderEventSection('Dates à vérifier', groupedEvents.unknown)}
                 </div>
               ) : (
                 <div className="text-center py-16 bg-muted/20 rounded-[3rem] border-2 border-dashed border-muted">
