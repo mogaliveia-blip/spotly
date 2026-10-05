@@ -1,6 +1,7 @@
 // src/lib/types.ts
 import type { User as FirebaseUser } from 'firebase/auth'
 import type { EventTime } from './event-time'
+import type { EventDiscoverySettings } from './event-discovery'
 
 export type UserRole = 'user' | 'owner'
 
@@ -116,7 +117,7 @@ export interface EventCapabilities {
   partnershipEnabled?: boolean
 }
 
-interface AppEventBase {
+interface AppEventBase extends EventDiscoverySettings {
   id: string
   name: string
   slug: string

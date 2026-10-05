@@ -342,6 +342,14 @@ export async function updateEventDetails(
 ): Promise<void> {
   const payload: Record<string, unknown> = {};
 
+  // Runtime guard as well as the Pick type: broad or stale Event objects cannot
+  // forward server-controlled fields (including deletion sentinels).
+  const allowedFields = ['name', 'description', 'eventCoverUrl', 'city', 'departmentCode',
+    'departmentName', 'region', 'country', 'visibility', 'poiCategories'];
+  if (Object.keys(data).some((key) => !allowedFields.includes(key))) {
+    throw new Error('Unsupported Event detail field');
+  }
+
   Object.entries(data).forEach(([key, value]) => {
     payload[key] = value === undefined ? deleteField() : value;
   });

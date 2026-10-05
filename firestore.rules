@@ -212,6 +212,13 @@ service cloud.firestore {
       ]);
     }
 
+    // Only the dedicated Function validates discovery data, even for owner clients.
+    function doesNotEditEventDiscoveryFields() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        "discoveryPosition", "typeId", "categoryId", "tags"
+      ]);
+    }
+
     function hasValidEventTimeShape() {
       return !("timePrecision" in request.resource.data) ||
         (
@@ -345,6 +352,7 @@ service cloud.firestore {
 
       allow update: if isEventAdmin(eventId) &&
         doesNotEditEventTimeFields() &&
+        doesNotEditEventDiscoveryFields() &&
         hasValidEventTimeShape() &&
         isValidEventStatus(request.resource.data.status) &&
         isValidEventVisibility(request.resource.data.visibility) &&

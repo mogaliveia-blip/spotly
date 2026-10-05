@@ -131,6 +131,60 @@ describe('Event protected fields', () => {
   })
 })
 
+describe('Event discovery authority', () => {
+  const settings = {
+    discoveryPosition: { lat: 48.8566, lng: 2.3522 }, typeId: 'festival', categoryId: 'culture', tags: ['family'],
+  }
+  async function seedDiscovery() {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'events', EVENT_ID), settings)
+    })
+  }
+
+  for (const uid of [ADMIN_UID, OWNER_UID]) {
+    it(`denies ${uid} adding, changing, deleting or replacing discovery fields directly`, async () => {
+      for (const [key, value] of Object.entries(settings)) {
+        await assertFails(updateDoc(eventRefFor(uid), { [key]: value }))
+      }
+      await seedDiscovery()
+      for (const change of [
+        { discoveryPosition: { lat: 0, lng: 0 } }, { 'discoveryPosition.lat': 0 },
+        { typeId: 'concert' }, { categoryId: 'music' }, { tags: ['free'] },
+        ...Object.keys(settings).map((key) => ({ [key]: deleteField() })),
+      ]) await assertFails(updateDoc(eventRefFor(uid), change))
+      const existing = (await getDoc(eventRefFor(uid))).data()
+      const { discoveryPosition, typeId, categoryId, tags, ...withoutDiscovery } = existing
+      await assertFails(setDoc(eventRefFor(uid), { ...withoutDiscovery, name: 'Remplacement involontaire' }))
+    })
+
+    it(`preserves discovery during allowed ${uid} metadata edits and unchanged document replacement`, async () => {
+      await seedDiscovery()
+      await assertSucceeds(updateDoc(eventRefFor(uid), { name: 'Nouveau nom', description: 'Informations modifiées' }))
+      await assertSucceeds(updateDoc(eventRefFor(uid), { status: 'published', visibility: 'private' }))
+      const existing = (await getDoc(eventRefFor(uid))).data()
+      await assertSucceeds(setDoc(eventRefFor(uid), { ...existing, name: 'Champs conservés' }))
+      const saved = (await getDoc(eventRefFor(uid))).data()
+      for (const [key, value] of Object.entries(settings)) assert.deepEqual(saved[key], value)
+    })
+  }
+
+  it('does not require discovery for historical Events or publication', async () => {
+    await assertSucceeds(updateDoc(eventRefFor(ADMIN_UID), { status: 'published' }))
+    const saved = (await getDoc(eventRefFor(ADMIN_UID))).data()
+    for (const key of Object.keys(settings)) assert.equal(key in saved, false)
+  })
+
+  it('denies editor, non-member and unauthenticated direct discovery writes', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `events/${EVENT_ID}/members`, 'event-editor'), { role: 'editor' })
+      await setDoc(doc(context.firestore(), 'users', 'event-editor'), { role: 'user', isApproved: true })
+      await setDoc(doc(context.firestore(), 'users', 'outsider'), { role: 'user', isApproved: true })
+    })
+    for (const uid of ['event-editor', 'outsider']) await assertFails(updateDoc(eventRefFor(uid), settings))
+    await assertFails(updateDoc(doc(testEnv.unauthenticatedContext().firestore(), 'events', EVENT_ID), settings))
+  })
+})
+
 describe('Event temporal contract', () => {
   async function seedTime(time) {
     await testEnv.withSecurityRulesDisabled(async (context) => {

@@ -55,6 +55,7 @@ import Image from 'next/image';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEvent } from '@/providers/event-provider';
 import { EventCalendarTimeForm } from '@/components/admin/event-calendar-time-form';
+import { EventDiscoveryForm } from '@/components/admin/event-discovery-form';
 
 const EVENT_DESCRIPTION_MAX_LENGTH = 400;
 const EVENT_COVER_STORAGE_PATH = (eventId: string) => `events/${eventId}/event-cover/cover.jpg`;
@@ -1513,6 +1514,16 @@ export default function AdminPage() {
               <AppConfigCard />
             </CardContent>
           </Card>
+
+          {event && <Card className="rounded-[2rem] border-muted/60 shadow-sm overflow-hidden lg:col-span-2">
+            <CardHeader className="bg-primary/5">
+              <CardTitle>Découverte</CardTitle>
+              <CardDescription>Préparez la position, le type et la classification de l’événement pour la future Carte Découverte.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <EventDiscoveryForm event={event} />
+            </CardContent>
+          </Card>}
 
           <Card className="rounded-[2rem] border-muted/60 shadow-sm overflow-hidden lg:col-span-2">
             <CardHeader className="bg-primary/5">

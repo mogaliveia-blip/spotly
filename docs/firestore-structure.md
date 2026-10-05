@@ -46,6 +46,33 @@ Les helpers communs (`functions/src/event-time.ts`, réexportés dans `src/lib/e
 
 Lors d'une mise en service ultérieure, coordonner les Functions, les règles et le client : le nouveau payload de création utilise `startDay`/`endDay`, et l'édition exige la nouvelle Function. Aucun déploiement n'est réalisé par ce sprint.
 
+### Paramètres de découverte Event — Discovery V1-B
+
+```ts
+discoveryPosition?: { lat: number; lng: number }
+typeId?: string
+categoryId?: string
+tags?: string[]
+```
+
+Ces champs optionnels appartiennent au document Event. Les Events historiques restent valides sans eux, sans migration ni nouvelle condition de publication. La création reste un brouillon simple ; l’enrichissement se fait dans la section « Découverte » de l’administration.
+
+`defaultMapCenter ≠ discoveryPosition` : le premier cadre la Carte Event ; le second est un choix explicite de l’administrateur pour représenter l’Event par un marqueur unique sur la future Carte Découverte. Le cadrage initial de l’éditeur peut utiliser `defaultMapCenter`, mais ne l’enregistre jamais comme position. Aucun Point, ville ou GPS ne détermine automatiquement cette position. Le serveur exige deux nombres finis : latitude entre -90 et 90 et longitude entre -180 et 180.
+
+La classification Event est indépendante des catégories des Points (`poiCategories` et `pois/{pointId}.categoryId`). Le catalogue central partagé (`functions/src/event-discovery.ts`, réexporté dans `src/lib/event-discovery.ts`) utilise des identifiants stables indépendants des libellés :
+
+* Types Event : `festival` (Festival), `concert` (Concert), `market` (Marché), `trail` (Trail), `other` (Autre).
+* Catégories : `music` (Musique), `culture` (Culture), `gastronomy` (Gastronomie), `sport` (Sport), `nature` (Nature), `other` (Autre).
+* Tags : `family` (En famille), `outdoor` (Plein air), `free` (Gratuit).
+
+Les identifiants inconnus et le texte libre sont refusés. Les tags sont dédupliqués et stockés dans l’ordre du catalogue, sans signification métier liée à cet ordre. Les types Event sont séparés des futurs types Place ; catégories et tags peuvent être réutilisés.
+
+La callable `updateEventDiscoverySettings` accepte `{ eventId, discoveryPosition?, typeId?, categoryId?, tags? }`. Un champ omis reste inchangé ; `null` supprime explicitement ce champ ; `tags: []` conserve une liste vide. Seuls admin Event, `adminId` historique et owner sont autorisés, selon le modèle existant. `createdBy` n’accorde aucun droit. Autorisation et mise à jour sont transactionnelles. La mutation ne touche que ces quatre champs et `updatedAt`, jamais les Points, avis, photos, memberships, données commerciales, capabilities ou champs temporels V1-A.
+
+Les Rules interdisent toute addition, modification ou suppression directe des quatre champs par le client, y compris l’owner. Les autres modifications Event restent autorisées selon les règles existantes et doivent conserver ces champs. `updateEventDetails` accepte uniquement ses champs métier habituels, avec une garde à l’exécution contre les payloads élargis. Les autres mutations serveur utilisent des mises à jour ciblées qui préservent la découverte.
+
+Ce sprint ne crée ni collection `/places`, ni projection `/discovery_public`, ni Carte Découverte. Le portail n’utilise pas ces champs. La projection et ses conditions d’éligibilité seront traitées dans V1-C. Lors d’une mise en service ultérieure, coordonner Function, Rules et client ; aucun déploiement n’est réalisé ici.
+
 ### Sous-collection : Membres
 **Chemin :** `/events/{eventId}/members/{userId}`  
 Définit qui peut gérer cet événement spécifique.

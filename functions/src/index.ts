@@ -14,6 +14,7 @@ import {
   deleteEventDocumentAndReservations
 } from './event-drafts';
 import { updateEventCalendarTimeTransaction } from './event-time-update';
+import { updateEventDiscoverySettingsTransaction } from './event-discovery-update';
 
 const app = initializeApp();
 
@@ -328,6 +329,11 @@ export const createEventDraft = onCall(
 export const updateEventCalendarTime = onCall(
   privateAccessCallableOptions,
   async (request) => updateEventCalendarTimeTransaction(db, request.auth?.uid ?? '', request.data)
+);
+
+export const updateEventDiscoverySettings = onCall(
+  privateAccessCallableOptions,
+  async (request) => updateEventDiscoverySettingsTransaction(db, request.auth?.uid ?? '', request.data)
 );
 
 export const rotatePrivateEventToken = onCall(

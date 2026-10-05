@@ -6,8 +6,10 @@ import { initializeTestEnvironment } from '@firebase/rules-unit-testing'
 
 import eventDraftsModule from '../functions/lib/event-drafts.js'
 import eventTimeUpdateModule from '../functions/lib/event-time-update.js'
+import eventDiscoveryUpdateModule from '../functions/lib/event-discovery-update.js'
 
 const { updateEventCalendarTimeTransaction } = eventTimeUpdateModule
+const { updateEventDiscoverySettingsTransaction } = eventDiscoveryUpdateModule
 // Use the Functions SDK instance: FieldValue transforms cannot cross two SDK installations.
 const functionsRequire = createRequire(new URL('../functions/package.json', import.meta.url))
 const { deleteApp, getApps, initializeApp } = functionsRequire('firebase-admin/app')
@@ -367,6 +369,141 @@ describe('updateEventCalendarTimeTransaction', () => {
       await assert.rejects(updateEventCalendarTimeTransaction(db, USER_UID, { ...time, ...changes }), { code: 'invalid-argument' })
       assert.deepEqual((await db.doc(`events/${REQUEST_ID_1}`).get()).data(), before)
     }
+  })
+})
+
+describe('updateEventDiscoverySettingsTransaction', () => {
+  const settings = {
+    eventId: REQUEST_ID_1, discoveryPosition: { lat: 48.8566, lng: 2.3522 },
+    typeId: 'festival', categoryId: 'culture', tags: ['outdoor', 'family', 'family'],
+  }
+  const eventRef = () => db.doc(`events/${REQUEST_ID_1}`)
+  const update = (changes, uid = USER_UID) => updateEventDiscoverySettingsTransaction(db, uid, { eventId: REQUEST_ID_1, ...changes })
+
+  it('accepts and rereads explicit position and classification, normalizing tags without duplicates', async () => {
+    await createEventDraftTransaction(db, identity(), payload())
+    const initial = (await eventRef().get()).data()
+    for (const key of ['discoveryPosition', 'typeId', 'categoryId', 'tags']) assert.equal(key in initial, false)
+    const result = await updateEventDiscoverySettingsTransaction(db, USER_UID, settings)
+    const saved = (await eventRef().get()).data()
+    assert.deepEqual(saved.discoveryPosition, settings.discoveryPosition)
+    assert.equal(saved.typeId, 'festival')
+    assert.equal(saved.categoryId, 'culture')
+    assert.deepEqual(saved.tags, ['family', 'outdoor'])
+    assert.deepEqual(result.tags, saved.tags)
+    await update({ tags: ['outdoor', 'family'] })
+    assert.deepEqual((await eventRef().get()).data().tags, saved.tags)
+    for (const position of [{ lat: -90, lng: -180 }, { lat: 90, lng: 180 }]) {
+      await update({ discoveryPosition: position })
+      assert.deepEqual((await eventRef().get()).data().discoveryPosition, position)
+    }
+  })
+
+  it('rejects invalid coordinates atomically', async () => {
+    await createEventDraftTransaction(db, identity(), payload())
+    const before = (await eventRef().get()).data()
+    for (const position of [
+      { lat: 90.01, lng: 0 }, { lat: -90.01, lng: 0 },
+      { lat: 0, lng: 180.01 }, { lat: 0, lng: -180.01 },
+      { lat: NaN, lng: 0 }, { lat: 0, lng: NaN },
+      { lat: Infinity, lng: 0 }, { lat: 0, lng: -Infinity },
+      { lat: '48.85', lng: 2.35 }, { lat: 0, lng: '2' },
+      {}, { lat: 0 }, { lng: 0 }, [], { lat: 0, lng: 0, altitude: 100 },
+    ]) {
+      await assert.rejects(update({ discoveryPosition: position, typeId: 'concert' }), { code: 'invalid-argument' })
+      assert.deepEqual((await eventRef().get()).data(), before)
+    }
+  })
+
+  it('rejects unknown IDs, non-list tags and fields outside the bounded mutation', async () => {
+    await createEventDraftTransaction(db, identity(), payload())
+    const before = (await eventRef().get()).data()
+    for (const changes of [
+      { typeId: 'unknown' }, { categoryId: 'parking' }, { tags: ['unknown'] },
+      { typeId: '' }, { typeId: 12 }, { categoryId: [] }, { tags: 'family' }, { tags: [null] },
+      { typeId: undefined }, { discoveryPosition: undefined },
+      { commercial: {} }, { poiCategories: [] }, { status: 'published' }, { startDay: '2026-01-01' }, {},
+    ]) {
+      await assert.rejects(update(changes), { code: 'invalid-argument' })
+      assert.deepEqual((await eventRef().get()).data(), before)
+    }
+    for (const raw of [null, [], 'invalid', { ...settings, eventId: '../events' }, { ...settings, eventId: '' }]) {
+      await assert.rejects(updateEventDiscoverySettingsTransaction(db, USER_UID, raw), { code: 'invalid-argument' })
+    }
+  })
+
+  it('explicitly removes fields while preserving omitted settings, allowing empty tags', async () => {
+    await createEventDraftTransaction(db, identity(), payload())
+    await updateEventDiscoverySettingsTransaction(db, USER_UID, settings)
+    await update({ discoveryPosition: null })
+    let saved = (await eventRef().get()).data()
+    assert.equal('discoveryPosition' in saved, false)
+    assert.equal(saved.typeId, 'festival')
+    assert.equal(saved.categoryId, 'culture')
+    assert.deepEqual(saved.tags, ['family', 'outdoor'])
+    await update({ typeId: null, categoryId: null, tags: [] })
+    saved = (await eventRef().get()).data()
+    assert.equal('typeId' in saved, false)
+    assert.equal('categoryId' in saved, false)
+    assert.deepEqual(saved.tags, [])
+    await update({ tags: null, discoveryPosition: null })
+    assert.equal('tags' in (await eventRef().get()).data(), false)
+  })
+
+  it('allows owner, member admin and legacy admin, denying editors, createdBy and non-members', async () => {
+    await eventRef().set({ name: 'Historique', adminId: 'legacy-admin', createdBy: USER_UID })
+    await assert.rejects(update({ typeId: 'concert' }), { code: 'permission-denied' })
+    await db.doc(`events/${REQUEST_ID_1}/members/${USER_UID}`).set({ role: 'editor' })
+    await assert.rejects(update({ typeId: 'concert' }), { code: 'permission-denied' })
+    await assert.rejects(update({ typeId: 'concert' }, 'outsider'), { code: 'permission-denied' })
+    await db.doc(`events/${REQUEST_ID_1}/members/${USER_UID}`).set({ role: 'admin' })
+    await update({ typeId: 'concert' })
+    await update({ categoryId: 'music' }, OWNER_UID)
+    await update({ tags: ['free'] }, 'legacy-admin')
+    const saved = (await eventRef().get()).data()
+    assert.equal(saved.typeId, 'concert')
+    assert.equal(saved.categoryId, 'music')
+    assert.deepEqual(saved.tags, ['free'])
+  })
+
+  it('rejects unauthenticated calls and missing Events', async () => {
+    await assert.rejects(update({ typeId: 'other' }, ''), { code: 'unauthenticated' })
+    await assert.rejects(update({ typeId: 'other' }, OWNER_UID), { code: 'not-found' })
+  })
+
+  it('preserves all other Event fields, temporal V1-A, Points, photos, reviews, config and memberships', async () => {
+    await createEventDraftTransaction(db, identity(), payload())
+    await eventRef().update({
+      status: 'published', visibility: 'public', defaultMapCenter: { lat: 12, lng: 34 },
+      capabilities: { partnershipEnabled: true }, poiCategories: [{ id: 'stage', label: 'Scène', icon: 'Music' }],
+    })
+    const refs = [
+      db.doc(`events/${REQUEST_ID_1}/pois/existing`),
+      db.doc(`events/${REQUEST_ID_1}/pois/existing/reviews/review`),
+      db.doc(`events/${REQUEST_ID_1}/pois_public/existing`),
+      db.doc(`events/${REQUEST_ID_1}/members/${USER_UID}`),
+      db.doc(`events/${REQUEST_ID_1}/config/main`),
+      db.doc(`events/${REQUEST_ID_1}/config/marketing`),
+    ]
+    await refs[0].set({ title: 'Point', categoryId: 'stage', galleryUrls: [{ url: 'photo', path: 'existing.jpg' }], headerPhotoUrl: 'cover' })
+    await refs[1].set({ rating: 5, comment: 'Avis conservé' })
+    await refs[2].set({ title: 'Point', categoryId: 'stage' })
+    const before = (await eventRef().get()).data()
+    const childrenBefore = await Promise.all(refs.map(async (ref) => (await ref.get()).data()))
+    await update({ typeId: 'other', categoryId: 'other' })
+    // Neither the camera nor Points create an implicit discovery position.
+    assert.equal('discoveryPosition' in (await eventRef().get()).data(), false)
+    await updateEventDiscoverySettingsTransaction(db, USER_UID, settings)
+    const after = (await eventRef().get()).data()
+    for (const [key, value] of Object.entries(before)) {
+      if (key !== 'updatedAt') assert.deepEqual(after[key], value, key)
+    }
+    assert.deepEqual(await Promise.all(refs.map(async (ref) => (await ref.get()).data())), childrenBefore)
+    await updateEventCalendarTimeTransaction(db, USER_UID, {
+      eventId: REQUEST_ID_1, timePrecision: 'date', startDay: '2026-10-10', endDay: '2026-10-12', timezone: 'Europe/Paris',
+    })
+    const afterTime = (await eventRef().get()).data()
+    for (const key of ['discoveryPosition', 'typeId', 'categoryId', 'tags']) assert.deepEqual(afterTime[key], after[key])
   })
 })
 
