@@ -31,6 +31,110 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "discovery_public",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "contentType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "geohash",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "windowEndAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "windowStartAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "discovery_public",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "contentType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "categoryId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "geohash",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "windowEndAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "windowStartAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "discovery_public",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "contentType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timePrecision",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "geohash",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "windowEndAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "windowStartAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "discovery_public",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "contentType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "categoryId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timePrecision",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "geohash",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "windowEndAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "windowStartAt",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [

@@ -22,6 +22,9 @@ describe('Event public eligibility and allowlist', () => {
     assert.equal(result.title, 'Festival public')
     assert.equal(result.slug, 'festival-public')
     assert.deepEqual(result.position, { lat: 48.85, lng: 2.35 })
+    assert.equal(result.geohash, 'u09tvkz5yu')
+    assert.equal(result.startDay, '2026-09-12')
+    assert.equal(result.endDay, '2026-09-20')
     assert.equal(result.typeId, 'festival')
     assert.equal(result.categoryId, 'culture')
     assert.equal(result.timePrecision, 'date')
@@ -52,6 +55,11 @@ describe('Event public eligibility and allowlist', () => {
     assert.ok(build({ startDay: '2000-01-01', endDay: '2000-01-02' }))
   })
 
+  it('rebuilds the ten-character index from the explicit position, independently of map framing', () => {
+    const result = build({ discoveryPosition: { lat: 1, lng: 2 }, defaultMapCenter: { lat: 48.85, lng: 2.35 } })!
+    assert.equal(result.geohash, 's01mtw037m')
+  })
+
   it('never leaks private or unexpected fields; tags and image are copied explicitly', () => {
     const result = build({
       adminId: 'secret', createdBy: 'secret', email: 'secret', privateAccess: { secret: true },
@@ -61,7 +69,7 @@ describe('Event public eligibility and allowlist', () => {
     })!
     assert.deepEqual(Object.keys(result).sort(), [
       'contentType', 'sourceId', 'title', 'slug', 'position', 'typeId', 'categoryId', 'tags',
-      'timePrecision', 'timezone', 'windowStartAt', 'windowEndAt', 'thumbnail', 'updatedAt',
+      'geohash', 'startDay', 'endDay', 'timePrecision', 'timezone', 'windowStartAt', 'windowEndAt', 'thumbnail', 'updatedAt',
     ].sort())
     assert.deepEqual(result.tags, ['family', 'free'])
     assert.equal(result.thumbnail, 'https://example.test/cover.jpg')
@@ -108,6 +116,8 @@ describe('Discovery query windows', () => {
     const result = build({ timePrecision: 'datetime', startDay: undefined, endDay: undefined,
       timezone: 'America/New_York', startDate, endDate })!
     assert.equal(result.timePrecision, 'datetime')
+    assert.equal('startDay' in result, false)
+    assert.equal('endDay' in result, false)
     assert.equal(result.windowStartAt.seconds, startDate.seconds)
     assert.equal(result.windowStartAt.nanoseconds, startDate.nanoseconds)
     assert.equal(result.windowEndAt.seconds, endDate.seconds)

@@ -17,6 +17,8 @@ import { updateEventCalendarTimeTransaction } from './event-time-update';
 import { updateEventDiscoverySettingsTransaction } from './event-discovery-update';
 import { updateEventPublicDetailsTransaction, updateEventCommercialTransaction } from './event-public-update';
 import { markEventDeletionStartedTransaction } from './event-deletion';
+import { searchDiscovery as searchDiscoveryPublic } from './discovery-search';
+import { hasReservedDiscoveryKey, isRecord } from './discovery-search-contract';
 
 const app = initializeApp();
 
@@ -281,6 +283,28 @@ async function recalculatePoiReviewStats({ eventId, poiId }: ReviewParams): Prom
     }
   });
 }
+
+/** Anonymous public search; App Check enforcement awaits a configured public client. */
+export const searchDiscovery = onCall(
+  { region, cors: PRIVATE_ACCESS_CORS, timeoutSeconds: 30 },
+  async (request) => {
+    try {
+      // rawRequest.body retains the parsed wire JSON; request.data is a separate decoded tree.
+      const body: unknown = request.rawRequest.body;
+      const rawData = isRecord(body) ? Object.getOwnPropertyDescriptor(body, 'data') : undefined;
+      if (!rawData || !Object.prototype.hasOwnProperty.call(rawData, 'value') || hasReservedDiscoveryKey(rawData.value)) {
+        throw new HttpsError('invalid-argument', 'INVALID_DISCOVERY_REQUEST', { reason: 'INVALID_DISCOVERY_REQUEST' });
+      }
+      return await searchDiscoveryPublic(db, request.data, undefined, (error) => {
+        console.error('[searchDiscovery] range failed', { code: (error as { code?: unknown })?.code ?? null });
+      });
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      console.error('[searchDiscovery] failed', { code: (error as { code?: unknown })?.code ?? null });
+      throw new HttpsError('internal', 'DISCOVERY_SEARCH_FAILED', { reason: 'DISCOVERY_SEARCH_FAILED' });
+    }
+  }
+);
 
 export const createEventDraft = onCall(
   privateAccessCallableOptions,

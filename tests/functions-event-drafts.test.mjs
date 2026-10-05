@@ -607,6 +607,9 @@ describe('Discovery source/projection transactions', () => {
     assert.equal('sensitiveGhost' in projected, false)
     assert.deepEqual(projected.position, { lat: 1, lng: 2 })
     assert.equal(projected.typeId, 'concert')
+    assert.equal(projected.geohash, 's01mtw037m')
+    assert.equal(projected.startDay, '2026-09-12')
+    assert.equal(projected.endDay, '2026-09-20')
     await assertSynchronized()
   })
 
@@ -648,6 +651,8 @@ describe('Discovery source/projection transactions', () => {
     assert.equal(projection.windowEndAt.seconds, Date.parse('2026-11-02T04:59:59Z') / 1000)
     assert.equal(projection.windowEndAt.nanoseconds, 999999000)
     assert.equal(projection.timePrecision, 'date')
+    assert.equal(projection.startDay, '2026-11-01')
+    assert.equal(projection.endDay, '2026-11-01')
     assert.equal(projection.typeId, 'festival')
   })
 
@@ -665,6 +670,9 @@ describe('Discovery source/projection transactions', () => {
     assert.deepEqual(projection.windowStartAt, startDate)
     assert.deepEqual(projection.windowEndAt, endDate)
     assert.equal(projection.timePrecision, 'datetime')
+    assert.equal('startDay' in projection, false)
+    assert.equal('endDay' in projection, false)
+    assert.equal(projection.geohash.length, 10)
   })
 
   it('keeps business subcollections/private fields intact and exposes exactly one allowlisted document', async () => {
@@ -696,7 +704,7 @@ describe('Discovery source/projection transactions', () => {
     assert.equal(documents[0].id, `event_${REQUEST_ID_1}`)
     assert.deepEqual(Object.keys(documents[0].data()).sort(), [
       'contentType', 'sourceId', 'title', 'slug', 'position', 'typeId', 'categoryId', 'tags',
-      'timePrecision', 'timezone', 'windowStartAt', 'windowEndAt', 'updatedAt',
+      'geohash', 'startDay', 'endDay', 'timePrecision', 'timezone', 'windowStartAt', 'windowEndAt', 'updatedAt',
     ].sort())
   })
 

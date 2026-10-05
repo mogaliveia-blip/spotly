@@ -4,6 +4,8 @@ import {
   discoveryCategories, discoveryTags, eventDiscoveryTypes, isCatalogId, isDiscoveryPosition,
 } from './event-discovery';
 import { getEventTimeState } from './event-time';
+import { calendarDaySegments } from './event-calendar-segments';
+import { discoveryGeohash } from './discovery-geo';
 import { isEventName, isEventSlug } from './event-public-identity';
 
 export type EventDiscoveryProjection = {
@@ -12,6 +14,9 @@ export type EventDiscoveryProjection = {
   title: string;
   slug: string;
   position: { lat: number; lng: number };
+  geohash: string;
+  startDay?: string;
+  endDay?: string;
   typeId: string;
   categoryId: string;
   tags?: string[];
@@ -35,73 +40,17 @@ function timestamp(value: unknown): Timestamp | null {
   return null;
 }
 
-/** Bound all occurrences of each civil day, including historical clock reversals across midnight. */
+/** Preserve the V1-C envelope and inclusive last persistable microsecond. */
 function calendarWindow(startDay: string, endDay: string, timezone: string): [Timestamp, Timestamp] | null {
-  const hour = 60 * 60 * 1000;
-  const dayLength = 24 * hour;
-  const formatter = new Intl.DateTimeFormat('en', {
-    timeZone: timezone, calendar: 'gregory', numberingSystem: 'latn',
-    era: 'short', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-  });
-  const offsetAt = (milliseconds: number) => {
-    const parts = formatter.formatToParts(new Date(milliseconds));
-    const part = (type: string) => parts.find((entry) => entry.type === type)!.value;
-    const year = part('era') === 'BC' ? 1 - Number(part('year')) : Number(part('year'));
-    // UTC here is only a coordinate system for civil arithmetic, not an Event instant.
-    const civil = new Date(0);
-    civil.setUTCFullYear(year, Number(part('month')) - 1, Number(part('day')));
-    civil.setUTCHours(Number(part('hour')), Number(part('minute')), Number(part('second')), 0);
-    return civil.getTime() - milliseconds;
-  };
-  const dayBounds = (day: string): [number, number] | null => {
-    const civilStart = new Date(`${day}T00:00:00Z`).getTime();
-    const civilEnd = civilStart + dayLength;
-    // This margin encloses every IANA offset, including historical date-line changes.
-    let segmentStart = civilStart - 2 * dayLength;
-    const limit = civilEnd + 2 * dayLength;
-    let offset = offsetAt(segmentStart);
-    let first = Infinity;
-    let last = -Infinity;
-    const includeSegment = (segmentEnd: number) => {
-      // Civil time advances linearly within a constant-offset segment. Intersect it
-      // with the requested day, then take the hull of all occurrences of that day.
-      const start = Math.max(segmentStart, civilStart - offset);
-      const end = Math.min(segmentEnd, civilEnd - offset);
-      if (start < end) {
-        first = Math.min(first, start);
-        last = Math.max(last, end);
-      }
-    };
-    // Isolate IANA offset transitions with hourly probes. Only the offset transition
-    // is searched within a probe interval; the local calendar date need not be monotone.
-    for (let probe = segmentStart + hour; probe <= limit; probe += hour) {
-      const nextOffset = offsetAt(probe);
-      if (nextOffset === offset) continue;
-      let low = probe - hour;
-      let high = probe;
-      while (high - low > 1000) {
-        const middle = Math.floor((low + high) / 2000) * 1000;
-        if (offsetAt(middle) === offset) low = middle;
-        else high = middle;
-      }
-      includeSegment(high);
-      segmentStart = high;
-      offset = nextOffset;
-    }
-    includeSegment(limit);
-    // A skipped civil day has no interval; never invent a position in time for it.
-    return first < last ? [first, last] : null;
-  };
-  const firstDay = dayBounds(startDay);
-  const lastDay = startDay === endDay ? firstDay : dayBounds(endDay);
-  if (!firstDay || !lastDay || firstDay[0] >= lastDay[1]) return null;
+  const first = calendarDaySegments(startDay, timezone);
+  const last = startDay === endDay ? first : calendarDaySegments(endDay, timezone);
+  if (!first.length || !last.length) return null;
+  const start = first[0].start;
+  const end = last[last.length - 1].endExclusive;
+  if (start >= end) return null;
   try {
-    const finalSecond = Timestamp.fromMillis(lastDay[1] - 1).seconds;
-    // Firestore stores microseconds: use the last persistable instant, without round-trip truncation.
-    return [Timestamp.fromMillis(firstDay[0]), new Timestamp(finalSecond, 999999000)];
-  }
-  catch { return null; }
+    return [Timestamp.fromMillis(start), new Timestamp(Timestamp.fromMillis(end - 1).seconds, 999999000)];
+  } catch { return null; }
 }
 
 /** Single eligibility definition and explicit public allowlist. No current-time test. */
@@ -140,12 +89,17 @@ export function buildEventDiscoveryProjection(
   const projection: EventDiscoveryProjection = {
     contentType: 'event', sourceId: eventId, title: event.name.trim(), slug: event.slug,
     position: { lat: event.discoveryPosition.lat, lng: event.discoveryPosition.lng },
+    geohash: discoveryGeohash(event.discoveryPosition),
     typeId: event.typeId, categoryId: event.categoryId,
     timePrecision: state, timezone: event.timezone as string,
     windowStartAt: window[0], windowEndAt: window[1],
     // Old sources may lack updatedAt; an epoch is deterministic and not an eligibility rule.
     updatedAt: timestamp(event.updatedAt) ?? Timestamp.fromMillis(0),
   };
+  if (state === 'date') {
+    projection.startDay = event.startDay as string;
+    projection.endDay = event.endDay as string;
+  }
   if (event.tags !== undefined) {
     projection.tags = discoveryTags.filter((tag) => (event.tags as string[]).includes(tag.id)).map((tag) => tag.id);
   }

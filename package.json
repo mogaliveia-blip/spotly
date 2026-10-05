@@ -12,7 +12,11 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "node --import tsx --test src/lib/*.test.ts",
     "test:rules": "firebase --config firebase.test.json emulators:exec --only firestore \"node --test tests/firestore-rules.test.mjs\"",
-    "test:functions": "npm --prefix functions run build && firebase --config firebase.test.json emulators:exec --only firestore \"node --test tests/functions-event-drafts.test.mjs\""
+    "test:functions": "npm --prefix functions run build && firebase --config firebase.test.json emulators:exec --only firestore \"node --test tests/functions-event-drafts.test.mjs\"",
+    "test:functions:discovery": "npm --prefix functions run build && firebase --config firebase.test.json --project demo-discovery-d1 emulators:exec --only firestore \"node --test tests/functions-discovery-search.test.mjs\"",
+    "test:callable:discovery": "npm --prefix functions run build && firebase --config firebase.test.json --project demo-discovery-d1 emulators:exec --only firestore,functions \"node --test tests/functions-discovery-callable.test.mjs\"",
+    "test:query-explain:guards": "node --test tests/discovery-query-explain-guards.test.mjs",
+    "test:query-explain:seed": "firebase --config firebase.test.json --project demo-discovery-d1 emulators:exec --only firestore \"node --test tests/discovery-query-explain-seed.test.mjs\""
   },
   "dependencies": {
     "@genkit-ai/google-genai": "^1.20.0",
