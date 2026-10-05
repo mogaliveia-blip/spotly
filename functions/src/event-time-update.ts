@@ -1,4 +1,5 @@
-import { FieldValue, Firestore } from 'firebase-admin/firestore';
+import { FieldValue, Firestore, Timestamp } from 'firebase-admin/firestore';
+import { syncEventDiscoveryProjection } from './event-discovery-projection';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { CalendarEventTime, isCalendarRange, isIanaTimezone } from './event-time';
 
@@ -45,13 +46,18 @@ export async function updateEventCalendarTimeTransaction(
     if (user.data()?.role !== 'owner' && member.data()?.role !== 'admin' && event.data()?.adminId !== uid) {
       throw new HttpsError('permission-denied', 'EVENT_ADMIN_REQUIRED');
     }
+    const updatedAt = Timestamp.now();
+    const nextEvent: Record<string, unknown> = { ...event.data(), ...time, updatedAt };
+    delete nextEvent.startDate;
+    delete nextEvent.endDate;
     transaction.update(eventRef, {
       ...time,
       // Explicit manual correction replaces the old temporal fields, not the Event content.
       startDate: FieldValue.delete(),
       endDate: FieldValue.delete(),
-      updatedAt: FieldValue.serverTimestamp(),
+      updatedAt,
     });
+    syncEventDiscoveryProjection(transaction, firestore, eventId, nextEvent);
     return time;
   });
 }

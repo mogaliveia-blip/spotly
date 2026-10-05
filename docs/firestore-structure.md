@@ -24,7 +24,8 @@ Chaque document représente un festival ou un espace unique.
 *   `name` (string) : Nom de l'événement.
 *   `slug` (string) : Identifiant unique pour l'URL (ex: `sicile-2026`).
 *   `adminId` (string) : UID de l'utilisateur ayant créé l'événement.
-*   `status` (enum) : `'draft' | 'published' | 'archived'`.
+*   `status` (enum) : `'draft' | 'published' | 'paused'`.
+*   `visibility` (enum) : `'private' | 'public'`.
 *   `createdAt` (timestamp) : Date de création.
 *   `updatedAt` (timestamp) : Dernière mise à jour.
 *   `poiCategories` (array) : Catégories POI configurées pour l'événement. Chaque entrée contient `{ id, label, icon }`.
@@ -36,7 +37,7 @@ Deux modes exclusifs, avec un `timezone` IANA validé côté serveur :
 *   `timePrecision: 'date'` : `startDay` et `endDay` sont des chaînes `YYYY-MM-DD`, jours calendaires inclusifs, avec `startDay <= endDay`. Aucun `startDate` ou `endDate` n'est stocké.
 *   `timePrecision: 'datetime'` : `startDate` et `endDate` sont des Firestore Timestamps représentant des instants, avec `startDate <= endDate`. Aucun `startDay` ou `endDay` n'est stocké. L'application les lit en `Date` et les affiche dans le fuseau du contenu.
 
-La création et l'édition actuelles saisissent uniquement des jours. L'édition de la période passe par `updateEventCalendarTime` (admin Event, `adminId` historique ou owner) ; les autres informations gardent leur parcours existant. Les règles interdisent les changements temporels directs côté client, y compris pour l'owner. La validation réelle du calendrier et du fuseau appartient aux mutations serveur ; les règles vérifient également la forme du document.
+La création et l'édition actuelles saisissent uniquement des jours. L'édition de la période passe par `updateEventCalendarTime` (admin Event, `adminId` historique ou owner) ; la même transaction synchronise désormais sa projection Discovery, si elle est éligible. Les règles interdisent les changements temporels directs côté client, y compris pour l'owner. La validation réelle du calendrier et du fuseau appartient aux mutations serveur ; les règles vérifient également la forme du document.
 
 Les instants précis sont reconnus et conservés, mais leur saisie/édition locale est différée. Aucun Timestamp historique ne prouve une précision horaire.
 
@@ -67,11 +68,62 @@ La classification Event est indépendante des catégories des Points (`poiCatego
 
 Les identifiants inconnus et le texte libre sont refusés. Les tags sont dédupliqués et stockés dans l’ordre du catalogue, sans signification métier liée à cet ordre. Les types Event sont séparés des futurs types Place ; catégories et tags peuvent être réutilisés.
 
-La callable `updateEventDiscoverySettings` accepte `{ eventId, discoveryPosition?, typeId?, categoryId?, tags? }`. Un champ omis reste inchangé ; `null` supprime explicitement ce champ ; `tags: []` conserve une liste vide. Seuls admin Event, `adminId` historique et owner sont autorisés, selon le modèle existant. `createdBy` n’accorde aucun droit. Autorisation et mise à jour sont transactionnelles. La mutation ne touche que ces quatre champs et `updatedAt`, jamais les Points, avis, photos, memberships, données commerciales, capabilities ou champs temporels V1-A.
+La callable `updateEventDiscoverySettings` accepte `{ eventId, discoveryPosition?, typeId?, categoryId?, tags? }`. Un champ omis reste inchangé ; `null` supprime explicitement ce champ ; `tags: []` conserve une liste vide. Seuls admin Event, `adminId` historique et owner sont autorisés, selon le modèle existant. `createdBy` n’accorde aucun droit. Autorisation et mise à jour sont transactionnelles. Sur la source Event, la mutation ne touche que ces quatre champs et `updatedAt` ; elle synchronise aussi la projection dans la même transaction. Elle ne modifie jamais les Points, avis, photos, memberships, données commerciales, capabilities ou champs temporels V1-A.
 
-Les Rules interdisent toute addition, modification ou suppression directe des quatre champs par le client, y compris l’owner. Les autres modifications Event restent autorisées selon les règles existantes et doivent conserver ces champs. `updateEventDetails` accepte uniquement ses champs métier habituels, avec une garde à l’exécution contre les payloads élargis. Les autres mutations serveur utilisent des mises à jour ciblées qui préservent la découverte.
+Les Rules interdisent toute addition, modification ou suppression directe des quatre champs par le client, y compris l’owner. Les métadonnées non projetées restent modifiables selon les règles existantes et doivent conserver ces champs. `updateEventDetails` accepte uniquement ses champs métier habituels, avec une garde à l’exécution contre les payloads élargis. Les autres mutations serveur utilisent des mises à jour ciblées qui préservent la découverte.
 
-Ce sprint ne crée ni collection `/places`, ni projection `/discovery_public`, ni Carte Découverte. Le portail n’utilise pas ces champs. La projection et ses conditions d’éligibilité seront traitées dans V1-C. Lors d’une mise en service ultérieure, coordonner Function, Rules et client ; aucun déploiement n’est réalisé ici.
+Le portail n’utilise pas ces champs ; aucune collection métier `/places` ni Carte Découverte n’est créée. Lors d’une mise en service ultérieure, coordonner Functions, Rules et client ; aucun déploiement n’est réalisé ici.
+
+### Projection publique Event — Discovery V1-C
+
+`/events/{eventId}` reste l'unique source métier. `/discovery_public/event_{eventId}` est une projection publique dérivée minimale, sans champ `id`. Le préfixe réserve la possibilité future de `place_{placeId}` sans créer de Places.
+
+Le builder serveur `buildEventDiscoveryProjection(eventId, event)` centralise l'éligibilité :
+
+* `status === 'published'` et `visibility === 'public'` ; aucun nettoyage de suppression en cours.
+* Nom et slug valides selon les invariants de création existants (nom de 3 à 120 caractères, slug normalisé de 3 à 80 caractères).
+* `discoveryPosition` valide et explicite ; `typeId` et `categoryId` connus du catalogue V1-B.
+* Contrat V1-A explicite et valide, avec `timePrecision` et fuseau IANA. Un Event historique sans précision n'est pas projeté.
+* Droit commercial existant `canCommercialPublishPublic(commercial)` : offre `public`, état `active`. La matrice est partagée, sans modification des offres. Un résumé absent, révoqué ou d'une autre offre ne donne aucun droit public Discovery.
+
+Tags et image restent facultatifs ; ni description, ni galerie, ni nombre de Points ne conditionnent l'éligibilité. Les tags présents doivent être contrôlés. Aucune position/classification n'est déduite des Points. Aucune éligibilité ne dépend du temps courant : un Event terminé peut rester projeté, les filtres temporels viendront dans V1-D.
+
+```ts
+{
+  contentType: 'event',
+  sourceId: string,
+  title: string,              // Event.name
+  slug: string,
+  position: { lat: number; lng: number }, // discoveryPosition uniquement
+  typeId: string,
+  categoryId: string,
+  tags?: string[],
+  timePrecision: 'date' | 'datetime',
+  timezone: string,
+  windowStartAt: Timestamp,
+  windowEndAt: Timestamp,
+  thumbnail?: string,         // Event.eventCoverUrl, pas la galerie
+  updatedAt: Timestamp       // dernière synchronisation matérielle de la projection
+}
+```
+
+La projection est construite par allowlist explicite : aucun `adminId`, `createdBy`, e-mail, membre, token, lien privé, commercial, capability, configuration interne, Point, avis, galerie complète ou paiement. Elle se lit sans charger l'Event source.
+
+Pour `datetime`, les bornes sont exactement `startDate`/`endDate`, nanosecondes conservées. Pour `date`, elles représentent le début de `startDay` local et la fin inclusive de `endDay` local (dernière microseconde stockable dans Firestore avant le jour suivant), convertis en UTC dans le fuseau du contenu, avec les changements DST. Un jour local inexistant suite à un changement de fuseau n'a pas de borne inventée et reste non projeté. Ces bornes servent aux futures requêtes ; elles ne remplacent jamais les jours métier. `timePrecision: 'date'` reste explicite et ne prouve pas « Maintenant ».
+
+Chaque mutation concernée lit la source et les permissions dans une transaction Firestore, produit son nouvel état, puis écrit la source et remplace **complètement** la projection (`set` sans merge) ou la supprime physiquement si l'Event n'est plus éligible. Aucun drapeau `eligible:false` ni trigger différé ne maintient cette collection.
+
+* `updateEventCalendarTime` : période V1-A et projection temporelle.
+* `updateEventDiscoverySettings` : position/classification V1-B et projection.
+* `updateEventPublicDetails` : patch borné `{ eventId, name?, status?, visibility?, eventCoverUrl? }` ; champ omis conservé, `eventCoverUrl: null` supprime la couverture. Admin Event, `adminId` historique ou owner. L'interface existante utilise ce chemin pour ces champs, et conserve le chemin client pour les autres métadonnées. La publication source n'exige pas les données Discovery.
+* `updateEventCommercial` : owner plateforme uniquement ; remplace le résumé commercial existant ou le supprime avec `commercial: null`, puis synchronise la projection. Le payload reprend les champs du modèle actuel (`offerCode`, `offerVersion`, `state`, `grantedAt` et les dates commerciales facultatives), avec dates en instants ISO UTC. Aucun paiement, prix ou nouvelle offre. Il remplace l'ancienne écriture directe owner du résumé, sans nouvelle interface commerciale.
+* `deleteEventCompletely` : retrait de la projection et marqueur de suppression atomiques **avant** le nettoyage Storage/sous-collections ; le builder refuse ensuite toute recréation pendant ce nettoyage. La suppression finale de la source/réservations supprime aussi la projection dans sa transaction. Les retries gardent le mécanisme d'autorisation existant.
+
+Le slug reste réservé dans `/eventSlugs` à la création ; aucun nouveau flux de changement de slug n'est introduit. Les Rules empêchent les clients, même owner, de changer directement nom, slug, statut, visibilité, couverture, résumé commercial et marqueurs de suppression, en plus des champs temporels et Discovery. La suppression directe Event est refusée. Les autres champs ne sont pas durcis par principe.
+
+Les Rules de `/discovery_public` autorisent la lecture publique d'un document et les listes limitées à 100 résultats, sans lecture de la source. Toutes les écritures client sont interdites, y compris owner. Les métadonnées non projetées peuvent changer sans rafraîchir `updatedAt` de la projection : ce timestamp décrit sa synchronisation, pas toutes les éditions de la source.
+
+Pour les quelques Events de démonstration, vérifier manuellement temporalité, position, classification et droit commercial ; ne rien déduire ni migrer automatiquement. Une sauvegarde autoritaire manuelle (période, Découverte ou détails publics) recalcule la projection une fois les données complètes. Aucun endpoint de migration, script de production ou requête géographique n'est ajouté. Le portail reste sur son fonctionnement actuel. Lors d'une future mise en service, livrer ensemble Functions, Rules et client.
 
 ### Sous-collection : Membres
 **Chemin :** `/events/{eventId}/members/{userId}`  

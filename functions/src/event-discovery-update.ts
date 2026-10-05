@@ -1,4 +1,5 @@
-import { FieldValue, Firestore } from 'firebase-admin/firestore';
+import { FieldValue, Firestore, Timestamp } from 'firebase-admin/firestore';
+import { syncEventDiscoveryProjection } from './event-discovery-projection';
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
   discoveryCategories, discoveryTags, eventDiscoveryTypes,
@@ -59,11 +60,16 @@ export async function updateEventDiscoverySettingsTransaction(
     if (user.data()?.role !== 'owner' && member.data()?.role !== 'admin' && event.data()?.adminId !== uid) {
       throw new HttpsError('permission-denied', 'EVENT_ADMIN_REQUIRED');
     }
-    const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
+    const updatedAt = Timestamp.now();
+    const nextEvent = { ...event.data(), updatedAt };
+    const update: Record<string, unknown> = { updatedAt };
     for (const [key, value] of Object.entries(settings)) {
       update[key] = value === null ? FieldValue.delete() : value;
+      if (value === null) delete (nextEvent as Record<string, unknown>)[key];
+      else (nextEvent as Record<string, unknown>)[key] = value;
     }
     transaction.update(eventRef, update);
+    syncEventDiscoveryProjection(transaction, firestore, eventId, nextEvent);
     return settings;
   });
 }

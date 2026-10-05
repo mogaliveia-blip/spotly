@@ -1,11 +1,8 @@
 import { Firestore } from 'firebase-admin/firestore';
 import { isCalendarRange, isIanaTimezone } from './event-time';
-
-const COMMERCIAL_OFFER_VERSION = 1;
-const EVENT_NAME_MIN_LENGTH = 3;
-const EVENT_NAME_MAX_LENGTH = 120;
-const EVENT_SLUG_MIN_LENGTH = 3;
-const EVENT_SLUG_MAX_LENGTH = 80;
+import { COMMERCIAL_OFFER_VERSION } from './commercial-policy';
+import { isEventName, isEventSlug, normalizeEventSlug } from './event-public-identity';
+export { normalizeEventSlug } from './event-public-identity';
 const OPTIONAL_LOCATION_MAX_LENGTH = 80;
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -97,16 +94,6 @@ const ALLOWED_PAYLOAD_KEYS = new Set([
   'country'
 ]);
 
-export function normalizeEventSlug(value: unknown): string {
-  return typeof value === 'string'
-    ? value
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-    : '';
-}
-
 function requiredTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -140,12 +127,12 @@ export function validateCreateEventDraftPayload(value: unknown): ValidatedEventD
   }
 
   const name = requiredTrimmedString(input.name);
-  if (name.length < EVENT_NAME_MIN_LENGTH || name.length > EVENT_NAME_MAX_LENGTH) {
+  if (!isEventName(name)) {
     throw new CreateEventDraftError('INVALID_NAME');
   }
 
   const slug = normalizeEventSlug(input.slug);
-  if (slug.length < EVENT_SLUG_MIN_LENGTH || slug.length > EVENT_SLUG_MAX_LENGTH) {
+  if (!isEventSlug(slug)) {
     throw new CreateEventDraftError('INVALID_SLUG');
   }
 
@@ -378,6 +365,7 @@ export async function deleteEventDocumentAndReservations(
       transaction.delete(slotRef);
     }
 
+    transaction.delete(firestore.doc(`discovery_public/event_${eventId}`));
     transaction.delete(eventRef);
   });
 }

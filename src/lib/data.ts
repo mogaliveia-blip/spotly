@@ -1,4 +1,5 @@
 // src/lib/data.ts
+import { updateEventPublicDetails } from './event-public-update'
 import { db, storage } from './firebase'
 import {
   collection,
@@ -350,9 +351,16 @@ export async function updateEventDetails(
     throw new Error('Unsupported Event detail field');
   }
 
+  const publicPatch: Parameters<typeof updateEventPublicDetails>[1] = {};
   Object.entries(data).forEach(([key, value]) => {
-    payload[key] = value === undefined ? deleteField() : value;
+    if (['name', 'eventCoverUrl', 'visibility'].includes(key)) {
+      Object.assign(publicPatch, { [key]: value === undefined ? null : value });
+    } else {
+      payload[key] = value === undefined ? deleteField() : value;
+    }
   });
+  if (Object.keys(publicPatch).length) await updateEventPublicDetails(eventId, publicPatch);
+  if (!Object.keys(payload).length) return;
 
   await updateDoc(doc(db, 'events', eventId), {
     ...payload,
@@ -361,17 +369,11 @@ export async function updateEventDetails(
 }
 
 export async function updateEventStatus(eventId: string, status: EventStatus): Promise<void> {
-  await updateDoc(doc(db, 'events', eventId), {
-    status,
-    updatedAt: serverTimestamp()
-  });
+  await updateEventPublicDetails(eventId, { status });
 }
 
 export async function updateEventVisibility(eventId: string, visibility: EventVisibility): Promise<void> {
-  await updateDoc(doc(db, 'events', eventId), {
-    visibility,
-    updatedAt: serverTimestamp()
-  });
+  await updateEventPublicDetails(eventId, { visibility });
 }
 
 export async function updateEventPrivatePreviewEnabled(eventId: string, privatePreviewEnabled: boolean): Promise<void> {

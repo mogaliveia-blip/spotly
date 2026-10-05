@@ -15,6 +15,8 @@ import {
 } from './event-drafts';
 import { updateEventCalendarTimeTransaction } from './event-time-update';
 import { updateEventDiscoverySettingsTransaction } from './event-discovery-update';
+import { updateEventPublicDetailsTransaction, updateEventCommercialTransaction } from './event-public-update';
+import { markEventDeletionStartedTransaction } from './event-deletion';
 
 const app = initializeApp();
 
@@ -208,13 +210,6 @@ function createEventDraftHttpsError(error: CreateEventDraftError): HttpsError {
   });
 }
 
-async function markEventDeletionStarted(eventId: string, uid: string): Promise<void> {
-  await db.doc(`events/${eventId}`).set({
-    deletionRequestedBy: uid,
-    deletionRequestedAt: FieldValue.serverTimestamp()
-  }, { merge: true });
-}
-
 async function deleteEventChildCollections(eventId: string): Promise<number> {
   const eventRef = db.doc(`events/${eventId}`);
   const childCollections = await eventRef.listCollections();
@@ -323,6 +318,19 @@ export const createEventDraft = onCall(
         reason: 'EVENT_CREATE_FAILED'
       });
     }
+  }
+);
+
+export const updateEventPublicDetails = onCall(
+  privateAccessCallableOptions,
+  async (request) => updateEventPublicDetailsTransaction(db, request.auth?.uid ?? '', request.data)
+);
+
+export const updateEventCommercial = onCall(
+  privateAccessCallableOptions,
+  async (request) => {
+    await updateEventCommercialTransaction(db, request.auth?.uid ?? '', request.data);
+    return { updated: true };
   }
 );
 
@@ -576,9 +584,7 @@ export const deleteEventCompletely = onCall(
     const permission = await assertEventDeletePermission(eventId, uid);
 
     try {
-      if (permission.eventExists) {
-        await markEventDeletionStarted(eventId, uid);
-      }
+      await markEventDeletionStartedTransaction(db, eventId, uid);
 
       const deletedChildCollectionCount = await deleteEventChildCollections(eventId);
       await deleteEventStoragePrefix(eventId);

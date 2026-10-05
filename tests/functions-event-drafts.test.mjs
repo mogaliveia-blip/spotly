@@ -7,13 +7,20 @@ import { initializeTestEnvironment } from '@firebase/rules-unit-testing'
 import eventDraftsModule from '../functions/lib/event-drafts.js'
 import eventTimeUpdateModule from '../functions/lib/event-time-update.js'
 import eventDiscoveryUpdateModule from '../functions/lib/event-discovery-update.js'
+import eventPublicUpdateModule from '../functions/lib/event-public-update.js'
+import eventDeletionModule from '../functions/lib/event-deletion.js'
+import eventProjectionModule from '../functions/lib/event-discovery-projection.js'
+
+const { updateEventPublicDetailsTransaction, updateEventCommercialTransaction } = eventPublicUpdateModule
+const { markEventDeletionStartedTransaction } = eventDeletionModule
+const { buildEventDiscoveryProjection } = eventProjectionModule
 
 const { updateEventCalendarTimeTransaction } = eventTimeUpdateModule
 const { updateEventDiscoverySettingsTransaction } = eventDiscoveryUpdateModule
 // Use the Functions SDK instance: FieldValue transforms cannot cross two SDK installations.
 const functionsRequire = createRequire(new URL('../functions/package.json', import.meta.url))
 const { deleteApp, getApps, initializeApp } = functionsRequire('firebase-admin/app')
-const { getFirestore } = functionsRequire('firebase-admin/firestore')
+const { getFirestore, FieldValue, Timestamp } = functionsRequire('firebase-admin/firestore')
 
 const {
   CreateEventDraftError,
@@ -543,5 +550,336 @@ describe('deleteEventDocumentAndReservations', () => {
       (await db.doc(`freeDraftSlots/${USER_UID}`).get()).data().eventId,
       REQUEST_ID_3
     )
+  })
+})
+
+describe('Discovery source/projection transactions', () => {
+  const sourceRef = () => db.doc(`events/${REQUEST_ID_1}`)
+  const projectionRef = () => db.doc(`discovery_public/event_${REQUEST_ID_1}`)
+  const publicUpdate = (patch, uid = USER_UID, firestore = db) =>
+    updateEventPublicDetailsTransaction(firestore, uid, { eventId: REQUEST_ID_1, ...patch })
+  const discoveryUpdate = (patch) =>
+    updateEventDiscoverySettingsTransaction(db, USER_UID, { eventId: REQUEST_ID_1, ...patch })
+  const commercial = { offerCode: 'public', state: 'active', offerVersion: 1, grantedAt: '2026-01-01T00:00:00.000Z' }
+  const commercialUpdate = (summary, uid = OWNER_UID) =>
+    updateEventCommercialTransaction(db, uid, { eventId: REQUEST_ID_1, commercial: summary })
+
+  async function eligible() {
+    await createEventDraftTransaction(db, identity(), payload())
+    await discoveryUpdate({ discoveryPosition: { lat: 48.85, lng: 2.35 }, typeId: 'festival', categoryId: 'culture' })
+    await commercialUpdate(commercial)
+    await publicUpdate({ status: 'published', visibility: 'public' })
+    assert.equal((await projectionRef().get()).exists, true)
+  }
+  async function assertSynchronized() {
+    const source = (await sourceRef().get()).data()
+    const projected = (await projectionRef().get()).data() ?? null
+    assert.deepEqual(projected, buildEventDiscoveryProjection(REQUEST_ID_1, source))
+  }
+
+  it('publishes an incomplete source without requiring Discovery and creates projection when completed', async () => {
+    await createEventDraftTransaction(db, identity(), payload())
+    await publicUpdate({ status: 'published', visibility: 'public' })
+    assert.equal((await sourceRef().get()).data().status, 'published')
+    assert.equal((await projectionRef().get()).exists, false)
+    await commercialUpdate(commercial)
+    await discoveryUpdate({ discoveryPosition: { lat: 48.85, lng: 2.35 }, typeId: 'festival' })
+    assert.equal((await projectionRef().get()).exists, false)
+    await discoveryUpdate({ categoryId: 'culture' })
+    await assertSynchronized()
+    assert.equal((await projectionRef().get()).exists, true)
+  })
+
+  it('replaces complete projection and removes ghosts when tags/image are reset', async () => {
+    await eligible()
+    await discoveryUpdate({ tags: ['free', 'family', 'family'] })
+    await publicUpdate({ name: ' Nouveau festival ', eventCoverUrl: 'https://example.test/cover.jpg' })
+    let projected = (await projectionRef().get()).data()
+    assert.equal(projected.title, 'Nouveau festival')
+    assert.deepEqual(projected.tags, ['family', 'free'])
+    assert.equal(projected.thumbnail, 'https://example.test/cover.jpg')
+    await projectionRef().update({ sensitiveGhost: 'old data' })
+    await discoveryUpdate({ tags: null, typeId: 'concert', discoveryPosition: { lat: 1, lng: 2 } })
+    await publicUpdate({ eventCoverUrl: null })
+    projected = (await projectionRef().get()).data()
+    assert.equal('thumbnail' in projected, false)
+    assert.equal('tags' in projected, false)
+    assert.equal('sensitiveGhost' in projected, false)
+    assert.deepEqual(projected.position, { lat: 1, lng: 2 })
+    assert.equal(projected.typeId, 'concert')
+    await assertSynchronized()
+  })
+
+  for (const [label, patch] of Object.entries({ private: { visibility: 'private' }, paused: { status: 'paused' }, draft: { status: 'draft' } })) {
+    it(`physically deletes projection for ${label} while preserving business content`, async () => {
+      await eligible()
+      const before = (await sourceRef().get()).data()
+      const pointRef = db.doc(`events/${REQUEST_ID_1}/pois/point`)
+      await pointRef.set({ location: { lat: 3, lng: 4 }, galleryUrls: ['photo'], categoryId: 'parking' })
+      await publicUpdate(patch)
+      const after = (await sourceRef().get()).data()
+      assert.equal((await projectionRef().get()).exists, false)
+      for (const [key, value] of Object.entries(before)) {
+        if (key !== 'updatedAt' && !(key in patch)) assert.deepEqual(after[key], value, key)
+      }
+      assert.deepEqual((await pointRef.get()).data(), { location: { lat: 3, lng: 4 }, galleryUrls: ['photo'], categoryId: 'parking' })
+      await publicUpdate({ status: 'published', visibility: 'public' })
+      await assertSynchronized()
+    })
+  }
+
+  for (const key of ['discoveryPosition', 'typeId', 'categoryId']) {
+    it(`deletes projection after explicit ${key} removal without deleting source`, async () => {
+      await eligible()
+      await discoveryUpdate({ [key]: null })
+      assert.equal((await projectionRef().get()).exists, false)
+      assert.equal((await sourceRef().get()).exists, true)
+    })
+  }
+
+  it('synchronizes V1-A calendar correction, including DST, without changing classification', async () => {
+    await eligible()
+    await updateEventCalendarTimeTransaction(db, USER_UID, {
+      eventId: REQUEST_ID_1, timePrecision: 'date', startDay: '2026-11-01', endDay: '2026-11-01', timezone: 'America/New_York',
+    })
+    await assertSynchronized()
+    const projection = (await projectionRef().get()).data()
+    assert.equal(projection.windowStartAt.toDate().toISOString(), '2026-11-01T04:00:00.000Z')
+    assert.equal(projection.windowEndAt.seconds, Date.parse('2026-11-02T04:59:59Z') / 1000)
+    assert.equal(projection.windowEndAt.nanoseconds, 999999000)
+    assert.equal(projection.timePrecision, 'date')
+    assert.equal(projection.typeId, 'festival')
+  })
+
+  it('projects existing explicit datetime sources without shifting or losing their stored instants', async () => {
+    await eligible()
+    const startDate = new Timestamp(1793511000, 123456000)
+    const endDate = new Timestamp(1793514600, 987654000)
+    await sourceRef().update({
+      timePrecision: 'datetime', timezone: 'America/New_York', startDate, endDate,
+      startDay: FieldValue.delete(), endDay: FieldValue.delete(),
+    })
+    await publicUpdate({ name: 'Heures explicites' })
+    await assertSynchronized()
+    const projection = (await projectionRef().get()).data()
+    assert.deepEqual(projection.windowStartAt, startDate)
+    assert.deepEqual(projection.windowEndAt, endDate)
+    assert.equal(projection.timePrecision, 'datetime')
+  })
+
+  it('keeps business subcollections/private fields intact and exposes exactly one allowlisted document', async () => {
+    await eligible()
+    await sourceRef().update({
+      email: 'private@example.test', privateAccess: { secret: true }, privateAccessTokenHash: 'private',
+      capabilities: { partnershipEnabled: true }, poiCategories: [{ id: 'parking', label: 'Parking' }],
+    })
+    const refs = [
+      db.doc(`events/${REQUEST_ID_1}/pois/point`),
+      db.doc(`events/${REQUEST_ID_1}/pois/point/reviews/review`),
+      db.doc(`events/${REQUEST_ID_1}/members/${USER_UID}`),
+      db.doc(`events/${REQUEST_ID_1}/config/main`),
+    ]
+    await refs[0].set({ location: { lat: 1, lng: 2 }, photos: ['photo'], categoryId: 'parking' })
+    await refs[1].set({ rating: 5, comment: 'Existing review' })
+    const before = (await sourceRef().get()).data()
+    const children = await Promise.all(refs.map(async (ref) => (await ref.get()).data()))
+    await discoveryUpdate({ categoryId: 'music', tags: ['free'] })
+    await publicUpdate({ name: 'Nouveau titre public' })
+    const after = (await sourceRef().get()).data()
+    for (const [key, value] of Object.entries(before)) {
+      if (!['name', 'categoryId', 'updatedAt'].includes(key)) assert.deepEqual(after[key], value, key)
+    }
+    assert.deepEqual(await Promise.all(refs.map(async (ref) => (await ref.get()).data())), children)
+    await assertSynchronized()
+    const documents = (await db.collection('discovery_public').get()).docs
+    assert.equal(documents.length, 1)
+    assert.equal(documents[0].id, `event_${REQUEST_ID_1}`)
+    assert.deepEqual(Object.keys(documents[0].data()).sort(), [
+      'contentType', 'sourceId', 'title', 'slug', 'position', 'typeId', 'categoryId', 'tags',
+      'timePrecision', 'timezone', 'windowStartAt', 'windowEndAt', 'updatedAt',
+    ].sort())
+  })
+
+  it('refuses to project historical time until manually corrected through V1-A', async () => {
+    await eligible()
+    // Historical source fixture, not an application write path.
+    const { timePrecision, startDay, endDay, ...historical } = (await sourceRef().get()).data()
+    await sourceRef().set(historical)
+    await publicUpdate({ name: 'Historique publié' })
+    assert.equal((await projectionRef().get()).exists, false)
+    await updateEventCalendarTimeTransaction(db, USER_UID, {
+      eventId: REQUEST_ID_1, timePrecision: 'date', startDay: '2026-09-12', endDay: '2026-09-20', timezone: 'Europe/Paris',
+    })
+    await assertSynchronized()
+    assert.equal((await projectionRef().get()).exists, true)
+  })
+
+  it('reuses commercial public rights and synchronizes grant, revoke and explicit removal', async () => {
+    await eligible()
+    await commercialUpdate({ ...commercial, state: 'revoked' })
+    assert.equal((await projectionRef().get()).exists, false)
+    await commercialUpdate({ ...commercial, offerCode: 'private' })
+    assert.equal((await projectionRef().get()).exists, false)
+    await commercialUpdate(commercial)
+    assert.equal((await projectionRef().get()).exists, true)
+    await commercialUpdate(null)
+    assert.equal('commercial' in (await sourceRef().get()).data(), false)
+    assert.equal((await projectionRef().get()).exists, false)
+  })
+
+  for (const [instant, accepted] of [
+    ['2026-02-28T00:00:00.000Z', true],
+    ['2026-02-30T00:00:00.000Z', false],
+    ['2024-02-29T00:00:00.000Z', true],
+    ['2026-02-29T00:00:00.000Z', false],
+    ['2026-04-31T00:00:00.000Z', false],
+    ['2026-13-01T00:00:00.000Z', false],
+    ['2026-02-28T24:00:00.000Z', false],
+    ['0000-01-01T00:00:00.000Z', false],
+    ['2026-02-28T12:34:56Z', true],
+    ['2026-02-28T12:34:56.1Z', true],
+    ['2026-02-28T12:34:56.12Z', true],
+  ]) {
+    it(`${accepted ? 'accepts' : 'rejects'} commercial ISO instant ${instant} without normalizing invalid dates`, async () => {
+      await eligible()
+      for (const key of ['grantedAt', 'purchasedAt', 'coveredFrom', 'coveredEndDate',
+        'eventStartDateAtPurchase', 'eventEndDateAtPurchase']) {
+        const summary = { ...commercial, [key]: instant }
+        if (accepted) {
+          await commercialUpdate(summary)
+          const stored = (await sourceRef().get()).data().commercial[key]
+          assert.equal(stored.toDate().toISOString(), new Date(instant).toISOString())
+          await assertSynchronized()
+        } else {
+          const source = (await sourceRef().get()).data()
+          const projection = (await projectionRef().get()).data()
+          await assert.rejects(commercialUpdate(summary), {
+            code: 'invalid-argument', message: 'INVALID_COMMERCIAL_DATE',
+          })
+          assert.deepEqual((await sourceRef().get()).data(), source)
+          assert.deepEqual((await projectionRef().get()).data(), projection)
+        }
+      }
+    })
+  }
+
+  it('allows member admin/legacy admin/owner and denies editor/nonmember/anonymous public mutations', async () => {
+    await sourceRef().set({ name: 'Historique', adminId: 'legacy-admin', createdBy: USER_UID })
+    await assert.rejects(publicUpdate({ name: 'Interdit' }), { code: 'permission-denied' })
+    await db.doc(`events/${REQUEST_ID_1}/members/${USER_UID}`).set({ role: 'editor' })
+    await assert.rejects(publicUpdate({ visibility: 'public' }), { code: 'permission-denied' })
+    await assert.rejects(publicUpdate({ status: 'published' }, 'outsider'), { code: 'permission-denied' })
+    await assert.rejects(publicUpdate({ status: 'published' }, ''), { code: 'unauthenticated' })
+    await db.doc(`events/${REQUEST_ID_1}/members/${USER_UID}`).set({ role: 'admin' })
+    await publicUpdate({ name: 'Par admin' })
+    await publicUpdate({ name: 'Par owner' }, OWNER_UID)
+    await publicUpdate({ name: 'Par historique' }, 'legacy-admin')
+    assert.equal((await sourceRef().get()).data().name, 'Par historique')
+    for (const uid of [USER_UID, 'legacy-admin', 'outsider']) {
+      await assert.rejects(commercialUpdate(commercial, uid), { code: 'permission-denied' })
+    }
+    await assert.rejects(commercialUpdate(commercial, ''), { code: 'unauthenticated' })
+    await commercialUpdate(commercial)
+  })
+
+  it('rejects invalid/out-of-scope public payloads and preserves both documents', async () => {
+    await eligible()
+    const source = (await sourceRef().get()).data()
+    const projection = (await projectionRef().get()).data()
+    for (const patch of [
+      {}, { slug: 'new-slug' }, { name: 'x' }, { name: null }, { status: 'archived' },
+      { visibility: null }, { commercial: {} }, { eventCoverUrl: 42 }, { eventCoverUrl: 'x'.repeat(2049) },
+      { discoveryPosition: null }, { eventId: '../bad', name: 'Valide' },
+    ]) {
+      await assert.rejects(publicUpdate(patch), { code: 'invalid-argument' })
+      assert.deepEqual((await sourceRef().get()).data(), source)
+      assert.deepEqual((await projectionRef().get()).data(), projection)
+    }
+    for (const summary of [{ ...commercial, offerCode: 'unknown' }, { ...commercial, state: 'unknown' },
+      { ...commercial, grantedAt: 'not-a-date' }, { ...commercial, offerVersion: 0 }, { ...commercial, stripe: 'secret' }]) {
+      await assert.rejects(commercialUpdate(summary), { code: 'invalid-argument' })
+      assert.deepEqual((await sourceRef().get()).data(), source)
+      assert.deepEqual((await projectionRef().get()).data(), projection)
+    }
+  })
+
+  it('rolls back queued source writes if the projection operation fails inside the transaction', async () => {
+    await eligible()
+    const source = (await sourceRef().get()).data()
+    const projection = (await projectionRef().get()).data()
+    const failingFirestore = {
+      doc: db.doc.bind(db),
+      runTransaction: (callback) => db.runTransaction((transaction) => callback(new Proxy(transaction, {
+        get(target, key) {
+          if (key === 'delete') return () => { throw new Error('INJECTED_TRANSACTION_FAILURE') }
+          const value = target[key]
+          return typeof value === 'function' ? value.bind(target) : value
+        },
+      }))),
+    }
+    await assert.rejects(publicUpdate({ visibility: 'private' }, USER_UID, failingFirestore), /INJECTED_TRANSACTION_FAILURE/)
+    assert.deepEqual((await sourceRef().get()).data(), source)
+    assert.deepEqual((await projectionRef().get()).data(), projection)
+  })
+
+  it('keeps concurrent Discovery, temporal and publication operations synchronized', async () => {
+    await eligible()
+    await Promise.all([
+      discoveryUpdate({ tags: ['free'], categoryId: 'music' }),
+      updateEventCalendarTimeTransaction(db, USER_UID, {
+        eventId: REQUEST_ID_1, timePrecision: 'date', startDay: '2026-10-25', endDay: '2026-10-25', timezone: 'Europe/Paris',
+      }),
+      publicUpdate({ name: 'Festival concurrent' }),
+    ])
+    await assertSynchronized()
+    const source = (await sourceRef().get()).data()
+    assert.equal(source.name, 'Festival concurrent')
+    assert.equal(source.categoryId, 'music')
+    assert.equal(source.startDay, '2026-10-25')
+    await Promise.all([discoveryUpdate({ tags: ['family'] }), publicUpdate({ visibility: 'private' })])
+    await assertSynchronized()
+    assert.equal((await projectionRef().get()).exists, false)
+  })
+
+  it('removes projection before cleanup and prevents re-creation by concurrent edits or deletion retries', async () => {
+    await eligible()
+    const childRef = db.doc(`events/${REQUEST_ID_1}/pois/point`)
+    await childRef.set({ title: 'Not yet cleaned' })
+    await markEventDeletionStartedTransaction(db, REQUEST_ID_1, USER_UID)
+    assert.equal((await projectionRef().get()).exists, false)
+    assert.equal((await childRef.get()).exists, true)
+    await discoveryUpdate({ categoryId: 'music' })
+    await publicUpdate({ name: 'Cleanup ongoing' })
+    assert.equal((await projectionRef().get()).exists, false)
+    await db.doc(`events/${REQUEST_ID_1}/members/${USER_UID}`).delete()
+    await sourceRef().update({ adminId: 'another-admin' })
+    await markEventDeletionStartedTransaction(db, REQUEST_ID_1, USER_UID)
+    const source = (await sourceRef().get()).data()
+    await deleteEventDocumentAndReservations(db, REQUEST_ID_1, source)
+    assert.equal((await sourceRef().get()).exists, false)
+    assert.equal((await projectionRef().get()).exists, false)
+    // The complete callable additionally cleans child collections and Storage.
+  })
+
+  it('final source deletion atomically removes any orphan projection and is idempotent', async () => {
+    await eligible()
+    const source = (await sourceRef().get()).data()
+    await deleteEventDocumentAndReservations(db, REQUEST_ID_1, source)
+    assert.equal((await sourceRef().get()).exists, false)
+    assert.equal((await projectionRef().get()).exists, false)
+    await deleteEventDocumentAndReservations(db, REQUEST_ID_1, source)
+    await projectionRef().set({ orphan: true })
+    await markEventDeletionStartedTransaction(db, REQUEST_ID_1, OWNER_UID)
+    assert.equal((await projectionRef().get()).exists, false)
+    assert.equal((await sourceRef().get()).exists, false)
+  })
+
+  it('does not allow nonmembers or anonymous callers to initiate deletion', async () => {
+    await eligible()
+    for (const uid of ['outsider', '']) {
+      await assert.rejects(markEventDeletionStartedTransaction(db, REQUEST_ID_1, uid),
+        { code: uid ? 'permission-denied' : 'unauthenticated' })
+    }
+    await assertSynchronized()
   })
 })

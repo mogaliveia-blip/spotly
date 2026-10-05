@@ -7,7 +7,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { deleteField, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 
 const PROJECT_ID = 'un-instant-ici-rules-test'
 const EVENT_ID = 'event-sensitive-fields'
@@ -72,8 +72,8 @@ after(async () => {
 })
 
 describe('Event protected fields', () => {
-  it('allows an Event admin to update name', async () => {
-    await assertSucceeds(updateDoc(eventRefFor(ADMIN_UID), { name: 'Nouveau nom' }))
+  it('allows an Event admin to update unprojected metadata', async () => {
+    await assertSucceeds(updateDoc(eventRefFor(ADMIN_UID), { description: 'Nouvelles informations' }))
   })
 
   it('requires server validation even for historical temporal fields', async () => {
@@ -82,8 +82,8 @@ describe('Event protected fields', () => {
     }))
   })
 
-  it('allows an Event admin to update visibility under current rules', async () => {
-    await assertSucceeds(updateDoc(eventRefFor(ADMIN_UID), { visibility: 'private' }))
+  it('requires server synchronization for visibility', async () => {
+    await assertFails(updateDoc(eventRefFor(ADMIN_UID), { visibility: 'private' }))
   })
 
   it('denies an Event admin changing commercial', async () => {
@@ -117,12 +117,6 @@ describe('Event protected fields', () => {
     await assertSucceeds(updateDoc(ownerEventRef, {
       createdBy: ADMIN_UID,
       adminId: ADMIN_UID,
-      commercial: {
-        offerCode: 'public',
-        offerVersion: 1,
-        state: 'active',
-        grantedAt: new Date('2026-09-23T00:00:00.000Z'),
-      },
       capabilities: { partnershipEnabled: true },
     }))
 
@@ -154,22 +148,21 @@ describe('Event discovery authority', () => {
       ]) await assertFails(updateDoc(eventRefFor(uid), change))
       const existing = (await getDoc(eventRefFor(uid))).data()
       const { discoveryPosition, typeId, categoryId, tags, ...withoutDiscovery } = existing
-      await assertFails(setDoc(eventRefFor(uid), { ...withoutDiscovery, name: 'Remplacement involontaire' }))
+      await assertFails(setDoc(eventRefFor(uid), { ...withoutDiscovery, description: 'Remplacement involontaire' }))
     })
 
     it(`preserves discovery during allowed ${uid} metadata edits and unchanged document replacement`, async () => {
       await seedDiscovery()
-      await assertSucceeds(updateDoc(eventRefFor(uid), { name: 'Nouveau nom', description: 'Informations modifiées' }))
-      await assertSucceeds(updateDoc(eventRefFor(uid), { status: 'published', visibility: 'private' }))
+      await assertSucceeds(updateDoc(eventRefFor(uid), { description: 'Informations modifiées' }))
       const existing = (await getDoc(eventRefFor(uid))).data()
-      await assertSucceeds(setDoc(eventRefFor(uid), { ...existing, name: 'Champs conservés' }))
+      await assertSucceeds(setDoc(eventRefFor(uid), { ...existing, description: 'Champs conservés' }))
       const saved = (await getDoc(eventRefFor(uid))).data()
       for (const [key, value] of Object.entries(settings)) assert.deepEqual(saved[key], value)
     })
   }
 
-  it('does not require discovery for historical Events or publication', async () => {
-    await assertSucceeds(updateDoc(eventRefFor(ADMIN_UID), { status: 'published' }))
+  it('does not require discovery for ordinary historical Event administration', async () => {
+    await assertSucceeds(updateDoc(eventRefFor(ADMIN_UID), { description: 'Historique administrable' }))
     const saved = (await getDoc(eventRefFor(ADMIN_UID))).data()
     for (const key of Object.keys(settings)) assert.equal(key in saved, false)
   })
@@ -200,7 +193,7 @@ describe('Event temporal contract', () => {
 
   it('keeps a calendar Event administrable without altering its dates', async () => {
     await seedTime(calendarTime)
-    await assertSucceeds(updateDoc(eventRefFor(ADMIN_UID), { name: 'Dates conservées' }))
+    await assertSucceeds(updateDoc(eventRefFor(ADMIN_UID), { description: 'Dates conservées' }))
     const data = (await getDoc(eventRefFor(ADMIN_UID))).data()
     assert.equal(data.startDay, '2026-10-10')
     assert.equal(data.endDay, '2026-10-12')
@@ -241,7 +234,7 @@ describe('Event temporal contract', () => {
       { ...calendarTime, timezone: '' },
     ]) {
       await seedTime(time)
-      await assertFails(updateDoc(eventRefFor(ADMIN_UID), { name: 'Interdit' }))
+      await assertFails(updateDoc(eventRefFor(ADMIN_UID), { description: 'Interdit' }))
     }
   })
 })
@@ -262,7 +255,7 @@ describe('exact-time Event invariants', () => {
           timePrecision: 'datetime', timezone: 'Europe/Paris', ...time,
         })
       })
-      await assertFails(updateDoc(eventRefFor(ADMIN_UID), { name: 'Interdit' }))
+      await assertFails(updateDoc(eventRefFor(ADMIN_UID), { description: 'Interdit' }))
     }
   })
 })
@@ -315,4 +308,68 @@ describe('Event creation authority', () => {
       directEventData(OWNER_UID)
     ))
   })
+})
+
+describe('Discovery public authority and confidentiality', () => {
+  const projectionId = `event_${EVENT_ID}`
+  async function seedProjection() {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'discovery_public', projectionId), {
+        contentType: 'event', sourceId: EVENT_ID, title: 'Public result',
+      })
+    })
+  }
+
+  it('allows anonymous and authenticated reads without reading the source Event', async () => {
+    await seedProjection()
+    // The source fixture is draft and unreadable to these clients; projection reads are independent.
+    for (const context of [testEnv.unauthenticatedContext(), testEnv.authenticatedContext('visitor')]) {
+      const db = context.firestore()
+      await assertFails(getDoc(doc(db, 'events', EVENT_ID)))
+      const result = await assertSucceeds(getDoc(doc(db, 'discovery_public', projectionId)))
+      assert.equal(result.data().title, 'Public result')
+      const results = await assertSucceeds(getDocs(query(collection(db, 'discovery_public'), limit(100))))
+      assert.equal(results.size, 1)
+      await assertFails(getDocs(query(collection(db, 'discovery_public'), limit(101))))
+      await assertFails(getDocs(collection(db, 'discovery_public')))
+    }
+  })
+
+  for (const uid of [ADMIN_UID, OWNER_UID, null]) {
+    it(`denies all ${uid ?? 'anonymous'} client projection writes`, async () => {
+      const db = (uid ? testEnv.authenticatedContext(uid) : testEnv.unauthenticatedContext()).firestore()
+      await assertFails(setDoc(doc(db, 'discovery_public', 'event_new'), { title: 'Forbidden' }))
+      await seedProjection()
+      const reference = doc(db, 'discovery_public', projectionId)
+      await assertFails(updateDoc(reference, { title: 'Forbidden' }))
+      await assertFails(setDoc(reference, { title: 'Replacement' }))
+      await assertFails(deleteDoc(reference))
+    })
+  }
+
+  for (const uid of [ADMIN_UID, OWNER_UID]) {
+    it(`requires server source updates and deletion for ${uid}, preserving ordinary metadata access`, async () => {
+      const fields = {
+        name: 'New public identity', slug: 'changed-slug', status: 'published', visibility: 'private',
+        eventCoverUrl: 'https://example.test/cover.jpg',
+        commercial: { offerCode: 'public', state: 'active', offerVersion: 1, grantedAt: new Date() },
+        deletionRequestedBy: uid, deletionRequestedAt: new Date(),
+      }
+      for (const [key, value] of Object.entries(fields)) {
+        await assertFails(updateDoc(eventRefFor(uid), { [key]: value }))
+      }
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await updateDoc(doc(context.firestore(), 'events', EVENT_ID), fields)
+      })
+      for (const key of Object.keys(fields)) await assertFails(updateDoc(eventRefFor(uid), { [key]: deleteField() }))
+      await assertFails(updateDoc(eventRefFor(uid), { 'commercial.state': 'revoked' }))
+      await assertFails(updateDoc(eventRefFor(uid), { 'commercial.offerCode': 'private' }))
+      await assertFails(deleteDoc(eventRefFor(uid)))
+      await assertSucceeds(updateDoc(eventRefFor(uid), { description: 'Still administrable', city: 'Paris' }))
+      const saved = (await getDoc(eventRefFor(uid))).data()
+      for (const key of Object.keys(fields)) assert.ok(key in saved, key)
+      const { name, ...withoutName } = saved
+      await assertFails(setDoc(eventRefFor(uid), withoutName))
+    })
+  }
 })
