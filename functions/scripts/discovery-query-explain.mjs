@@ -70,7 +70,7 @@ async function main() {
       const request = validateSearchDiscoveryRequest(raw)
       const ranges = geographicQueryRanges(request.area)
       const budgets = allocateRangeBudgets(ranges.length)
-      const window = discoveryCandidateWindow(request.when, now)
+      const window = discoveryCandidateWindow(request.when, { seconds: now.seconds, nanoseconds: now.nanoseconds })
       const pages = []
       for (let i = 0; i < ranges.length; i++) {
         let consumed = 0, cursor
