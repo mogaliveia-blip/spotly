@@ -58,7 +58,7 @@ tags?: string[]
 
 Ces champs optionnels appartiennent au document Event. Les Events historiques restent valides sans eux, sans migration ni nouvelle condition de publication. La création reste un brouillon simple ; l’enrichissement se fait dans la section « Découverte » de l’administration.
 
-`defaultMapCenter ≠ discoveryPosition` : le premier cadre la Carte Event ; le second est un choix explicite de l’administrateur pour représenter l’Event par un marqueur unique sur la future Carte Découverte. Le cadrage initial de l’éditeur peut utiliser `defaultMapCenter`, mais ne l’enregistre jamais comme position. Aucun Point, ville ou GPS ne détermine automatiquement cette position. Le serveur exige deux nombres finis : latitude entre -90 et 90 et longitude entre -180 et 180.
+`defaultMapCenter ≠ discoveryPosition` : le premier cadre la Carte Event ; le second est un choix explicite de l’administrateur pour représenter l’Event par un marqueur unique sur la Carte Découverte. Le cadrage initial de l’éditeur peut utiliser `defaultMapCenter`, mais ne l’enregistre jamais comme position. Aucun Point, ville ou GPS ne détermine automatiquement cette position. Le serveur exige deux nombres finis : latitude entre -90 et 90 et longitude entre -180 et 180.
 
 La classification Event est indépendante des catégories des Points (`poiCategories` et `pois/{pointId}.categoryId`). Le catalogue central partagé (`functions/src/event-discovery.ts`, réexporté dans `src/lib/event-discovery.ts`) utilise des identifiants stables indépendants des libellés :
 
@@ -72,7 +72,7 @@ La callable `updateEventDiscoverySettings` accepte `{ eventId, discoveryPosition
 
 Les Rules interdisent toute addition, modification ou suppression directe des quatre champs par le client, y compris l’owner. Les métadonnées non projetées restent modifiables selon les règles existantes et doivent conserver ces champs. `updateEventDetails` accepte uniquement ses champs métier habituels, avec une garde à l’exécution contre les payloads élargis. Les autres mutations serveur utilisent des mises à jour ciblées qui préservent la découverte.
 
-Le portail n’utilise pas ces champs ; aucune collection métier `/places` ni Carte Découverte n’est créée. Lors d’une mise en service ultérieure, coordonner Functions, Rules et client ; aucun déploiement n’est réalisé ici.
+La liste historique du portail n’utilise pas ces champs ; la route `/discovery` interroge la projection publique par le callable D1. Aucune collection métier `/places` n’est créée.
 
 ### Projection publique Event — Discovery V1-C / V1-D D1
 

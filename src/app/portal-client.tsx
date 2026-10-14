@@ -438,6 +438,9 @@ export default function PortalPage() {
                   <p className="mt-4 max-w-3xl mx-auto text-muted-foreground">
                       L'application sera bientôt disponible pour tous. Retrouvez le programme, les points d'intérêt, et organisez votre expérience pour un festival inoubliable.
                   </p>
+                  <Button asChild className="mt-6">
+                    <Link href="/discovery"><MapPin className="h-4 w-4" /> Carte Découverte</Link>
+                  </Button>
               </div>
           </section>
         </main>
@@ -523,6 +526,9 @@ export default function PortalPage() {
               <div className="flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
                 <Button asChild size="lg" className="w-full rounded-2xl px-7 font-bold shadow-sm sm:w-auto">
                   <Link href="#evenements">Explorer les événements</Link>
+                </Button>
+                <Button asChild size="lg" variant="outline" className="w-full rounded-2xl px-7 font-bold sm:w-auto">
+                  <Link href="/discovery"><MapPin className="h-4 w-4" /> Carte Découverte</Link>
                 </Button>
               </div>
               {!user && (

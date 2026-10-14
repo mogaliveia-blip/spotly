@@ -8,22 +8,28 @@ import {
   useContext,
   ReactNode,
   useRef,
+  useCallback,
 } from 'react';
+import { createSharedGeolocationRequest } from '@/lib/geolocation-request';
+
+type Location = { lat: number; lng: number };
 
 interface GeolocationContextType {
-  userLocation: { lat: number; lng: number } | null;
+  userLocation: Location | null;
   loading: boolean;
   error: GeolocationPositionError | null;
+  requestPosition: () => Promise<Location>;
 }
 
 const GeolocationContext = createContext<GeolocationContextType>({
   userLocation: null,
   loading: true,
   error: null,
+  requestPosition: async () => { throw new Error('GeolocationProvider is missing'); },
 });
 
 export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
-  const [state, setState] = useState<GeolocationContextType>({
+  const [state, setState] = useState<Omit<GeolocationContextType, 'requestPosition'>>({
     userLocation: null,
     loading: true,
     error: null,
@@ -31,53 +37,50 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
 
   const watchIdRef = useRef<number | null>(null);
   const hasLoggedErrorRef = useRef(false);
+  const mountedRef = useRef(false);
+  const requesterRef = useRef<ReturnType<typeof createSharedGeolocationRequest> | null>(null);
+
+  const updateLocation = useCallback((position: GeolocationPosition) => {
+    if (!mountedRef.current) return;
+    setState({
+      userLocation: { lat: position.coords.latitude, lng: position.coords.longitude },
+      loading: false,
+      error: null,
+    });
+  }, []);
+
+  const handleError = useCallback((error: GeolocationPositionError) => {
+    if (!mountedRef.current) return;
+    if (!hasLoggedErrorRef.current && error.code !== 3) {
+      console.warn('[Geolocation]', error.code, error.message);
+      hasLoggedErrorRef.current = true;
+    }
+    setState(prev => ({ ...prev, loading: false, error }));
+  }, []);
+
+  const requestPosition = useCallback(async (): Promise<Location> => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      throw new Error('Geolocation unavailable');
+    }
+    requesterRef.current ??= createSharedGeolocationRequest(navigator.geolocation, updateLocation, handleError);
+    const position = await requesterRef.current();
+    return { lat: position.coords.latitude, lng: position.coords.longitude };
+  }, [updateLocation, handleError]);
 
   useEffect(() => {
+    mountedRef.current = true;
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setState(prev => ({ ...prev, loading: false }));
       return;
     }
 
-    let isMounted = true;
-
-    const updateLocation = (position: GeolocationPosition) => {
-      if (!isMounted) return;
-
-      setState({
-        userLocation: {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        },
-        loading: false,
-        error: null,
-      });
-    };
-
-    const handleError = (error: GeolocationPositionError) => {
-      if (!isMounted) return;
-
-      // On ne log en console que les erreurs réelles, pas les timeouts fréquents
-      if (!hasLoggedErrorRef.current && error.code !== 3) {
-        console.warn(
-          '[Geolocation]',
-          error.code,
-          error.message
-        );
-        hasLoggedErrorRef.current = true;
-      }
-
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        error,
-      }));
-    };
-
     const startWatching = () => {
+      const requester = requesterRef.current ??= createSharedGeolocationRequest(navigator.geolocation, updateLocation, handleError);
+      requester.setWatching(true);
       // Configuration équilibrée : précision élevée pour le suivi
       watchIdRef.current = navigator.geolocation.watchPosition(
-        updateLocation,
-        handleError,
+        requester.watchPosition,
+        requester.watchError,
         {
           enableHighAccuracy: true,
           timeout: 10000,
@@ -92,8 +95,11 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
           const permission = await navigator.permissions.query({
             name: 'geolocation',
           } as PermissionDescriptor);
+          if (!mountedRef.current) return;
     
           if (permission.state === 'denied') {
+            requesterRef.current ??= createSharedGeolocationRequest(navigator.geolocation, updateLocation, handleError);
+            requesterRef.current.setWatching(false);
             setState(prev => ({ 
               ...prev, 
               loading: false, 
@@ -103,16 +109,9 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
           }
         }
     
-        // ⚡ Position initiale rapide (réseau / wifi)
-        navigator.geolocation.getCurrentPosition(
-          updateLocation,
-          handleError,
-          {
-            enableHighAccuracy: false, // IMPORTANT : beaucoup plus rapide
-            timeout: 5000,
-            maximumAge: 30000          // accepte une position récente
-          }
-        );
+        // The position watch can satisfy the same initial request before the quick fix returns.
+        startWatching();
+        void requestPosition().catch(() => {});
         
         // 🔥 IMPORTANT : ne jamais bloquer l'UI si le GPS est lent
         setState(prev => ({
@@ -120,10 +119,9 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
           loading: false
         }));
 
-        // ensuite suivi précis
-        startWatching();
-    
       } catch {
+        requesterRef.current ??= createSharedGeolocationRequest(navigator.geolocation, updateLocation, handleError);
+        requesterRef.current.setWatching(false);
         setState(prev => ({ ...prev, loading: false }));
       }
     };
@@ -131,15 +129,16 @@ export const GeolocationProvider = ({ children }: { children: ReactNode }) => {
     init();
 
     return () => {
-      isMounted = false;
+      mountedRef.current = false;
+      requesterRef.current?.setWatching(false);
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-  }, []);
+  }, [requestPosition, updateLocation, handleError]);
 
   return (
-    <GeolocationContext.Provider value={state}>
+    <GeolocationContext.Provider value={{ ...state, requestPosition }}>
       {children}
     </GeolocationContext.Provider>
   );
