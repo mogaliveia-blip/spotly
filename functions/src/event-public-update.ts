@@ -2,6 +2,7 @@ import { FieldValue, Firestore, Timestamp } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { syncEventDiscoveryProjection } from './event-discovery-projection';
 import { isEventName } from './event-public-identity';
+import { canCommercialPublish, COMMERCIAL_OFFER_VERSION } from './commercial-policy';
 
 export type EventPublicDetailsPatch = {
   name?: string;
@@ -27,10 +28,12 @@ function payload(value: unknown, fields: string[]): Record<string, unknown> & { 
 }
 
 async function applyPatch(
-  firestore: Firestore, uid: string, eventId: string, patch: Record<string, unknown>, ownerOnly = false
-): Promise<void> {
+  firestore: Firestore, uid: string, eventId: string,
+  patch: Record<string, unknown> | ((event: Record<string, unknown>) => Record<string, unknown>),
+  ownerOnly = false
+): Promise<boolean> {
   const eventRef = firestore.doc(`events/${eventId}`);
-  await firestore.runTransaction(async (transaction) => {
+  return firestore.runTransaction(async (transaction) => {
     const [event, user, member] = await Promise.all([
       transaction.get(eventRef), transaction.get(firestore.doc(`users/${uid}`)),
       transaction.get(firestore.doc(`events/${eventId}/members/${uid}`)),
@@ -40,16 +43,29 @@ async function applyPatch(
     if (!owner && (ownerOnly || (member.data()?.role !== 'admin' && event.data()?.adminId !== uid))) {
       throw new HttpsError('permission-denied', ownerOnly ? 'PLATFORM_OWNER_REQUIRED' : 'EVENT_ADMIN_REQUIRED');
     }
+    const currentEvent = event.data() as Record<string, unknown>;
+    const resolvedPatch = typeof patch === 'function' ? patch(currentEvent) : patch;
+    const nextStatus = resolvedPatch.status ?? currentEvent.status;
+    const nextVisibility = resolvedPatch.visibility ?? currentEvent.visibility;
+    const commercial = currentEvent.commercial as { offerCode?: unknown; state?: unknown } | undefined;
+    const validCommercial = commercial && ['free_draft', 'private', 'public'].includes(commercial.offerCode as string) &&
+      ['active', 'revoked'].includes(commercial.state as string);
+    if (nextStatus === 'published' && ('status' in resolvedPatch || 'visibility' in resolvedPatch) &&
+        (nextVisibility !== 'private' && nextVisibility !== 'public' ||
+          !validCommercial || !canCommercialPublish(commercial as Parameters<typeof canCommercialPublish>[0],
+          nextVisibility as 'private' | 'public'))) {
+      throw new HttpsError('failed-precondition', 'PUBLICATION_AUTHORIZATION_REQUIRED');
+    }
     const updatedAt = Timestamp.now();
     const nextEvent: Record<string, unknown> = { ...event.data(), updatedAt };
     const update: Record<string, unknown> = { updatedAt };
-    for (const [key, value] of Object.entries(patch)) {
+    for (const [key, value] of Object.entries(resolvedPatch)) {
       update[key] = value === null ? FieldValue.delete() : value;
       if (value === null) delete nextEvent[key];
       else nextEvent[key] = value;
     }
     transaction.update(eventRef, update);
-    syncEventDiscoveryProjection(transaction, firestore, eventId, nextEvent);
+    return syncEventDiscoveryProjection(transaction, firestore, eventId, nextEvent);
   });
 }
 
@@ -80,12 +96,36 @@ export async function updateEventPublicDetailsTransaction(
 /** Replaces the existing owner-only commercial summary; no pricing/payment logic is introduced. */
 export async function updateEventCommercialTransaction(
   firestore: Firestore, uid: string, rawPayload: unknown
-): Promise<void> {
+): Promise<boolean> {
   if (!uid) throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
-  const { eventId, commercial } = payload(rawPayload, ['commercial']);
+  const { eventId, commercial, action } = payload(rawPayload, ['commercial', 'action']);
+  if ((action === undefined) === (commercial === undefined)) {
+    throw new HttpsError('invalid-argument', 'INVALID_COMMERCIAL');
+  }
+  if (action !== undefined) {
+    if (!['authorize_private', 'authorize_public', 'suspend', 'reactivate'].includes(action as string)) {
+      throw new HttpsError('invalid-argument', 'INVALID_COMMERCIAL_ACTION');
+    }
+    return applyPatch(firestore, uid, eventId, (event) => {
+      const existing = event.commercial && typeof event.commercial === 'object' &&
+        !Array.isArray(event.commercial) ? event.commercial as Record<string, unknown> : null;
+      if ((action === 'suspend' || action === 'reactivate') &&
+          (!existing || !['free_draft', 'private', 'public'].includes(existing.offerCode as string))) {
+        throw new HttpsError('failed-precondition', 'COMMERCIAL_AUTHORIZATION_MISSING');
+      }
+      const offerCode = action === 'authorize_private' ? 'private' :
+        action === 'authorize_public' ? 'public' : existing?.offerCode;
+      return { commercial: {
+        ...existing,
+        offerCode,
+        offerVersion: existing?.offerVersion ?? COMMERCIAL_OFFER_VERSION,
+        grantedAt: existing?.grantedAt ?? Timestamp.now(),
+        state: action === 'suspend' ? 'revoked' : 'active',
+      } };
+    }, true);
+  }
   if (commercial === null) {
-    await applyPatch(firestore, uid, eventId, { commercial: null }, true);
-    return;
+    return applyPatch(firestore, uid, eventId, { commercial: null }, true);
   }
   if (!commercial || typeof commercial !== 'object' || Array.isArray(commercial)) {
     throw new HttpsError('invalid-argument', 'INVALID_COMMERCIAL');
@@ -115,5 +155,5 @@ export async function updateEventCommercialTransaction(
     }
     summary[key] = Timestamp.fromDate(instant);
   }
-  await applyPatch(firestore, uid, eventId, { commercial: summary }, true);
+  return applyPatch(firestore, uid, eventId, { commercial: summary }, true);
 }

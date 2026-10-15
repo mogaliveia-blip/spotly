@@ -56,7 +56,7 @@ categoryId?: string
 tags?: string[]
 ```
 
-Ces champs optionnels appartiennent au document Event. Les Events historiques restent valides sans eux, sans migration ni nouvelle condition de publication. La création reste un brouillon simple ; l’enrichissement se fait dans la section « Découverte » de l’administration.
+Ces champs optionnels appartiennent au document Event. Les Events historiques restent valides sans eux et sans migration ; la publication visiteur exige une autorisation commerciale active. La création reste un brouillon simple ; l’enrichissement se fait dans la section « Découverte » de l’administration.
 
 `defaultMapCenter ≠ discoveryPosition` : le premier cadre la Carte Event ; le second est un choix explicite de l’administrateur pour représenter l’Event par un marqueur unique sur la Carte Découverte. Le cadrage initial de l’éditeur peut utiliser `defaultMapCenter`, mais ne l’enregistre jamais comme position. Aucun Point, ville ou GPS ne détermine automatiquement cette position. Le serveur exige deux nombres finis : latitude entre -90 et 90 et longitude entre -180 et 180.
 
@@ -118,15 +118,15 @@ Chaque mutation concernée lit la source et les permissions dans une transaction
 
 * `updateEventCalendarTime` : période V1-A et projection temporelle.
 * `updateEventDiscoverySettings` : position/classification V1-B et projection.
-* `updateEventPublicDetails` : patch borné `{ eventId, name?, status?, visibility?, eventCoverUrl? }` ; champ omis conservé, `eventCoverUrl: null` supprime la couverture. Admin Event, `adminId` historique ou owner. L'interface existante utilise ce chemin pour ces champs, et conserve le chemin client pour les autres métadonnées. La publication source n'exige pas les données Discovery.
-* `updateEventCommercial` : owner plateforme uniquement ; remplace le résumé commercial existant ou le supprime avec `commercial: null`, puis synchronise la projection. Le payload reprend les champs du modèle actuel (`offerCode`, `offerVersion`, `state`, `grantedAt` et les dates commerciales facultatives), avec dates en instants ISO UTC. Aucun paiement, prix ou nouvelle offre. Il remplace l'ancienne écriture directe owner du résumé, sans nouvelle interface commerciale.
+* `updateEventPublicDetails` : patch borné `{ eventId, name?, status?, visibility?, eventCoverUrl? }` ; champ omis conservé, `eventCoverUrl: null` supprime la couverture. Admin Event, `adminId` historique ou owner. Une transition vers `published` doit correspondre à l'autorisation commerciale active pour la visibilité choisie. Les données Discovery ne sont pas exigées pour la publication source.
+* `updateEventCommercial` : owner plateforme uniquement ; les actions `authorize_private`, `authorize_public`, `suspend`, `reactivate` conservent les autres attributs du résumé dans la transaction et synchronisent la projection. Le payload historique complet et `commercial: null` restent acceptés pour compatibilité ; l'interface `/admin/events` n'utilise pas `null` pour suspendre. Aucun paiement, prix ou nouvelle offre.
 * `deleteEventCompletely` : retrait de la projection et marqueur de suppression atomiques **avant** le nettoyage Storage/sous-collections ; le builder refuse ensuite toute recréation pendant ce nettoyage. La suppression finale de la source/réservations supprime aussi la projection dans sa transaction. Les retries gardent le mécanisme d'autorisation existant.
 
 Le slug reste réservé dans `/eventSlugs` à la création ; aucun nouveau flux de changement de slug n'est introduit. Les Rules empêchent les clients, même owner, de changer directement nom, slug, statut, visibilité, couverture, résumé commercial et marqueurs de suppression, en plus des champs temporels et Discovery. La suppression directe Event est refusée. Les autres champs ne sont pas durcis par principe.
 
 Les Rules de `/discovery_public` autorisent la lecture publique d'un document et les listes limitées à 100 résultats, sans lecture de la source. Toutes les écritures client sont interdites, y compris owner. Les métadonnées non projetées peuvent changer sans rafraîchir `updatedAt` de la projection : ce timestamp décrit sa synchronisation, pas toutes les éditions de la source.
 
-Pour les quelques Events de démonstration, vérifier manuellement temporalité, position, classification et droit commercial ; ne rien déduire ni migrer automatiquement. Une sauvegarde autoritaire manuelle (période, Découverte ou détails publics) recalcule la projection enrichie une fois les données complètes. Les anciennes projections sans géohash ne sont pas interrogées par le moteur D1 : toutes les projections existantes doivent être remises à niveau avant sa mise en service. Aucun endpoint de migration ou script de production n'est ajouté. Le portail reste sur son fonctionnement actuel.
+Pour les quelques Events de démonstration, vérifier manuellement temporalité, position, classification et droit commercial ; ne rien déduire ni migrer automatiquement. Une sauvegarde autoritaire manuelle (période, Découverte ou détails publics) recalcule la projection enrichie une fois les données complètes. Les anciennes projections sans géohash ne sont pas interrogées par le moteur D1 : toutes les projections existantes doivent être remises à niveau avant sa mise en service. Aucun endpoint de migration ou script de production n'est ajouté. Le portail filtre les Events sur l'offre `public` active.
 
 #### Recherche publique — Discovery V1-D D1
 

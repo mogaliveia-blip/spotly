@@ -104,7 +104,7 @@ export interface EventCommercial {
   offerCode: CommercialOfferCode
   offerVersion: number
   state: CommercialEntitlementState
-  grantedAt: Date
+  grantedAt?: Date // Historical summaries may lack this field; owner actions fill it.
   purchasedAt?: Date
   coveredFrom?: Date
   coveredEndDate?: Date

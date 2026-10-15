@@ -112,9 +112,10 @@ export function buildEventDiscoveryProjection(
 /** Called with the post-mutation source, in the same transaction as the Event write. */
 export function syncEventDiscoveryProjection(
   transaction: Transaction, firestore: Firestore, eventId: string, nextEvent: Record<string, unknown>
-): void {
+): boolean {
   const reference = firestore.doc(`discovery_public/event_${eventId}`);
   const projection = buildEventDiscoveryProjection(eventId, nextEvent);
   if (projection) transaction.set(reference, projection);
   else transaction.delete(reference);
+  return !!projection;
 }

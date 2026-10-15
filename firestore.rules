@@ -45,13 +45,19 @@ service cloud.firestore {
         get(eventPath).data.status == "published";
     }
 
+    function canVisitEvent(data, visibility) {
+      return data.status == "published" && data.visibility == visibility &&
+        "commercial" in data && data.commercial is map &&
+        data.commercial.state == "active" &&
+        (data.commercial.offerCode == "public" ||
+          (visibility == "private" && data.commercial.offerCode == "private"));
+    }
+
     function isEventPublic(eventId) {
       let eventPath =
         /databases/$(database)/documents/events/$(eventId);
 
-      return exists(eventPath) &&
-        get(eventPath).data.status == "published" &&
-        get(eventPath).data.visibility == "public";
+      return exists(eventPath) && canVisitEvent(get(eventPath).data, "public");
     }
 
     function hasActivePrivateLink(eventId, linkId) {
@@ -69,8 +75,7 @@ service cloud.firestore {
 
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/events/$(eventId)) &&
-        get(/databases/$(database)/documents/events/$(eventId)).data.status == "published" &&
-        get(/databases/$(database)/documents/events/$(eventId)).data.visibility == "private" &&
+        canVisitEvent(get(/databases/$(database)/documents/events/$(eventId)).data, "private") &&
         exists(grantPath) &&
         get(grantPath).data.expiresAt > request.time &&
         (
@@ -339,19 +344,13 @@ service cloud.firestore {
 
     match /events/{eventId} {
       allow get: if
-        (
-          resource.data.status == "published" &&
-          resource.data.visibility == "public"
-        ) ||
+        canVisitEvent(resource.data, "public") ||
         isEventMember(eventId) ||
         hasPrivateAccessGrant(eventId);
 
       allow list: if
         isOwner() ||
-        (
-          resource.data.status == "published" &&
-          resource.data.visibility == "public"
-        ) ||
+        canVisitEvent(resource.data, "public") ||
         isEventMember(eventId) ||
         hasPrivateAccessGrant(eventId);
 

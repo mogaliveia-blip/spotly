@@ -7,11 +7,13 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function isOwnerForUser(userId) {
+      let userPath = /databases/(default)/documents/users/$(userId);
+      return firestore.exists(userPath) && firestore.get(userPath).data.role == 'owner';
+    }
+
     function isOwner() {
-      return isSignedIn() &&
-        firestore.get(
-          /databases/(default)/documents/users/$(request.auth.uid)
-        ).data.role == 'owner';
+      return isSignedIn() ? isOwnerForUser(request.auth.uid) : false;
     }
 
     function isEventPublished(eventId) {
@@ -23,16 +25,19 @@ service firebase.storage {
         ).data.status == 'published';
     }
 
+    function canVisitEvent(eventId, visibility) {
+      let eventPath = /databases/(default)/documents/events/$(eventId);
+      return firestore.exists(eventPath) &&
+        firestore.get(eventPath).data.status == 'published' &&
+        firestore.get(eventPath).data.visibility == visibility &&
+        'commercial' in firestore.get(eventPath).data &&
+        firestore.get(eventPath).data.commercial.state == 'active' &&
+        (firestore.get(eventPath).data.commercial.offerCode == 'public' ||
+          (visibility == 'private' && firestore.get(eventPath).data.commercial.offerCode == 'private'));
+    }
+
     function isEventPublic(eventId) {
-      return firestore.exists(
-        /databases/(default)/documents/events/$(eventId)
-      ) &&
-        firestore.get(
-          /databases/(default)/documents/events/$(eventId)
-        ).data.status == 'published' &&
-        firestore.get(
-          /databases/(default)/documents/events/$(eventId)
-        ).data.visibility == 'public';
+      return canVisitEvent(eventId, 'public');
     }
 
     function hasActivePrivateLink(eventId, linkId) {
@@ -44,14 +49,12 @@ service firebase.storage {
         !('revokedAt' in firestore.get(linkPath).data);
     }
 
-    function hasPrivateAccessGrant(eventId) {
+    function hasPrivateAccessGrantForUser(eventId, userId) {
       let grantPath =
-        /databases/(default)/documents/events/$(eventId)/privateAccess/$(request.auth.uid);
+        /databases/(default)/documents/events/$(eventId)/privateAccess/$(userId);
 
-      return isSignedIn() &&
-        firestore.exists(/databases/(default)/documents/events/$(eventId)) &&
-        firestore.get(/databases/(default)/documents/events/$(eventId)).data.status == 'published' &&
-        firestore.get(/databases/(default)/documents/events/$(eventId)).data.visibility == 'private' &&
+      return firestore.exists(/databases/(default)/documents/events/$(eventId)) &&
+        canVisitEvent(eventId, 'private') &&
         firestore.exists(grantPath) &&
         firestore.get(grantPath).data.expiresAt > request.time &&
         (
@@ -67,13 +70,21 @@ service firebase.storage {
         );
     }
 
-    function getEventRole(eventId) {
+    function hasPrivateAccessGrant(eventId) {
+      return isSignedIn() ? hasPrivateAccessGrantForUser(eventId, request.auth.uid) : false;
+    }
+
+    function getSignedInEventRole(eventId, userId) {
       let memberPath =
-        /databases/(default)/documents/events/$(eventId)/members/$(request.auth.uid);
+        /databases/(default)/documents/events/$(eventId)/members/$(userId);
 
       return firestore.exists(memberPath)
         ? firestore.get(memberPath).data.role
         : 'none';
+    }
+
+    function getEventRole(eventId) {
+      return isSignedIn() ? getSignedInEventRole(eventId, request.auth.uid) : 'none';
     }
 
     function isEventAdmin(eventId) {
@@ -106,7 +117,7 @@ service firebase.storage {
     }
 
     match /events/{eventId}/marketing/{allPaths=**} {
-      allow read: if true;
+      allow read: if isEventPublic(eventId) || isAdminOrEditor(eventId) || hasPrivateAccessGrant(eventId);
       allow write: if isEventAdmin(eventId);
     }
   }

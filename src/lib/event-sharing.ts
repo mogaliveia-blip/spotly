@@ -1,11 +1,13 @@
 import type { AppEvent } from './types'
+import { canCommercialPublishPublic } from './commercial-policy'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://uninstantici.com'
 
 type ShareableEvent = Pick<AppEvent, 'name' | 'slug' | 'description' | 'status' | 'visibility'>
 
-export function canShareEvent(event: Pick<AppEvent, 'status' | 'visibility'> | null | undefined): boolean {
-  return event?.status === 'published' && event.visibility === 'public'
+export function canShareEvent(event: Pick<AppEvent, 'status' | 'visibility' | 'commercial'> | null | undefined): boolean {
+  return event?.status === 'published' && event.visibility === 'public' &&
+    canCommercialPublishPublic(event.commercial)
 }
 
 export function buildEventShareUrl(event: Pick<AppEvent, 'slug'>): string {

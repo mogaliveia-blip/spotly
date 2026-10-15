@@ -5,6 +5,7 @@ import { getApps, initializeApp, type App } from 'firebase-admin/app'
 import { getFirestore, type Timestamp } from 'firebase-admin/firestore'
 
 import type { AppEvent, EventStatus, EventVisibility } from './types'
+import { canVisitPrivateEvent } from './commercial-policy'
 
 type EventDocumentData = {
   name?: unknown
@@ -15,6 +16,7 @@ type EventDocumentData = {
   status?: unknown
   visibility?: unknown
   privatePreviewEnabled?: unknown
+  commercial?: { offerCode?: unknown; state?: unknown }
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -97,9 +99,7 @@ export async function fetchPrivateEventPreviewBySlugAndToken(
   const eventData = eventDoc.data() as EventDocumentData
 
   if (
-    eventData.status !== 'published' ||
-    eventData.visibility !== 'private' ||
-    eventData.privatePreviewEnabled === false
+    !canVisitPrivateEvent(eventData) || eventData.privatePreviewEnabled === false
   ) {
     return null
   }

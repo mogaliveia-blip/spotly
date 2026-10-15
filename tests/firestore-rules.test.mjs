@@ -7,7 +7,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, limit, query, setDoc, updateDoc } from 'firebase/firestore'
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, limit, query, setDoc, updateDoc, where } from 'firebase/firestore'
 
 const PROJECT_ID = 'un-instant-ici-rules-test'
 const EVENT_ID = 'event-sensitive-fields'
@@ -122,6 +122,75 @@ describe('Event protected fields', () => {
 
     const snapshot = await assertSucceeds(getDoc(ownerEventRef))
     assert.equal(snapshot.data().capabilities.partnershipEnabled, true)
+  })
+})
+
+describe('Commercial visitor access', () => {
+  async function setPublication(offerCode, state, visibility = 'public') {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'events', EVENT_ID), {
+        status: 'published', visibility,
+        commercial: { offerCode, state, offerVersion: 1, grantedAt: new Date('2026-01-01T00:00:00.000Z') },
+      })
+      await setDoc(doc(context.firestore(), `events/${EVENT_ID}/pois`, 'point'), { categoryId: 'parking' })
+    })
+  }
+
+  it('allows only active public authorization to visitors and preserves admin access', async () => {
+    const publicDb = testEnv.unauthenticatedContext().firestore()
+    const eventRef = doc(publicDb, 'events', EVENT_ID)
+    const pointRef = doc(publicDb, `events/${EVENT_ID}/pois`, 'point')
+    for (const [offer, state, allowed] of [
+      ['free_draft', 'active', false], ['private', 'active', false],
+      ['public', 'revoked', false], ['public', 'active', true],
+    ]) {
+      await setPublication(offer, state)
+      if (allowed) {
+        await assertSucceeds(getDoc(eventRef))
+        await assertSucceeds(getDoc(pointRef))
+      } else {
+        await assertFails(getDoc(eventRef))
+        await assertFails(getDoc(pointRef))
+      }
+      await assertSucceeds(getDoc(eventRefFor(ADMIN_UID)))
+    }
+  })
+
+  it('ends private visitor grants on suspension while retaining the Point', async () => {
+    await setPublication('private', 'active', 'private')
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, `events/${EVENT_ID}/privateLinks`, 'link'), {
+        expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+      })
+      await setDoc(doc(db, `events/${EVENT_ID}/privateAccess`, 'visitor'), {
+        linkId: 'link', expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+      })
+    })
+    const visitorDb = testEnv.authenticatedContext('visitor').firestore()
+    const privateEvent = doc(visitorDb, 'events', EVENT_ID)
+    await assertSucceeds(getDoc(privateEvent))
+    await setPublication('private', 'revoked', 'private')
+    await assertFails(getDoc(privateEvent))
+    await assertSucceeds(getDoc(eventRefFor(ADMIN_UID)))
+    await assertSucceeds(getDoc(doc(testEnv.authenticatedContext(ADMIN_UID).firestore(), `events/${EVENT_ID}/pois`, 'point')))
+  })
+
+  it('supports the filtered public event query', async () => {
+    await setPublication('public', 'active')
+    const db = testEnv.unauthenticatedContext().firestore()
+    const listed = query(collection(db, 'events'), where('status', '==', 'published'),
+      where('visibility', '==', 'public'), where('commercial.offerCode', '==', 'public'),
+      where('commercial.state', '==', 'active'))
+    const result = await assertSucceeds(getDocs(listed))
+    assert.equal(result.size, 1)
+    const bySlug = query(collection(db, 'events'), where('slug', '==', 'event-de-test'),
+      where('status', '==', 'published'), where('visibility', '==', 'public'),
+      where('commercial.offerCode', '==', 'public'), where('commercial.state', '==', 'active'), limit(1))
+    assert.equal((await assertSucceeds(getDocs(bySlug))).size, 1)
+    await setPublication('public', 'revoked')
+    assert.equal((await assertSucceeds(getDocs(listed))).size, 0)
+    assert.equal((await assertSucceeds(getDocs(bySlug))).size, 0)
   })
 })
 

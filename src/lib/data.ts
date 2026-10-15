@@ -1,5 +1,6 @@
 // src/lib/data.ts
 import { updateEventPublicDetails } from './event-public-update'
+import { canCommercialPublishPublic } from './commercial-policy'
 import { db, storage } from './firebase'
 import {
   collection,
@@ -55,7 +56,8 @@ import {
 export const DEFAULT_EVENT_ID = 'default-event';
 
 export function isPubliclyAccessibleEvent(event: AppEvent | null | undefined): event is AppEvent {
-  return event?.status === 'published' && event.visibility === 'public';
+  return event?.status === 'published' && event.visibility === 'public' &&
+    canCommercialPublishPublic(event.commercial);
 }
 
 function dateFromFirestore(value: any): Date | undefined {
@@ -68,13 +70,12 @@ function commercialFromFirestore(value: any): EventCommercial | undefined {
   if (!value || typeof value !== 'object') return undefined;
 
   const grantedAt = dateFromFirestore(value.grantedAt);
-  if (!grantedAt) return undefined;
 
   return {
     offerCode: value.offerCode,
     offerVersion: value.offerVersion,
     state: value.state,
-    grantedAt,
+    ...(grantedAt ? { grantedAt } : {}),
     purchasedAt: dateFromFirestore(value.purchasedAt),
     coveredFrom: dateFromFirestore(value.coveredFrom),
     coveredEndDate: dateFromFirestore(value.coveredEndDate),
@@ -131,6 +132,8 @@ export async function fetchEventBySlug(
       where('slug', '==', normalizedSlug),
       where('status', '==', 'published'),
       where('visibility', '==', 'public'),
+      where('commercial.offerCode', '==', 'public'),
+      where('commercial.state', '==', 'active'),
       limit(1)
     );
     const snap = await getDocsFromServer(q);
@@ -255,7 +258,8 @@ export async function fetchAllEvents(): Promise<AppEvent[]> {
 export async function fetchPublishedEvents(): Promise<AppEvent[]> {
   try {
     const eventsRef = collection(db, 'events');
-    const q = query(eventsRef, where('status', '==', 'published'), where('visibility', '==', 'public'));
+    const q = query(eventsRef, where('status', '==', 'published'), where('visibility', '==', 'public'),
+      where('commercial.offerCode', '==', 'public'), where('commercial.state', '==', 'active'));
     const snap = await getDocsFromServer(q);
     
     return snap.docs.map(eventFromDoc);
@@ -266,6 +270,11 @@ export async function fetchPublishedEvents(): Promise<AppEvent[]> {
     });
     throw error;
   }
+}
+
+export async function fetchEventDiscoveryProjectionPresent(eventId: string): Promise<boolean> {
+  const projection = await getDocFromServer(doc(db, 'discovery_public', `event_${eventId}`));
+  return projection.exists();
 }
 
 export interface PlatformMonitorStats {

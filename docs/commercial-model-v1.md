@@ -1,7 +1,7 @@
 # Schéma économique V1 — fondations Sprint 1
 
-Ce document décrit les invariants préparés par le Sprint 1. Il ne branche encore
-aucun contrôle commercial sur le parcours utilisateur.
+Ce document décrit les invariants préparés par le Sprint 1 et les contrôles
+de publication ajoutés en D2.1.
 
 ## Axes indépendants
 
@@ -88,8 +88,8 @@ owner. `createdBy` ne doit jamais accorder une permission.
 Les updates client d'un event admin ne peuvent plus changer les racines
 `createdBy`, `creationRequestId`, `adminId`, `commercial`, `capabilities`, les
 champs commerciaux top-level réservés, ni les marqueurs internes de suppression.
-Le global owner conserve cette capacité via les Rules actuelles ; les Functions
-passent par l'Admin SDK.
+Les changements de `commercial` passent par la Function réservée au rôle global
+`owner` ; les Rules refusent aussi l'écriture directe de ce champ à l'owner.
 
 Le document Event est publiquement lisible dans certains contextes. Son objet
 `commercial` est donc un résumé fonctionnel uniquement. Il ne doit jamais
@@ -108,8 +108,8 @@ signature webhook ou donnée personnelle de paiement.
 - un entitlement `revoked` : aucune publication ;
 - Partnership absent ou différent de `true` : désactivé.
 
-Cette politique est pure et testée, mais n'est appelée ni par la publication ni
-par la création POI dans ce Sprint.
+Cette politique contrôle désormais les transitions de publication et les accès
+visiteurs. La création et la gestion des Points restent indépendantes.
 
 ## Dates
 

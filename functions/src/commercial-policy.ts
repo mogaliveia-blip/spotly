@@ -41,6 +41,7 @@ export function canCommercialPublishPrivate(
   commercial: CommercialSummary | null | undefined
 ): boolean {
   return isCommercialActive(commercial) &&
+    Object.prototype.hasOwnProperty.call(COMMERCIAL_PUBLICATION_CAPABILITIES, commercial.offerCode) &&
     COMMERCIAL_PUBLICATION_CAPABILITIES[commercial.offerCode].private
 }
 
@@ -48,6 +49,7 @@ export function canCommercialPublishPublic(
   commercial: CommercialSummary | null | undefined
 ): boolean {
   return isCommercialActive(commercial) &&
+    Object.prototype.hasOwnProperty.call(COMMERCIAL_PUBLICATION_CAPABILITIES, commercial.offerCode) &&
     COMMERCIAL_PUBLICATION_CAPABILITIES[commercial.offerCode].public
 }
 
@@ -58,6 +60,14 @@ export function canCommercialPublish(
   return visibility === 'private'
     ? canCommercialPublishPrivate(commercial)
     : canCommercialPublishPublic(commercial)
+}
+
+export function canVisitPrivateEvent(event: {
+  status?: unknown; visibility?: unknown;
+  commercial?: { offerCode?: unknown; state?: unknown } | null;
+}): boolean {
+  return event.status === 'published' && event.visibility === 'private' &&
+    canCommercialPublishPrivate(event.commercial as CommercialSummary | null | undefined)
 }
 
 /** Partnership reste désactivé tant que l'owner ne l'a pas explicitement activé. */

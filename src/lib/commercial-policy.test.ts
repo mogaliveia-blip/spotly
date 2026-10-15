@@ -6,6 +6,7 @@ import {
   FREE_DRAFT_POI_LIMIT,
   canCommercialPublishPrivate,
   canCommercialPublishPublic,
+  canVisitPrivateEvent,
   isFreeDraftCommercial,
   isPartnershipEnabled,
 } from './commercial-policy'
@@ -51,6 +52,16 @@ describe('commercial-policy V1', () => {
     assert.equal(isFreeDraftCommercial(undefined), false)
     assert.equal(canCommercialPublishPrivate(undefined), false)
     assert.equal(canCommercialPublishPublic(undefined), false)
+  })
+
+  it('guards private server previews and private link redemption after revocation', () => {
+    const event = { status: 'published', visibility: 'private', commercial: { offerCode: 'private', state: 'active' } }
+    assert.equal(canVisitPrivateEvent(event), true)
+    assert.equal(canVisitPrivateEvent({ ...event, commercial: { ...event.commercial, state: 'revoked' } }), false)
+    assert.equal(canVisitPrivateEvent({ ...event, commercial: { ...event.commercial, offerCode: 'free_draft' } }), false)
+    assert.equal(canVisitPrivateEvent({ ...event, status: 'paused' }), false)
+    assert.equal(canVisitPrivateEvent({ ...event, visibility: 'public' }), false)
+    assert.equal(canVisitPrivateEvent({ ...event, commercial: null }), false)
   })
 
   it('keeps Partnership disabled unless it is explicitly true', () => {

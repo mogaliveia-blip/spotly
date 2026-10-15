@@ -579,10 +579,10 @@ describe('Discovery source/projection transactions', () => {
 
   it('publishes an incomplete source without requiring Discovery and creates projection when completed', async () => {
     await createEventDraftTransaction(db, identity(), payload())
+    await commercialUpdate(commercial)
     await publicUpdate({ status: 'published', visibility: 'public' })
     assert.equal((await sourceRef().get()).data().status, 'published')
     assert.equal((await projectionRef().get()).exists, false)
-    await commercialUpdate(commercial)
     await discoveryUpdate({ discoveryPosition: { lat: 48.85, lng: 2.35 }, typeId: 'festival' })
     assert.equal((await projectionRef().get()).exists, false)
     await discoveryUpdate({ categoryId: 'culture' })
@@ -732,6 +732,65 @@ describe('Discovery source/projection transactions', () => {
     assert.equal((await projectionRef().get()).exists, true)
     await commercialUpdate(null)
     assert.equal('commercial' in (await sourceRef().get()).data(), false)
+    assert.equal((await projectionRef().get()).exists, false)
+  })
+
+  it('changes authorization atomically while preserving optional commercial timestamps and Points', async () => {
+    await eligible()
+    const original = (await sourceRef().get()).data().commercial
+    const extra = {
+      ...original,
+      purchasedAt: Timestamp.fromMillis(123456789),
+      coveredFrom: Timestamp.fromMillis(123456790),
+      coveredEndDate: Timestamp.fromMillis(123456791),
+      eventStartDateAtPurchase: Timestamp.fromMillis(123456792),
+      eventEndDateAtPurchase: Timestamp.fromMillis(123456793),
+    }
+    await sourceRef().update({ commercial: extra })
+    const pointRef = db.doc(`events/${REQUEST_ID_1}/pois/point`)
+    await pointRef.set({ categoryId: 'parking' })
+    const authorize = (action, uid = OWNER_UID) =>
+      updateEventCommercialTransaction(db, uid, { eventId: REQUEST_ID_1, action })
+    await assert.rejects(authorize('suspend', USER_UID), { code: 'permission-denied' })
+    assert.equal(await authorize('suspend'), false)
+    assert.equal((await projectionRef().get()).exists, false)
+    assert.equal((await sourceRef().get()).data().commercial.state, 'revoked')
+    assert.equal(await authorize('reactivate'), true)
+    assert.equal((await projectionRef().get()).exists, true)
+    await authorize('authorize_private')
+    assert.equal((await projectionRef().get()).exists, false)
+    await authorize('authorize_public')
+    assert.equal((await projectionRef().get()).exists, true)
+    const after = (await sourceRef().get()).data().commercial
+    for (const key of ['offerVersion', 'grantedAt', 'purchasedAt', 'coveredFrom', 'coveredEndDate',
+      'eventStartDateAtPurchase', 'eventEndDateAtPurchase']) assert.deepEqual(after[key], extra[key], key)
+    assert.deepEqual((await pointRef.get()).data(), { categoryId: 'parking' })
+  })
+
+  it('requires matching active authorization for visitor publication transitions', async () => {
+    await createEventDraftTransaction(db, identity(), payload())
+    await assert.rejects(publicUpdate({ status: 'published' }), { code: 'failed-precondition' })
+    await commercialUpdate({ ...commercial, offerCode: 'private' })
+    await publicUpdate({ status: 'published' })
+    await assert.rejects(publicUpdate({ visibility: 'public' }), { code: 'failed-precondition' })
+    await commercialUpdate({ ...commercial, state: 'revoked' })
+    await assert.rejects(publicUpdate({ visibility: 'public' }), { code: 'failed-precondition' })
+    await publicUpdate({ status: 'paused' })
+    await commercialUpdate(commercial)
+    await publicUpdate({ status: 'published', visibility: 'public' })
+    assert.equal((await sourceRef().get()).data().visibility, 'public')
+  })
+
+  it('fills missing required commercial metadata on a historical Event without removing other fields', async () => {
+    await sourceRef().set({ name: 'Historique', status: 'draft', visibility: 'private',
+      commercial: { offerCode: 'private', state: 'revoked', purchasedAt: Timestamp.fromMillis(1234) } })
+    await updateEventCommercialTransaction(db, OWNER_UID, { eventId: REQUEST_ID_1, action: 'reactivate' })
+    const saved = (await sourceRef().get()).data().commercial
+    assert.equal(saved.offerCode, 'private')
+    assert.equal(saved.state, 'active')
+    assert.equal(saved.offerVersion, 1)
+    assert.ok(saved.grantedAt instanceof Timestamp)
+    assert.deepEqual(saved.purchasedAt, Timestamp.fromMillis(1234))
     assert.equal((await projectionRef().get()).exists, false)
   })
 

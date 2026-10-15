@@ -16,6 +16,7 @@ import {
 import { updateEventCalendarTimeTransaction } from './event-time-update';
 import { updateEventDiscoverySettingsTransaction } from './event-discovery-update';
 import { updateEventPublicDetailsTransaction, updateEventCommercialTransaction } from './event-public-update';
+import { canVisitPrivateEvent } from './commercial-policy';
 import { markEventDeletionStartedTransaction } from './event-deletion';
 import { searchDiscovery as searchDiscoveryPublic } from './discovery-search';
 import { hasReservedDiscoveryKey, isRecord } from './discovery-search-contract';
@@ -353,8 +354,8 @@ export const updateEventPublicDetails = onCall(
 export const updateEventCommercial = onCall(
   privateAccessCallableOptions,
   async (request) => {
-    await updateEventCommercialTransaction(db, request.auth?.uid ?? '', request.data);
-    return { updated: true };
+    const projectionExpected = await updateEventCommercialTransaction(db, request.auth?.uid ?? '', request.data);
+    return { updated: true, projectionExpected };
   }
 );
 
@@ -538,10 +539,7 @@ export const redeemPrivateEventAccess = onCall(
     const eventData = eventDoc.data() as EventDocumentData;
     const candidateHash = hashPrivateAccessToken(eventDoc.id, token);
 
-    if (
-      eventData.status !== 'published' ||
-      eventData.visibility !== 'private'
-    ) {
+    if (!canVisitPrivateEvent(eventData)) {
       throw new HttpsError('permission-denied', 'PRIVATE_LINK_INVALID');
     }
 

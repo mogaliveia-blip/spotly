@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth-user';
-import { fetchAllEvents, fetchUserEvents, updateEventStatus, updateEventVisibility } from '@/lib/data';
+import { fetchAllEvents, fetchUserEvents, fetchEventById, fetchEventDiscoveryProjectionPresent, updateEventStatus, updateEventVisibility } from '@/lib/data';
+import { updateEventCommercialAuthorization, type CommercialAuthorizationAction } from '@/lib/event-public-update';
 import { deleteEventCompletely } from '@/lib/event-deletion';
 import type { AppEvent, EventRole, EventStatus, EventVisibility } from '@/lib/types';
 import { formatEventDateRange } from '@/lib/event-time';
@@ -37,7 +38,7 @@ function getEventOwnerLabel(event: AppEvent): string {
 }
 
 function getStatusLabel(status: EventStatus): string {
-  if (status === 'published') return 'En ligne';
+  if (status === 'published') return 'Publié';
   if (status === 'paused') return 'En pause';
   return 'Brouillon';
 }
@@ -70,6 +71,8 @@ export default function MyEventsPage() {
   const [errorType, setErrorType] = useState<'NONE' | 'INDEX_MISSING' | 'OTHER'>('NONE');
   const [updatingEventId, setUpdatingEventId] = useState<string | null>(null);
   const [updatingVisibilityEventId, setUpdatingVisibilityEventId] = useState<string | null>(null);
+  const [updatingCommercialEventId, setUpdatingCommercialEventId] = useState<string | null>(null);
+  const [commercialFeedback, setCommercialFeedback] = useState<Record<string, string>>({});
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
   const [eventToDelete, setEventToDelete] = useState<AppEventWithRole | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
@@ -164,6 +167,35 @@ export default function MyEventsPage() {
       });
     } finally {
       setUpdatingVisibilityEventId(null);
+    }
+  };
+
+  const handleCommercialChange = async (event: AppEventWithRole, action: CommercialAuthorizationAction) => {
+    if (!isPlatformOwner) return;
+    setUpdatingCommercialEventId(event.id);
+    setCommercialFeedback((current) => ({ ...current, [event.id]: '' }));
+    try {
+      const { projectionExpected } = await updateEventCommercialAuthorization(event.id, action);
+      const freshEvent = await fetchEventById(event.id);
+      if (!freshEvent) throw new Error('EVENT_RELOAD_FAILED');
+      setEvents((current) => current.map((item) => item.id === event.id ? { ...freshEvent, userRole: item.userRole } : item));
+      let projectionMessage = 'Vérification Discovery indisponible.';
+      try {
+        const present = await fetchEventDiscoveryProjectionPresent(event.id);
+        projectionMessage = present === projectionExpected
+          ? `Projection Discovery ${present ? 'présente' : 'absente'} : synchronisée.`
+          : 'Projection Discovery incohérente : vérification nécessaire.';
+      } catch { /* The commercial source was reloaded even if this read fails. */ }
+      setCommercialFeedback((current) => ({
+        ...current,
+        [event.id]: `Enregistré et relu : ${freshEvent.commercial?.offerCode ?? 'aucune offre'} · ${freshEvent.commercial?.state ?? 'sans état'}. ${projectionMessage}`
+      }));
+      toast({ title: 'Autorisation enregistrée', description: event.name });
+    } catch {
+      setCommercialFeedback((current) => ({ ...current, [event.id]: 'Enregistrement ou relecture impossible. Rafraîchissez avant une autre action.' }));
+      toast({ title: 'Erreur', description: "Impossible de confirmer l'autorisation.", variant: 'destructive' });
+    } finally {
+      setUpdatingCommercialEventId(null);
     }
   };
 
@@ -383,6 +415,21 @@ export default function MyEventsPage() {
                     )}
                   </CardHeader>
                   <CardContent className="pt-6 space-y-4">
+                    {isPlatformOwner && (
+                      <div className="space-y-2 rounded-xl border p-3">
+                        <p className="text-sm font-semibold">Autorisation Anava Studio</p>
+                        <p className="text-xs text-muted-foreground">
+                          Offre : {e.commercial?.offerCode ?? 'aucune'} · État : {e.commercial?.state ?? 'non défini'}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" disabled={updatingCommercialEventId === e.id} onClick={() => void handleCommercialChange(e, 'authorize_private')}>Autoriser en privé</Button>
+                          <Button size="sm" variant="outline" disabled={updatingCommercialEventId === e.id} onClick={() => void handleCommercialChange(e, 'authorize_public')}>Autoriser en public</Button>
+                          <Button size="sm" variant="outline" disabled={updatingCommercialEventId === e.id || !e.commercial || e.commercial.state === 'revoked'} onClick={() => void handleCommercialChange(e, 'suspend')}>Suspendre</Button>
+                          <Button size="sm" variant="outline" disabled={updatingCommercialEventId === e.id || e.commercial?.state !== 'revoked'} onClick={() => void handleCommercialChange(e, 'reactivate')}>Réactiver</Button>
+                        </div>
+                        {commercialFeedback[e.id] && <p role="status" className="text-xs text-muted-foreground">{commercialFeedback[e.id]}</p>}
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {eventSlug ? (
                         <Button variant="default" size="sm" asChild className="rounded-xl h-12 gap-2 font-bold shadow-md">
