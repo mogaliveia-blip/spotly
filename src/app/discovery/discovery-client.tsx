@@ -4,7 +4,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import Link from 'next/link';
 import { APILoadingStatus, useApiLoadingStatus } from '@vis.gl/react-google-maps';
 import { fr } from 'date-fns/locale';
-import { ArrowLeft, Crosshair, Loader2, MapPin, Search } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Crosshair, Loader2, MapPin, Search } from 'lucide-react';
 import { DiscoveryMap } from '@/components/discovery/discovery-map';
 import { PoiLocationSearch } from '@/components/poi/poi-location-search';
 import { Button } from '@/components/ui/button';
@@ -244,14 +244,18 @@ export function DiscoveryClient() {
           <p className="mt-2 text-muted-foreground">Choisissez où et quand découvrir des événements.</p>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <section className="rounded-2xl border bg-card p-4 shadow-sm sm:p-5" aria-label="Recherche d’événements">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <section className="box-border w-full min-w-0 rounded-2xl border bg-card p-4 shadow-sm sm:p-5" aria-label="Recherche d’événements">
             <div className="lg:hidden">
               <p className="text-sm font-semibold">Votre recherche</p>
               <p className="mt-1 text-sm text-muted-foreground" aria-live="polite">{locationSummary} · {whenSummary}</p>
               <Button type="button" variant="outline" size="sm" className="mt-3 w-full"
-                aria-expanded={filtersOpen} aria-controls="discovery-filters" onClick={() => setFiltersOpen((open) => !open)}>
+                aria-expanded={filtersOpen} aria-controls="discovery-filters" onClick={() => {
+                  if (filtersOpen) setDateOpen(false);
+                  setFiltersOpen((open) => !open);
+                }}>
                 {filtersOpen ? 'Masquer les filtres' : 'Modifier la recherche'}
+                <ChevronDown aria-hidden="true" className={`transition-transform duration-300 motion-reduce:transition-none ${filtersOpen ? 'rotate-180' : ''}`} />
               </Button>
               {session.pendingBounds && (
                 <Button type="button" onClick={searchVisibleArea} className="mt-3 w-full">
@@ -259,56 +263,60 @@ export function DiscoveryClient() {
                 </Button>
               )}
             </div>
-            <div id="discovery-filters" className={`${filtersOpen ? 'mt-4 border-t pt-4' : 'hidden'} lg:mt-0 lg:block lg:border-0 lg:pt-0`}>
-              <h2 id="where-heading" className="text-xl font-semibold">OÙ ?</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Autour de vous, d’un lieu recherché ou dans la zone de la carte.</p>
-              <Button type="button" onClick={() => void chooseCurrentLocation()} className="mt-5 w-full" disabled={!hydrated || gpsPending}>
-                {gpsPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crosshair className="h-4 w-4" />}
-                {gpsPending ? 'Recherche de votre position…' : 'Utiliser ma position'}
-              </Button>
-              <div className="mt-5">
-                <label className="mb-2 block text-sm font-medium">Rechercher un lieu</label>
-                {mapUnavailable ? <p className="text-sm text-muted-foreground">La recherche de lieu et la carte sont indisponibles.</p> :
-                  <PoiLocationSearch locationBias={session.context?.area.kind === 'radius' ? session.context.area.center : null}
-                    onPlaceSelected={choosePlace} />}
-              </div>
-              <p className="mt-4 text-sm text-muted-foreground">Vous pouvez aussi déplacer ou zoomer la carte, puis lancer la recherche dans la zone affichée.</p>
-              {session.pendingBounds && (
-                <Button type="button" onClick={searchVisibleArea} className="mt-4 hidden w-full lg:flex">
-                  <Search className="h-4 w-4" /> Rechercher dans cette zone
-                </Button>
-              )}
-              <fieldset className="mt-5 border-t pt-4" disabled={!hydrated}>
-                <legend className="font-semibold">QUAND ?</legend>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {([
-                    { kind: 'today', label: 'Aujourd’hui' },
-                    { kind: 'tomorrow', label: 'Demain' },
-                    { kind: 'weekend', label: 'Ce week-end' },
-                  ] as const).map((choice) => (
-                    <Button key={choice.kind} type="button" size="sm" variant={when.kind === choice.kind ? 'default' : 'outline'}
-                      aria-pressed={when.kind === choice.kind} onClick={() => chooseWhen({ kind: choice.kind })}>
-                      {choice.label}
+            <div id="discovery-filters" className={`grid min-w-0 grid-rows-[0fr] transition-[grid-template-rows,visibility] duration-300 ease-in-out motion-reduce:transition-none lg:visible lg:block lg:transition-none ${filtersOpen ? 'visible grid-rows-[1fr]' : 'invisible'}`}>
+              <div className="min-h-0 min-w-0 overflow-hidden lg:overflow-visible">
+                <div className="mt-4 min-w-0 border-t pt-4 lg:mt-0 lg:border-0 lg:pt-0">
+                  <h2 id="where-heading" className="text-xl font-semibold">OÙ ?</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Autour de vous, d’un lieu recherché ou dans la zone de la carte.</p>
+                  <Button type="button" onClick={() => void chooseCurrentLocation()} className="mt-5 w-full" disabled={!hydrated || gpsPending}>
+                    {gpsPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crosshair className="h-4 w-4" />}
+                    {gpsPending ? 'Recherche de votre position…' : 'Utiliser ma position'}
+                  </Button>
+                  <div className="mt-5 min-w-0 [&_gmp-place-autocomplete]:max-w-full [&_gmp-place-autocomplete]:min-w-0">
+                    <label className="mb-2 block text-sm font-medium">Rechercher un lieu</label>
+                    {mapUnavailable ? <p className="text-sm text-muted-foreground">La recherche de lieu et la carte sont indisponibles.</p> :
+                      <PoiLocationSearch locationBias={session.context?.area.kind === 'radius' ? session.context.area.center : null}
+                        onPlaceSelected={choosePlace} />}
+                  </div>
+                  <p className="mt-4 text-sm text-muted-foreground">Vous pouvez aussi déplacer ou zoomer la carte, puis lancer la recherche dans la zone affichée.</p>
+                  {session.pendingBounds && (
+                    <Button type="button" onClick={searchVisibleArea} className="mt-4 hidden w-full lg:flex">
+                      <Search className="h-4 w-4" /> Rechercher dans cette zone
                     </Button>
-                  ))}
-                  <Popover open={dateOpen} onOpenChange={setDateOpen}>
-                    <PopoverTrigger asChild>
-                      <Button type="button" size="sm" variant={when.kind === 'date' ? 'default' : 'outline'}
-                        aria-pressed={when.kind === 'date'} aria-label={when.kind === 'date' ? `Date choisie : ${dateLabel}` : 'Choisir une date'}>
-                        {dateLabel}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className="w-auto max-w-[calc(100vw-2rem)] p-0">
-                      <Calendar mode="single" selected={selectedDate} defaultMonth={selectedDate} locale={fr} onSelect={(date) => {
-                        if (!date) return;
-                        chooseWhen({ kind: 'date', day: calendarDay(date) });
-                        setDateOpen(false);
-                      }} />
-                    </PopoverContent>
-                  </Popover>
+                  )}
+                  <fieldset className="mt-5 min-w-0 border-t pt-4" disabled={!hydrated}>
+                    <legend className="font-semibold">QUAND ?</legend>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      {([
+                        { kind: 'today', label: 'Aujourd’hui' },
+                        { kind: 'tomorrow', label: 'Demain' },
+                        { kind: 'weekend', label: 'Ce week-end' },
+                      ] as const).map((choice) => (
+                        <Button key={choice.kind} type="button" size="sm" variant={when.kind === choice.kind ? 'default' : 'outline'}
+                          aria-pressed={when.kind === choice.kind} onClick={() => chooseWhen({ kind: choice.kind })}>
+                          {choice.label}
+                        </Button>
+                      ))}
+                      <Popover open={dateOpen} onOpenChange={setDateOpen}>
+                        <PopoverTrigger asChild>
+                          <Button type="button" size="sm" variant={when.kind === 'date' ? 'default' : 'outline'}
+                            aria-pressed={when.kind === 'date'} aria-label={when.kind === 'date' ? `Date choisie : ${dateLabel}` : 'Choisir une date'}>
+                            {dateLabel}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" className="w-auto max-w-[calc(100vw-2rem)] p-0">
+                          <Calendar mode="single" selected={selectedDate} defaultMonth={selectedDate} locale={fr} onSelect={(date) => {
+                            if (!date) return;
+                            chooseWhen({ kind: 'date', day: calendarDay(date) });
+                            setDateOpen(false);
+                          }} />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </fieldset>
+                  {session.context && !session.pendingBounds && <p className="mt-3 hidden text-sm text-primary lg:block">{sourceLabel[session.context.source]}</p>}
                 </div>
-              </fieldset>
-              {session.context && !session.pendingBounds && <p className="mt-3 hidden text-sm text-primary lg:block">{sourceLabel[session.context.source]}</p>}
+              </div>
             </div>
           </section>
 
