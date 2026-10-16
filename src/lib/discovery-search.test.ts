@@ -103,6 +103,7 @@ describe('Discovery request authority', () => {
     badPosition: { area: { kind: 'radius', center: { lat: '48.85', lng: 2.35 } } },
     nan: { area: { kind: 'radius', center: { lat: NaN, lng: 0 } } },
     invalidDate: { when: { kind: 'date', day: '2026-02-30' } },
+    invalidTomorrow: { when: { kind: 'tomorrow', day: '2026-09-13' } },
     unknownCategory: { categoryId: 'parking' }, unknownType: { typeIds: ['unknown'] },
     unknownTag: { tags: ['custom'] }, tagOverflow: { tags: Array(4).fill('free') },
     typeOverflow: { typeIds: Array(6).fill('concert') },

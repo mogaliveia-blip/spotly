@@ -16,10 +16,10 @@ function shiftDay(day: string, days: number): string {
 export function discoveryCandidateWindow(when: DiscoveryWhen, now: TimestampDto): CandidateWindow {
   if (when.kind === 'now') return { start: { ...now }, end: { ...now } };
   const anchor = when.kind === 'date' ? Date.parse(`${when.day}T00:00:00Z`) : now.seconds * 1000;
-  // Two-day offset margin matches the historical calendar primitive. Today adds one
-  // civil day's extent; a weekend can fall up to seven days after the reference instant.
+  // Two-day offset margin matches the historical calendar primitive. Tomorrow adds
+  // one civil day beyond today; a weekend can fall up to seven days after the reference instant.
   const start = when.kind === 'date' ? anchor - 2 * DAY : anchor - 3 * DAY;
-  const end = when.kind === 'date' ? anchor + 3 * DAY : anchor + (when.kind === 'weekend' ? 10 : 3) * DAY;
+  const end = when.kind === 'date' ? anchor + 3 * DAY : anchor + (when.kind === 'weekend' ? 10 : when.kind === 'tomorrow' ? 4 : 3) * DAY;
   return {
     start: instantFromMillis(Math.max(MIN, start)),
     end: end >= MAX ? { seconds: 253402300799, nanoseconds: 999999999 } : instantFromMillis(end),
@@ -37,7 +37,7 @@ export function matchesDiscoveryWhen(
     compareInstants(start, now) <= 0 && compareInstants(now, end) <= 0;
   const today = calendarDayInTimezone(new Date(now.seconds * 1000 + Math.floor(now.nanoseconds / 1_000_000)), projection.timezone);
   const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
-  let days = [when.kind === 'date' ? when.day : today];
+  let days = [when.kind === 'date' ? when.day : when.kind === 'tomorrow' ? shiftDay(today, 1) : today];
   const remainingSunday = when.kind === 'weekend' && weekday === 0;
   if (when.kind === 'weekend' && !remainingSunday) {
     const saturday = shiftDay(today, weekday === 6 ? 0 : 6 - weekday);
@@ -46,9 +46,11 @@ export function matchesDiscoveryWhen(
   if (projection.timePrecision === 'date') {
     return days.some((day) => projection.startDay <= day && day <= projection.endDay);
   }
-  if ((when.kind === 'today' || remainingSunday) && compareInstants(end, now) < 0) return false;
+  // A chosen date equal to today and a weekend in progress must obey Today's exact-hour rule.
+  const includesToday = days.includes(today);
+  if (includesToday && compareInstants(end, now) < 0) return false;
   return days.some((day) => segmentsFor(day, projection.timezone).some((segment) => {
-    const lower = remainingSunday && compareInstants(now, instantFromMillis(segment.start)) > 0 ? now : instantFromMillis(segment.start);
+    const lower = day === today && compareInstants(now, instantFromMillis(segment.start)) > 0 ? now : instantFromMillis(segment.start);
     return compareInstants(start, instantFromMillis(segment.endExclusive)) < 0 && compareInstants(end, lower) >= 0;
   }));
 }

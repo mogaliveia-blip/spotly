@@ -92,6 +92,26 @@ describe('Discovery engine on local Firestore', () => {
     assert.deepEqual(result.results[0].windowEndAt, { seconds: end.seconds, nanoseconds: end.nanoseconds })
     assert.equal('startDay' in result.results[0], false)
   })
+  it('queries Tomorrow through the existing temporal indexes and retains multi-day Events', async () => {
+    await seed('multi-day', { startDay: '2026-09-11', endDay: '2026-09-13' })
+    await seed('tomorrow', { startDay: '2026-09-13', endDay: '2026-09-13' })
+    await seed('today-only')
+    const result = await search({ when: { kind: 'tomorrow' } })
+    assert.deepEqual(result.results.map((r) => r.sourceId), ['multi-day', 'tomorrow'])
+    assert.equal(result.meta.complete, true)
+  })
+  it('does not return an exact Event already ended today for weekend or the chosen current date', async () => {
+    await seed('ended', {
+      timePrecision: 'datetime', startDay: undefined, endDay: undefined,
+      startDate: Timestamp.fromDate(new Date('2026-09-12T08:00:00Z')),
+      endDate: Timestamp.fromDate(new Date('2026-09-12T09:00:00Z')),
+    })
+    await seed('all-day')
+    for (const when of [{ kind: 'weekend' }, { kind: 'date', day: '2026-09-12' }]) {
+      const result = await search({ when })
+      assert.deepEqual(result.results.map((r) => r.sourceId), ['all-day'])
+    }
+  })
   it('returns an actual exhausted zero for old or distant candidates', async () => {
     await seed('historical', { startDay: '2000-01-01', endDay: '2000-01-02' })
     await seed('distant', { discoveryPosition: { lat: 1, lng: 2 } })

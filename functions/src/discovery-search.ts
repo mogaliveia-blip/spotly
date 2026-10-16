@@ -47,7 +47,7 @@ export function validateSearchDiscoveryRequest(value: unknown): SearchDiscoveryR
   if (!isDataObject(when, ['kind'], ['day'])) invalid();
   if (when.kind === 'date') {
     if (!isDataObject(when, ['kind', 'day']) || !isCalendarDay(when.day)) invalid();
-  } else if (!['now', 'today', 'weekend'].includes(when.kind as string) || !isDataObject(when, ['kind'])) invalid();
+  } else if (!['now', 'today', 'tomorrow', 'weekend'].includes(when.kind as string) || !isDataObject(when, ['kind'])) invalid();
   if ('categoryId' in value && value.categoryId !== null && !isCatalogId(discoveryCategories, value.categoryId)) invalid();
   for (const [key, catalog] of [['typeIds', eventDiscoveryTypes], ['tags', discoveryTags]] as const) {
     if (!(key in value)) continue;
@@ -63,7 +63,7 @@ export function validateSearchDiscoveryRequest(value: unknown): SearchDiscoveryR
   // Copy the request so a caller cannot mutate its context during an asynchronous read.
   return {
     area: normalizedArea,
-    when: when.kind === 'date' ? { kind: 'date', day: when.day as string } : { kind: when.kind as 'now' | 'today' | 'weekend' },
+    when: when.kind === 'date' ? { kind: 'date', day: when.day as string } : { kind: when.kind as 'now' | 'today' | 'tomorrow' | 'weekend' },
     categoryId: value.categoryId as SearchDiscoveryRequest['categoryId'] ?? null,
     typeIds: [...new Set(value.typeIds as SearchDiscoveryRequest['typeIds'] ?? [])],
     tags: [...new Set(value.tags as SearchDiscoveryRequest['tags'] ?? [])],

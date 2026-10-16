@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { APILoadingStatus, useApiLoadingStatus } from '@vis.gl/react-google-maps';
+import { fr } from 'date-fns/locale';
 import { ArrowLeft, Crosshair, Loader2, MapPin, Search } from 'lucide-react';
 import { DiscoveryMap } from '@/components/discovery/discovery-map';
 import { PoiLocationSearch } from '@/components/poi/poi-location-search';
 import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { mapsConfig } from '@/lib/firebase-config';
 import { searchDiscovery } from '@/lib/discovery-search';
@@ -16,7 +19,10 @@ import {
   isDiscoveryAreaTooLarge, parseDiscoverySession,
 } from '@/lib/discovery-geography';
 import type { DiscoveryCamera, DiscoveryContext, DiscoverySession, DiscoverySource } from '@/lib/discovery-geography';
-import type { DiscoveryArea } from '../../../functions/src/discovery-search-contract';
+import {
+  DEFAULT_DISCOVERY_WHEN, DISCOVERY_WHEN_SESSION_KEY, parseDiscoveryWhenSession, searchAreaForWhenChange,
+} from '@/lib/discovery-when';
+import type { DiscoveryArea, DiscoveryWhen } from '../../../functions/src/discovery-search-contract';
 
 type BoundsArea = Extract<DiscoveryArea, { kind: 'bounds' }>;
 type SearchStatus = 'idle' | 'loading' | 'success' | 'error' | 'too-large';
@@ -28,6 +34,18 @@ const initialSession: DiscoverySession = {
 const sourceLabel: Record<DiscoverySource, string> = {
   gps: 'Autour de ma position', place: 'Autour du lieu recherché', map: 'Dans la zone affichée',
 };
+
+function calendarDate(day: string): Date {
+  const [year, month, date] = day.split('-').map(Number);
+  const result = new Date(0);
+  result.setFullYear(year, month - 1, date);
+  result.setHours(12, 0, 0, 0);
+  return result;
+}
+
+function calendarDay(date: Date): string {
+  return `${String(date.getFullYear()).padStart(4, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 
 function EventResult({ result, selected, onSelect }: {
   result: DiscoveryResult;
@@ -54,6 +72,8 @@ export function DiscoveryClient() {
     mapsStatus === APILoadingStatus.FAILED || mapsStatus === APILoadingStatus.AUTH_FAILURE;
   const [hydrated, setHydrated] = useState(false);
   const [session, setSession] = useState<DiscoverySession>(initialSession);
+  const [when, setWhen] = useState<DiscoveryWhen>(DEFAULT_DISCOVERY_WHEN);
+  const [dateOpen, setDateOpen] = useState(false);
   const [cameraRequest, setCameraRequest] = useState<DiscoveryCamera & { sequence: number }>({
     ...DEFAULT_DISCOVERY_CAMERA, sequence: 0,
   });
@@ -64,20 +84,20 @@ export function DiscoveryClient() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [gpsPending, setGpsPending] = useState(false);
   const requestSequenceRef = useRef(0);
+  const whenRef = useRef<DiscoveryWhen>(DEFAULT_DISCOVERY_WHEN);
   const locationIntentRef = useRef<DiscoveryLocationIntent | null>(null);
   locationIntentRef.current ??= new DiscoveryLocationIntent();
   const locationIntent = locationIntentRef.current;
   const mapSectionRef = useRef<HTMLElement | null>(null);
 
-  const runSearch = useCallback(async (area: DiscoveryArea) => {
+  const runSearch = useCallback(async (area: DiscoveryArea, selectedWhen: DiscoveryWhen = whenRef.current) => {
     const sequence = ++requestSequenceRef.current;
     setStatus('loading');
     setMessage(null);
     setSearchResult(null);
     setSelectedId(null);
     try {
-      // D2 fixes the period to D1's exact "today" variant; later stages own the WHEN controls.
-      const response = await searchDiscovery({ area, when: { kind: 'today' } });
+      const response = await searchDiscovery({ area, when: selectedWhen });
       if (sequence !== requestSequenceRef.current) return;
       setSearchResult(response);
       setStatus('success');
@@ -95,11 +115,18 @@ export function DiscoveryClient() {
 
   useEffect(() => {
     let restored: DiscoverySession | null = null;
+    let restoredWhen: DiscoveryWhen = DEFAULT_DISCOVERY_WHEN;
+    try { restoredWhen = parseDiscoveryWhenSession(window.sessionStorage.getItem(DISCOVERY_WHEN_SESSION_KEY)); } catch { /* Storage may be disabled. */ }
+    whenRef.current = restoredWhen;
+    setWhen(restoredWhen);
     try { restored = parseDiscoverySession(window.sessionStorage.getItem(DISCOVERY_SESSION_KEY)); } catch { /* Storage may be disabled. */ }
     if (restored) {
       setSession(restored);
       setCameraRequest({ ...restored.camera, sequence: 0 });
-      if (restored.context && !restored.pendingBounds) void runSearch(restored.context.area);
+      if (!restored.pendingBounds) {
+        const area = searchAreaForWhenChange(restored);
+        if (area) void runSearch(area, restoredWhen);
+      }
     }
     setHydrated(true);
   }, [runSearch]);
@@ -108,6 +135,27 @@ export function DiscoveryClient() {
     if (!hydrated) return;
     try { window.sessionStorage.setItem(DISCOVERY_SESSION_KEY, JSON.stringify(session)); } catch { /* Memory state still works. */ }
   }, [hydrated, session]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try { window.sessionStorage.setItem(DISCOVERY_WHEN_SESSION_KEY, JSON.stringify(when)); } catch { /* Memory state still works. */ }
+  }, [hydrated, when]);
+
+  const chooseWhen = (next: DiscoveryWhen) => {
+    if (when.kind === next.kind && (when.kind !== 'date' || (next.kind === 'date' && when.day === next.day))) return;
+    whenRef.current = next;
+    setWhen(next);
+    const area = searchAreaForWhenChange(session);
+    if (area) {
+      void runSearch(area, next);
+      return;
+    }
+    requestSequenceRef.current += 1;
+    setSearchResult(null);
+    setSelectedId(null);
+    setStatus('idle');
+    setMessage(null);
+  };
 
   const chooseRadius = useCallback((source: 'gps' | 'place', center: { lat: number; lng: number }) => {
     const camera = { center, zoom: 11 };
@@ -183,6 +231,12 @@ export function DiscoveryClient() {
 
   const results = searchResult?.results ?? [];
   const selectedResult = results.find((result) => result.id === selectedId) ?? null;
+  const selectedDate = when.kind === 'date' ? calendarDate(when.day) : undefined;
+  const dateLabel = selectedDate ? new Intl.DateTimeFormat('fr-FR', {
+    day: 'numeric', month: 'short', year: 'numeric',
+  }).format(selectedDate) : 'Choisir une date';
+  const emptyTimeLabel = when.kind === 'today' ? 'aujourd’hui' : when.kind === 'tomorrow' ? 'demain' :
+    when.kind === 'weekend' ? 'ce week-end' : `le ${dateLabel}`;
 
   return (
     <main className="min-h-screen bg-background">
@@ -192,7 +246,7 @@ export function DiscoveryClient() {
         </Link>
         <div className="mb-5">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Carte Découverte</h1>
-          <p className="mt-2 text-muted-foreground">Choisissez où chercher les événements d’aujourd’hui.</p>
+          <p className="mt-2 text-muted-foreground">Choisissez où et quand découvrir des événements.</p>
         </div>
 
         <div className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -215,9 +269,36 @@ export function DiscoveryClient() {
                 <Search className="h-4 w-4" /> Rechercher dans cette zone
               </Button>
             )}
-            <div className="mt-5 border-t pt-4 text-sm">
-              <span className="font-medium">QUAND ?</span> Aujourd’hui
-            </div>
+            <fieldset className="mt-5 border-t pt-4" disabled={!hydrated}>
+              <legend className="font-semibold">QUAND ?</legend>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {([
+                  { kind: 'today', label: 'Aujourd’hui' },
+                  { kind: 'tomorrow', label: 'Demain' },
+                  { kind: 'weekend', label: 'Ce week-end' },
+                ] as const).map((choice) => (
+                  <Button key={choice.kind} type="button" size="sm" variant={when.kind === choice.kind ? 'default' : 'outline'}
+                    aria-pressed={when.kind === choice.kind} onClick={() => chooseWhen({ kind: choice.kind })}>
+                    {choice.label}
+                  </Button>
+                ))}
+                <Popover open={dateOpen} onOpenChange={setDateOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" size="sm" variant={when.kind === 'date' ? 'default' : 'outline'}
+                      aria-pressed={when.kind === 'date'} aria-label={when.kind === 'date' ? `Date choisie : ${dateLabel}` : 'Choisir une date'}>
+                      {dateLabel}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-auto max-w-[calc(100vw-2rem)] p-0">
+                    <Calendar mode="single" selected={selectedDate} defaultMonth={selectedDate} locale={fr} onSelect={(date) => {
+                      if (!date) return;
+                      chooseWhen({ kind: 'date', day: calendarDay(date) });
+                      setDateOpen(false);
+                    }} />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </fieldset>
             {session.context && !session.pendingBounds && <p className="mt-3 text-sm text-primary">{sourceLabel[session.context.source]}</p>}
           </section>
 
@@ -251,7 +332,7 @@ export function DiscoveryClient() {
           {!session.pendingBounds && status === 'error' && session.context &&
             <Button type="button" variant="outline" onClick={retrySearch} className="mt-3">Réessayer</Button>}
           {status === 'success' && results.length === 0 && searchResult?.meta.complete &&
-            <p className="mt-3 text-sm text-muted-foreground">Aucun événement trouvé dans cette zone aujourd’hui.</p>}
+            <p className="mt-3 text-sm text-muted-foreground">Aucun événement trouvé dans cette zone {emptyTimeLabel}.</p>}
           {status === 'success' && searchResult && !searchResult.meta.complete &&
             <p className="mt-3 text-sm text-muted-foreground">Résultats partiels pour cette zone.</p>}
           {status === 'success' && searchResult && !searchResult.meta.complete && session.context &&

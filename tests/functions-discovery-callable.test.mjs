@@ -86,13 +86,16 @@ describe('Public Discovery callable protocol', () => {
     assert.equal((await db.collection('events').get()).empty, true)
   })
   it('reports a true exhaustive empty result', async () => {
-    const { data } = await callable(request)
-    assert.deepEqual(data, { results: [], meta: { complete: true, truncated: false, partialFailure: false, returnedCount: 0 } })
+    for (const when of [{ kind: 'today' }, { kind: 'tomorrow' }, { kind: 'weekend' }, request.when]) {
+      const { data } = await callable({ ...request, when })
+      assert.deepEqual(data, { results: [], meta: { complete: true, truncated: false, partialFailure: false, returnedCount: 0 } })
+    }
   })
   it('returns callable validation errors without accepting client-owned limits', async () => {
     for (const payload of [
       { ...request, limit: 1000 }, { ...request, categoryId: 'unknown' },
       { ...request, when: { kind: 'date', day: '2026-02-30' } },
+      { ...request, when: { kind: 'tomorrow', day: '2026-09-13' } },
       { ...request, area: { kind: 'radius', center: { lat: '48.85', lng: 2.35 } } },
     ]) await assert.rejects(callable(payload), { code: 'functions/invalid-argument' })
   })

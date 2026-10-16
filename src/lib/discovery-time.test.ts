@@ -12,7 +12,7 @@ function event(start: string, end: string, timezone = 'Europe/Paris'): Discovery
     position: { lat: 48.85, lng: 2.35 }, typeId: 'festival', categoryId: 'culture', timePrecision: 'datetime',
     timezone, windowStartAt: instant(start), windowEndAt: instant(end) }
 }
-function date(day: string, timezone = 'Europe/Paris'): DiscoveryResultDto {
+function date(day: string, timezone = 'Europe/Paris'): Extract<DiscoveryResultDto, { timePrecision: 'date' }> {
   return { ...event('2026-09-12T00:00:00Z', '2026-09-12T23:00:00Z', timezone), timePrecision: 'date', startDay: day, endDay: day }
 }
 describe('Discovery temporal policy', () => {
@@ -28,6 +28,21 @@ describe('Discovery temporal policy', () => {
     assert.equal(matchesDiscoveryWhen(event('2026-09-12T11:00:00Z', '2026-09-12T13:00:00Z'), { kind: 'today' }, now), true)
     assert.equal(matchesDiscoveryWhen(event('2026-09-12T18:00:00Z', '2026-09-12T19:00:00Z'), { kind: 'today' }, now), true)
     assert.equal(matchesDiscoveryWhen(event('2026-09-12T08:00:00Z', '2026-09-12T09:00:00Z'), { kind: 'today' }, now), false)
+  })
+  it('Tomorrow uses each Event timezone, including a UTC midnight boundary', () => {
+    const reference = instant('2026-09-12T23:30:00Z')
+    assert.equal(matchesDiscoveryWhen(date('2026-09-14', 'Europe/Paris'), { kind: 'tomorrow' }, reference), true)
+    assert.equal(matchesDiscoveryWhen(date('2026-09-13', 'Europe/Paris'), { kind: 'tomorrow' }, reference), false)
+    assert.equal(matchesDiscoveryWhen(date('2026-09-13', 'America/New_York'), { kind: 'tomorrow' }, reference), true)
+    assert.equal(matchesDiscoveryWhen(date('2026-09-14', 'America/New_York'), { kind: 'tomorrow' }, reference), false)
+  })
+  it('matches multi-day Events and exact intervals crossing local midnight', () => {
+    const multiDay = { ...date('2026-09-11'), endDay: '2026-09-13' }
+    const overnight = event('2026-09-12T20:00:00Z', '2026-09-13T01:00:00Z')
+    assert.equal(matchesDiscoveryWhen(multiDay, { kind: 'today' }, now), true)
+    assert.equal(matchesDiscoveryWhen(multiDay, { kind: 'tomorrow' }, now), true)
+    assert.equal(matchesDiscoveryWhen(overnight, { kind: 'today' }, now), true)
+    assert.equal(matchesDiscoveryWhen(overnight, { kind: 'tomorrow' }, now), true)
   })
   it('uses each Event timezone rather than the runtime timezone', () => {
     const reference = instant('2026-09-12T23:30:00Z')
@@ -48,6 +63,22 @@ describe('Discovery temporal policy', () => {
     assert.equal(matchesDiscoveryWhen(date('2026-09-13'), { kind: 'weekend' }, sunday), true)
     assert.equal(matchesDiscoveryWhen(event('2026-09-13T08:00:00Z', '2026-09-13T09:00:00Z'), { kind: 'weekend' }, sunday), false)
     assert.equal(matchesDiscoveryWhen(event('2026-09-13T12:00:00Z', '2026-09-13T13:00:00Z'), { kind: 'weekend' }, sunday), true)
+  })
+  it('excludes completed exact hours on Saturday and on a chosen date equal to local today', () => {
+    const ended = event('2026-09-12T08:00:00Z', '2026-09-12T09:00:00Z')
+    assert.equal(matchesDiscoveryWhen(ended, { kind: 'weekend' }, now), false)
+    assert.equal(matchesDiscoveryWhen(ended, { kind: 'date', day: '2026-09-12' }, now), false)
+    assert.equal(matchesDiscoveryWhen(date('2026-09-12'), { kind: 'weekend' }, now), true)
+    assert.equal(matchesDiscoveryWhen(date('2026-09-12'), { kind: 'date', day: '2026-09-12' }, now), true)
+    assert.equal(matchesDiscoveryWhen(ended, { kind: 'date', day: '2026-09-12' }, instant('2026-09-13T12:00:00Z')), true)
+  })
+  it('includes real Tomorrow overlaps across spring and autumn clock changes', () => {
+    for (const [reference, start, end] of [
+      ['2026-03-28T12:00:00Z', '2026-03-29T00:30:00Z', '2026-03-29T02:30:00Z'],
+      ['2026-10-24T12:00:00Z', '2026-10-25T00:30:00Z', '2026-10-25T02:30:00Z'],
+    ]) {
+      assert.equal(matchesDiscoveryWhen(event(start, end), { kind: 'tomorrow' }, instant(reference)), true)
+    }
   })
   it('chosen dates have no future horizon and do not exclude completed historical Events', () => {
     assert.equal(matchesDiscoveryWhen(date('2099-07-01'), { kind: 'date', day: '2099-07-01' }, now), true)
@@ -79,10 +110,10 @@ describe('Discovery temporal policy', () => {
     const reference = { seconds: now.seconds, nanoseconds: 123456789 }
     assert.deepEqual(discoveryCandidateWindow({ kind: 'now' }, reference), { start: reference, end: reference })
   })
-  it('Today/weekend envelopes include all matching days around UTC/local week boundaries', () => {
+  it('Today/Tomorrow/weekend envelopes include all matching days around UTC/local week boundaries', () => {
     for (const timezone of ['Etc/GMT+12', 'Pacific/Kiritimati', 'America/New_York', 'Europe/Paris']) {
       for (const reference of [instant('2026-09-11T23:59:59Z'), now, instant('2026-09-13T00:00:00Z')]) {
-        for (const kind of ['today', 'weekend'] as const) {
+        for (const kind of ['today', 'tomorrow', 'weekend'] as const) {
           const filter: DiscoveryWhen = { kind }
           const envelope = discoveryCandidateWindow(filter, reference)
           for (let d = 10; d <= 21; d++) {

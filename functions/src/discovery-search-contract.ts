@@ -5,7 +5,7 @@ import { isEventName, isEventSlug } from './event-public-identity';
 
 /** JSON transport only: neither runtime relies on an SDK instance crossing the callable. */
 export type TimestampDto = { seconds: number; nanoseconds: number };
-export type DiscoveryWhen = { kind: 'now' | 'today' | 'weekend' } | { kind: 'date'; day: string };
+export type DiscoveryWhen = { kind: 'now' | 'today' | 'tomorrow' | 'weekend' } | { kind: 'date'; day: string };
 export type DiscoveryArea =
   | { kind: 'radius'; center: { lat: number; lng: number } }
   | { kind: 'bounds'; north: number; south: number; east: number; west: number };
