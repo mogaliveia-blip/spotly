@@ -516,7 +516,7 @@ export async function removeEventMember(eventId: string, uid: string): Promise<v
 
 // --- CONFIG FUNCTIONS ---
 
-export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
+export async function fetchAppConfig(eventId: string, options: { throwOnReadError?: boolean } = {}): Promise<AppConfig> {
   const path = dbPaths.config(eventId);
   const configPath = `${path}/main`;
 
@@ -528,12 +528,13 @@ export async function fetchAppConfig(eventId: string): Promise<AppConfig> {
       return configSnap.data() as AppConfig;
     }
   } catch (e: any) {
-    console.warn('[Config] Read failed, fallback applied', {
+    console.warn(options.throwOnReadError ? '[Config] Read failed' : '[Config] Read failed, fallback applied', {
       eventId,
       path: configPath,
       errorCode: e?.code ?? null,
       errorMessage: e?.message ?? null,
     });
+    if (options.throwOnReadError) throw e;
   }
   
   return { isLandingPageActive: true, festivalMode: false, reviewsEnabled: true }

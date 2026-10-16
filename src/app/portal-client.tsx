@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { canAccessMyEvents, canAccessPlatformAdmin } from '@/lib/access-control';
+import { selectPortalView } from '@/lib/portal-view';
 import { SpotlyMapPreview } from '@/components/marketing/spotly-map-preview';
 import { SpotlyQrReminder } from '@/components/marketing/spotly-qr-reminder';
 
@@ -24,7 +25,6 @@ const ALL_DEPARTMENTS_VALUE = 'all';
 const EVENTS_LOAD_TIMEOUT_MS = 8000;
 const EVENTS_RETRY_DELAY_MS = 900;
 const EVENTS_STALE_MS = 30000;
-const defaultConfig: AppConfig = { isLandingPageActive: false };
 
 type EventsLoadStatus = 'loading' | 'refreshing' | 'success' | 'error';
 
@@ -70,9 +70,11 @@ function compareEventsByDate(a: AppEvent, b: AppEvent): number {
 }
 
 export default function PortalPage() {
-  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [config, setConfig] = useState<AppConfig | null | undefined>(undefined);
+  const [configAttempt, setConfigAttempt] = useState(0);
   const [events, setEvents] = useState<AppEvent[]>(publishedEventsMemoryCache?.events ?? []);
   const [eventsStatus, setEventsStatus] = useState<EventsLoadStatus>(publishedEventsMemoryCache?.events.length ? 'refreshing' : 'loading');
+  const [initialEventsResolved, setInitialEventsResolved] = useState(false);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [lastEventsLoadedAt, setLastEventsLoadedAt] = useState<number | null>(publishedEventsMemoryCache?.loadedAt ?? null);
   const [hasEventMembership, setHasEventMembership] = useState(false);
@@ -83,7 +85,6 @@ export default function PortalPage() {
   const activeEventsRequestRef = useRef<number | null>(null);
   const latestEventsRef = useRef<AppEvent[]>(publishedEventsMemoryCache?.events ?? []);
 
-  const effectiveConfig = config ?? defaultConfig;
   const showMyEvents = !!user && !firebaseUser?.isAnonymous && canAccessMyEvents({ globalRole, hasEventMembership });
   const showPlatformAdmin = canAccessPlatformAdmin(globalRole);
 
@@ -243,6 +244,7 @@ export default function PortalPage() {
       setLastEventsLoadedAt(loadedAt);
       setEventsStatus('success');
       setEventsError(null);
+      setInitialEventsResolved(true);
     } catch (error: any) {
       if (activeEventsRequestRef.current !== requestId || eventRequestSeqRef.current !== requestId) {
         return;
@@ -254,6 +256,7 @@ export default function PortalPage() {
           ? 'Le chargement des événements prend trop de temps. Vérifiez votre connexion puis réessayez.'
           : 'Impossible de charger les événements.'
       );
+      setInitialEventsResolved(true);
     } finally {
       if (activeEventsRequestRef.current === requestId) {
         activeEventsRequestRef.current = null;
@@ -330,18 +333,19 @@ export default function PortalPage() {
   useEffect(() => {
     let isMounted = true;
 
-    fetchAppConfig(DEFAULT_EVENT_ID)
+    setConfig(undefined);
+    fetchAppConfig(DEFAULT_EVENT_ID, { throwOnReadError: true })
       .then((appConfig) => {
         if (isMounted) setConfig(appConfig);
       })
       .catch(() => {
-        if (isMounted) setConfig(defaultConfig);
+        if (isMounted) setConfig(null);
       });
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [configAttempt]);
 
   useEffect(() => {
     const shouldRefresh = () => {
@@ -377,8 +381,32 @@ export default function PortalPage() {
     void loadPublishedEvents('manual');
   }, [loadPublishedEvents]);
 
+  const portalView = selectPortalView(config, initialEventsResolved, events.length, eventsStatus, lastEventsLoadedAt !== null);
+
+  if (portalView === 'loading') {
+    return <main role="status" className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">Chargement de l’accueil…</main>;
+  }
+
+  if (portalView === 'config-error' || portalView === 'events-error') {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 text-center">
+        <p role="alert" className="text-sm text-muted-foreground">
+          {portalView === 'config-error' ? 'Impossible de charger la configuration de l’accueil.' : eventsError}
+        </p>
+        <Button variant="outline" onClick={() => {
+          if (portalView === 'config-error') {
+            setConfig(undefined);
+            setConfigAttempt((attempt) => attempt + 1);
+          } else {
+            void loadPublishedEvents('retry');
+          }
+        }}>Réessayer</Button>
+      </main>
+    );
+  }
+
   // MODE MAINTENANCE / LANDING PAGE ACTIVE
-  if (effectiveConfig.isLandingPageActive && events.length === 0 && eventsStatus === 'success') {
+  if (portalView === 'landing') {
     return (
       <div className="flex min-h-screen flex-col bg-background">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">
