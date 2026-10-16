@@ -438,9 +438,6 @@ export default function PortalPage() {
                   <p className="mt-4 max-w-3xl mx-auto text-muted-foreground">
                       L'application sera bientôt disponible pour tous. Retrouvez le programme, les points d'intérêt, et organisez votre expérience pour un festival inoubliable.
                   </p>
-                  <Button asChild className="mt-6">
-                    <Link href="/discovery"><MapPin className="h-4 w-4" /> Carte Découverte</Link>
-                  </Button>
               </div>
           </section>
         </main>
