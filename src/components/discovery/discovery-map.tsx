@@ -52,6 +52,9 @@ export function DiscoveryMap({ camera, cameraRequest, searchSequence, results, s
 
   return (
     <div className="h-full w-full" onPointerDownCapture={() => movement.noteUserInput()}
+      onPointerMoveCapture={(event) => { if (event.buttons) movement.noteUserInput(); }}
+      onPointerUpCapture={() => movement.noteUserRelease()}
+      onPointerCancelCapture={() => movement.noteUserRelease()}
       onWheelCapture={() => movement.noteUserInput()} onKeyDownCapture={() => movement.noteUserInput()}>
     <Map
       defaultCenter={camera.center}

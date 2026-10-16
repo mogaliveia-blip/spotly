@@ -5,9 +5,12 @@ function sameCamera(a: DiscoveryCamera, b: DiscoveryCamera): boolean {
     Math.abs(a.center.lng - b.center.lng) < 1e-7 && a.zoom === b.zoom;
 }
 
+const INPUT_WINDOW_MS = 1000;
+const RELEASE_GRACE_MS = 350;
+
 /** Google Maps zoom/idle events have no source flag; recent input and the requested camera disambiguate them. */
 export class DiscoveryMapMovement {
-  private userInput = false;
+  private userInputUntil: number | null = null;
   private manual = false;
   private manualSettled = false;
   private dragging = false;
@@ -17,8 +20,16 @@ export class DiscoveryMapMovement {
   private target: DiscoveryCamera | null = null;
   private expectedZoom: number | null = null;
 
+  constructor(private readonly now: () => number = Date.now) {}
+
   noteUserInput() {
-    this.userInput = true;
+    this.userInputUntil = this.now() + INPUT_WINDOW_MS;
+  }
+
+  noteUserRelease() {
+    if (this.userInputUntil !== null && !this.manual) {
+      this.userInputUntil = Math.min(this.userInputUntil, this.now() + RELEASE_GRACE_MS);
+    }
   }
 
   beginProgrammatic(target: DiscoveryCamera, currentZoom: number | undefined) {
@@ -28,7 +39,7 @@ export class DiscoveryMapMovement {
   }
 
   finishManual() {
-    this.userInput = false;
+    this.userInputUntil = null;
     this.manual = false;
     this.manualSettled = false;
     this.dragging = false;
@@ -61,13 +72,14 @@ export class DiscoveryMapMovement {
   }
 
   onZoomChanged(zoom: number | undefined): boolean {
-    if (this.target && !this.userInput) {
+    const recentInput = this.manual || (this.userInputUntil !== null && this.now() <= this.userInputUntil);
+    if (this.target && !recentInput) {
       if (zoom === this.expectedZoom) {
         this.expectedZoom = null;
         return false;
       }
     }
-    if (!this.userInput) return false;
+    if (!recentInput) return false;
     const started = this.beginManual();
     this.manualZoom = zoom ?? null;
     return started;
@@ -82,7 +94,7 @@ export class DiscoveryMapMovement {
       // A queued idle may precede the final idle of the same gesture.
       this.lastManualCamera = camera;
       this.manualSettled = true;
-      this.userInput = false;
+      this.userInputUntil = null;
       return true;
     }
     if (this.target && sameCamera(camera, this.target)) {

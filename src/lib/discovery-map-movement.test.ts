@@ -31,6 +31,39 @@ function harness() {
 }
 
 describe('Discovery map movements', () => {
+  it('does not turn a released tap or one-finger page scroll into a later manual zoom', () => {
+    let time = 1_000;
+    const movement = new DiscoveryMapMovement(() => time);
+    movement.noteUserInput();
+    movement.noteUserRelease();
+    time += 351;
+    assert.equal(movement.onZoomChanged(12), false);
+    assert.equal(movement.onIdle(first, true), false);
+    movement.noteUserInput();
+    time += 100;
+    movement.noteUserInput(); // one-finger scroll over the cooperative map
+    movement.noteUserRelease();
+    time += 351;
+    assert.equal(movement.onZoomChanged(13), false);
+    assert.equal(movement.onIdle(first, true), false);
+  });
+
+  it('still recognizes a touch zoom and a two-finger drag', () => {
+    let time = 1_000;
+    const movement = new DiscoveryMapMovement(() => time);
+    movement.noteUserInput();
+    movement.noteUserRelease();
+    time += 100;
+    assert.equal(movement.onZoomChanged(12), true);
+    assert.equal(movement.onIdle({ ...first, zoom: 12 }, true), true);
+    movement.finishManual();
+    movement.noteUserInput();
+    assert.equal(movement.onDragstart(), true);
+    movement.noteUserRelease();
+    movement.onDragend();
+    assert.equal(movement.onIdle(manual, true), true);
+  });
+
   it('keeps initialization passive and records the first manual drag', () => {
     const map = harness();
     map.movement.onZoomChanged(first.zoom);
