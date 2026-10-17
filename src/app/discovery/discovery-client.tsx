@@ -10,6 +10,7 @@ import { PoiLocationSearch } from '@/components/poi/poi-location-search';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { mapsConfig } from '@/lib/firebase-config';
 import { searchDiscovery } from '@/lib/discovery-search';
@@ -17,6 +18,7 @@ import {
   discoverySearchViewReducer, initialDiscoverySearchView, showingPreviousDiscoveryResults,
 } from '@/lib/discovery-search-view';
 import type { DiscoveryResult } from '@/lib/discovery-search-dto';
+import { discoveryCategories, isCatalogId } from '@/lib/event-discovery';
 import {
   DEFAULT_DISCOVERY_CAMERA, DISCOVERY_SESSION_KEY, DiscoveryLocationIntent, focusDiscoveryResult,
   isDiscoveryAreaTooLarge, parseDiscoverySession,
@@ -25,6 +27,10 @@ import type { DiscoveryCamera, DiscoveryContext, DiscoverySession, DiscoverySour
 import {
   DEFAULT_DISCOVERY_WHEN, DISCOVERY_WHEN_SESSION_KEY, parseDiscoveryWhenSession, searchAreaForWhenChange,
 } from '@/lib/discovery-when';
+import {
+  DEFAULT_DISCOVERY_CATEGORY, DISCOVERY_CATEGORY_SESSION_KEY, discoverySearchRequest, parseDiscoveryCategorySession,
+} from '@/lib/discovery-what';
+import type { DiscoveryCategorySelection } from '@/lib/discovery-what';
 import type { DiscoveryArea, DiscoveryWhen } from '../../../functions/src/discovery-search-contract';
 
 type BoundsArea = Extract<DiscoveryArea, { kind: 'bounds' }>;
@@ -75,6 +81,7 @@ export function DiscoveryClient() {
   const [hydrated, setHydrated] = useState(false);
   const [session, setSession] = useState<DiscoverySession>(initialSession);
   const [when, setWhen] = useState<DiscoveryWhen>(DEFAULT_DISCOVERY_WHEN);
+  const [category, setCategory] = useState<DiscoveryCategorySelection>(DEFAULT_DISCOVERY_CATEGORY);
   const [dateOpen, setDateOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [cameraRequest, setCameraRequest] = useState<DiscoveryCamera & { sequence: number }>({
@@ -86,16 +93,20 @@ export function DiscoveryClient() {
   const [gpsPending, setGpsPending] = useState(false);
   const requestSequenceRef = useRef(0);
   const whenRef = useRef<DiscoveryWhen>(DEFAULT_DISCOVERY_WHEN);
+  const categoryRef = useRef<DiscoveryCategorySelection>(DEFAULT_DISCOVERY_CATEGORY);
   const locationIntentRef = useRef<DiscoveryLocationIntent | null>(null);
   locationIntentRef.current ??= new DiscoveryLocationIntent();
   const locationIntent = locationIntentRef.current;
   const mapSectionRef = useRef<HTMLElement | null>(null);
 
-  const runSearch = useCallback(async (area: DiscoveryArea, selectedWhen: DiscoveryWhen = whenRef.current) => {
+  const runSearch = useCallback(async (
+    area: DiscoveryArea, selectedWhen: DiscoveryWhen = whenRef.current,
+    selectedCategory: DiscoveryCategorySelection = categoryRef.current,
+  ) => {
     const sequence = ++requestSequenceRef.current;
     dispatchSearch({ type: 'start' });
     try {
-      const response = await searchDiscovery({ area, when: selectedWhen });
+      const response = await searchDiscovery(discoverySearchRequest(area, selectedWhen, selectedCategory));
       if (sequence !== requestSequenceRef.current) return;
       dispatchSearch({ type: 'success', result: response });
     } catch (error) {
@@ -113,16 +124,20 @@ export function DiscoveryClient() {
   useEffect(() => {
     let restored: DiscoverySession | null = null;
     let restoredWhen: DiscoveryWhen = DEFAULT_DISCOVERY_WHEN;
+    let restoredCategory: DiscoveryCategorySelection = DEFAULT_DISCOVERY_CATEGORY;
     try { restoredWhen = parseDiscoveryWhenSession(window.sessionStorage.getItem(DISCOVERY_WHEN_SESSION_KEY)); } catch { /* Storage may be disabled. */ }
     whenRef.current = restoredWhen;
     setWhen(restoredWhen);
+    try { restoredCategory = parseDiscoveryCategorySession(window.sessionStorage.getItem(DISCOVERY_CATEGORY_SESSION_KEY)); } catch { /* Storage may be disabled. */ }
+    categoryRef.current = restoredCategory;
+    setCategory(restoredCategory);
     try { restored = parseDiscoverySession(window.sessionStorage.getItem(DISCOVERY_SESSION_KEY)); } catch { /* Storage may be disabled. */ }
     if (restored) {
       setSession(restored);
       setCameraRequest({ ...restored.camera, sequence: 0 });
       if (!restored.pendingBounds) {
         const area = searchAreaForWhenChange(restored);
-        if (area) void runSearch(area, restoredWhen);
+        if (area) void runSearch(area, restoredWhen, restoredCategory);
       }
     }
     setHydrated(true);
@@ -138,6 +153,11 @@ export function DiscoveryClient() {
     try { window.sessionStorage.setItem(DISCOVERY_WHEN_SESSION_KEY, JSON.stringify(when)); } catch { /* Memory state still works. */ }
   }, [hydrated, when]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    try { window.sessionStorage.setItem(DISCOVERY_CATEGORY_SESSION_KEY, JSON.stringify(category)); } catch { /* Memory state still works. */ }
+  }, [hydrated, category]);
+
   const chooseWhen = (next: DiscoveryWhen) => {
     if (when.kind === next.kind && (when.kind !== 'date' || (next.kind === 'date' && when.day === next.day))) return;
     whenRef.current = next;
@@ -145,6 +165,19 @@ export function DiscoveryClient() {
     const area = searchAreaForWhenChange(session);
     if (area) {
       void runSearch(area, next);
+      return;
+    }
+    requestSequenceRef.current += 1;
+    dispatchSearch({ type: 'interrupt' });
+  };
+
+  const chooseCategory = (next: DiscoveryCategorySelection) => {
+    if (category === next) return;
+    categoryRef.current = next;
+    setCategory(next);
+    const area = searchAreaForWhenChange(session);
+    if (area) {
+      void runSearch(area, whenRef.current, next);
       return;
     }
     requestSequenceRef.current += 1;
@@ -231,6 +264,8 @@ export function DiscoveryClient() {
   const whenSummary = when.kind === 'today' ? 'Aujourd’hui' : when.kind === 'tomorrow' ? 'Demain' :
     when.kind === 'weekend' ? 'Ce week-end' : dateLabel;
   const locationSummary = session.context ? sourceLabel[session.context.source] : 'Choisir un lieu';
+  const categorySummary = category === 'all' ? 'Tout découvrir' :
+    discoveryCategories.find((item) => item.id === category)?.label ?? 'Tout découvrir';
   const previousResults = showingPreviousDiscoveryResults(searchView, session.pendingBounds !== null);
 
   return (
@@ -241,14 +276,14 @@ export function DiscoveryClient() {
         </Link>
         <div className="mb-5">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Carte Découverte</h1>
-          <p className="mt-2 text-muted-foreground">Choisissez où et quand découvrir des événements.</p>
+          <p className="mt-2 text-muted-foreground">Choisissez où, quand et quoi découvrir.</p>
         </div>
 
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
           <section className="box-border w-full min-w-0 rounded-2xl border bg-card p-4 shadow-sm sm:p-5" aria-label="Recherche d’événements">
             <div className="lg:hidden">
               <p className="text-sm font-semibold">Votre recherche</p>
-              <p className="mt-1 text-sm text-muted-foreground" aria-live="polite">{locationSummary} · {whenSummary}</p>
+              <p className="mt-1 text-sm text-muted-foreground" aria-live="polite">{locationSummary} · {whenSummary} · {categorySummary}</p>
               <Button type="button" variant="outline" size="sm" className="mt-3 w-full"
                 aria-expanded={filtersOpen} aria-controls="discovery-filters" onClick={() => {
                   if (filtersOpen) setDateOpen(false);
@@ -314,6 +349,18 @@ export function DiscoveryClient() {
                       </Popover>
                     </div>
                   </fieldset>
+                  <div className="mt-5 min-w-0 border-t pt-4">
+                    <h2 id="what-heading" className="font-semibold">QUOI ?</h2>
+                    <Select value={category} disabled={!hydrated} onValueChange={(value) => {
+                      if (value === 'all' || isCatalogId(discoveryCategories, value)) chooseCategory(value);
+                    }}>
+                      <SelectTrigger aria-labelledby="what-heading" className="mt-3"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tout découvrir</SelectItem>
+                        {discoveryCategories.map((item) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   {session.context && !session.pendingBounds && <p className="mt-3 hidden text-sm text-primary lg:block">{sourceLabel[session.context.source]}</p>}
                 </div>
               </div>
