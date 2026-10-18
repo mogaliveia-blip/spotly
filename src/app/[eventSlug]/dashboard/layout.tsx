@@ -8,6 +8,7 @@ import { useEvent } from '@/providers/event-provider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { DiscoveryReturnLink } from '@/components/discovery/discovery-return-link';
 
 export default function DashboardLayout({
   children,
@@ -97,5 +98,10 @@ export default function DashboardLayout({
     );
   }
 
-  return <AppLayout>{children}</AppLayout>;
+  return <AppLayout>
+    <div className="flex h-full min-h-0 flex-col">
+      <DiscoveryReturnLink eventSlug={eventSlug} />
+      <div className="min-h-0 flex-1">{children}</div>
+    </div>
+  </AppLayout>;
 }

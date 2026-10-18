@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { APILoadingStatus, useApiLoadingStatus } from '@vis.gl/react-google-maps';
 import { fr } from 'date-fns/locale';
-import { ArrowLeft, ChevronDown, Crosshair, Loader2, MapPin, Search } from 'lucide-react';
+import { ArrowLeft, CalendarDays, ChevronDown, Crosshair, Loader2, MapPin, Search } from 'lucide-react';
 import { DiscoveryMap } from '@/components/discovery/discovery-map';
 import { DiscoveryPlaceSearch } from '@/components/discovery/discovery-place-search';
 import { Button } from '@/components/ui/button';
@@ -14,11 +15,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { mapsConfig } from '@/lib/firebase-config';
 import { searchDiscovery } from '@/lib/discovery-search';
+import { createDiscoveryReturnToken, discoveryEventHref, discoveryReturnIntent, DISCOVERY_RETURN_SESSION_KEY } from '@/lib/discovery-return';
 import {
   discoverySearchViewReducer, initialDiscoverySearchView, showingPreviousDiscoveryResults,
 } from '@/lib/discovery-search-view';
 import type { DiscoveryResult } from '@/lib/discovery-search-dto';
 import { discoveryCategories, isCatalogId } from '@/lib/event-discovery';
+import type { DiscoveryCategoryId } from '@/lib/event-discovery';
 import {
   DEFAULT_DISCOVERY_CAMERA, DISCOVERY_SESSION_KEY, DiscoveryLocationIntent, focusDiscoveryResult,
   isDiscoveryAreaTooLarge, parseDiscoverySession,
@@ -43,6 +46,18 @@ const sourceLabel: Record<DiscoverySource, string> = {
   gps: 'Autour de ma position', place: 'Autour du lieu recherché', map: 'Dans la zone affichée',
 };
 
+const categoryAppearance: Record<DiscoveryCategoryId, { border: string; badge: string; image: string }> = {
+  music: { border: 'border-l-violet-500', badge: 'bg-violet-100 text-violet-900 dark:bg-violet-950 dark:text-violet-100', image: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-200' },
+  culture: { border: 'border-l-rose-500', badge: 'bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-100', image: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-200' },
+  gastronomy: { border: 'border-l-amber-500', badge: 'bg-amber-100 text-amber-950 dark:bg-amber-950 dark:text-amber-100', image: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200' },
+  sport: { border: 'border-l-sky-500', badge: 'bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-100', image: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-200' },
+  nature: { border: 'border-l-emerald-500', badge: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100', image: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200' },
+  other: { border: 'border-l-slate-500', badge: 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100', image: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200' },
+};
+const unknownCategoryAppearance = {
+  border: 'border-l-muted-foreground', badge: 'bg-muted text-foreground', image: 'bg-muted text-muted-foreground',
+};
+
 function calendarDate(day: string): Date {
   const [year, month, date] = day.split('-').map(Number);
   const result = new Date(0);
@@ -55,20 +70,46 @@ function calendarDay(date: Date): string {
   return `${String(date.getFullYear()).padStart(4, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function EventResult({ result, selected, onSelect }: {
+function EventResult({ result, selected, onSelect, eventHref, onOpenEvent }: {
   result: DiscoveryResult;
   selected: boolean;
   onSelect: () => void;
+  eventHref: string;
+  onOpenEvent: () => void;
 }) {
+  const [failedThumbnail, setFailedThumbnail] = useState<string | null>(null);
+  const category = discoveryCategories.find((item) => item.id === result.categoryId);
+  const appearance = category ? categoryAppearance[category.id] : unknownCategoryAppearance;
+  const thumbnail = result.thumbnail?.trim();
+  const showThumbnail = !!thumbnail && failedThumbnail !== thumbnail;
+  const optimizableThumbnail = !!thumbnail && (
+    (thumbnail.startsWith('/') && !thumbnail.startsWith('//')) ||
+    thumbnail.startsWith('https://firebasestorage.googleapis.com/')
+  );
   return (
-    <article className={`rounded-xl border bg-card p-4 shadow-sm ${selected ? 'border-primary ring-1 ring-primary' : 'border-border'}`}>
-      <button type="button" onClick={onSelect} className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Voir ${result.title} sur la carte`}>
-        <h3 className="font-semibold leading-snug">{result.title}</h3>
-        {result.distanceMeters !== undefined && <p className="mt-1 text-sm text-muted-foreground">À {Math.round(result.distanceMeters / 1000)} km du centre</p>}
+    <article className={`flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-l-4 bg-card shadow-sm ${appearance.border} ${selected ? 'border-primary ring-2 ring-primary' : 'border-border'}`}>
+      <button type="button" onClick={onSelect} className="w-full min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" aria-label={`Localiser ${result.title} sur la carte`}>
+        <div className={`relative flex h-36 w-full items-center justify-center overflow-hidden ${appearance.image}`}>
+          {showThumbnail ? <Image src={thumbnail} alt="" fill unoptimized={!optimizableThumbnail} sizes="(max-width: 639px) calc(100vw - 2rem), (max-width: 1023px) calc(50vw - 2rem), (max-width: 1279px) 320px, 300px"
+            className="object-cover" onError={() => setFailedThumbnail(thumbnail)} /> :
+            <CalendarDays aria-hidden="true" className="h-12 w-12 opacity-70" />}
+        </div>
+        <div className="space-y-2 p-3">
+          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${appearance.badge}`}>{category?.label ?? 'Catégorie non renseignée'}</span>
+          <h3 className="break-words font-semibold leading-snug">{result.title}</h3>
+          {result.distanceMeters !== undefined && <p className="text-sm text-muted-foreground">À {result.distanceMeters < 1000
+            ? `${Math.round(result.distanceMeters)} m` : `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(result.distanceMeters / 1000)} km`} du centre</p>}
+          <span className="inline-flex items-center gap-1 text-sm font-medium text-violet-700 underline-offset-2 hover:underline dark:text-violet-300">
+            <MapPin aria-hidden="true" className="h-4 w-4" /> Localiser sur la carte
+          </span>
+        </div>
       </button>
-      <Button asChild size="sm" variant="outline" className="mt-3 w-full">
-        <Link href={`/${result.slug}/dashboard`}>Découvrir l’événement</Link>
-      </Button>
+      <div className="mt-auto px-3 pb-3">
+        <Button asChild size="sm" variant="outline" className="w-full">
+          <Link href={eventHref} onClick={onOpenEvent} onAuxClick={(event) => { if (event.button === 1) onOpenEvent(); }}
+            onContextMenu={onOpenEvent}>Découvrir l’événement</Link>
+        </Button>
+      </div>
     </article>
   );
 }
@@ -85,6 +126,8 @@ export function DiscoveryClient() {
   const [dateOpen, setDateOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filtersOverflowVisible, setFiltersOverflowVisible] = useState(false);
+  const [selectedPlaceLabel, setSelectedPlaceLabel] = useState<string | null>(null);
+  const [returnToken, setReturnToken] = useState<string | null>(null);
   const [cameraRequest, setCameraRequest] = useState<DiscoveryCamera & { sequence: number }>({
     ...DEFAULT_DISCOVERY_CAMERA, sequence: 0,
   });
@@ -99,6 +142,10 @@ export function DiscoveryClient() {
   locationIntentRef.current ??= new DiscoveryLocationIntent();
   const locationIntent = locationIntentRef.current;
   const mapSectionRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    try { setReturnToken(createDiscoveryReturnToken()); } catch { /* Direct Event navigation still works. */ }
+  }, []);
 
   const runSearch = useCallback(async (
     area: DiscoveryArea, selectedWhen: DiscoveryWhen = whenRef.current,
@@ -210,10 +257,26 @@ export function DiscoveryClient() {
     if (current) setGpsPending(false);
   };
 
-  const choosePlace = (center: DiscoveryCamera['center']) => {
+  const choosePlace = (center: DiscoveryCamera['center'], label: string) => {
     locationIntent.invalidate();
     setGpsPending(false);
+    setSelectedPlaceLabel(label);
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      setDateOpen(false);
+      setFiltersOverflowVisible(false);
+      setFiltersOpen(false);
+    }
     chooseRadius('place', center);
+  };
+
+  const showMap = () => {
+    const mapSection = mapSectionRef.current;
+    if (!mapSection) return;
+    mapSection.focus({ preventScroll: true });
+    mapSection.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'center',
+    });
   };
 
   const selectResult = (result: DiscoveryResult) => {
@@ -223,9 +286,7 @@ export function DiscoveryClient() {
     const nextSession = focusDiscoveryResult(session, result.position);
     setSession(nextSession);
     setCameraRequest((previous) => ({ ...nextSession.camera, sequence: previous.sequence + 1 }));
-    if (window.matchMedia('(max-width: 639px)').matches) {
-      mapSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    showMap();
   };
 
   const onManualViewport = useCallback((bounds: BoundsArea, camera: DiscoveryCamera) => {
@@ -254,6 +315,16 @@ export function DiscoveryClient() {
     else if (session.context) void runSearch(session.context.area);
   };
 
+  const recordEventOpen = (slug: string) => {
+    if (!returnToken) return;
+    try {
+      window.sessionStorage.setItem(DISCOVERY_SESSION_KEY, JSON.stringify(session));
+      window.sessionStorage.setItem(DISCOVERY_WHEN_SESSION_KEY, JSON.stringify(when));
+      window.sessionStorage.setItem(DISCOVERY_CATEGORY_SESSION_KEY, JSON.stringify(category));
+      window.sessionStorage.setItem(DISCOVERY_RETURN_SESSION_KEY, discoveryReturnIntent(slug, returnToken));
+    } catch { /* Navigation still works when storage is unavailable. */ }
+  };
+
   const results = searchResult?.results ?? [];
   const selectedResult = results.find((result) => result.id === selectedId) ?? null;
   const selectedDate = when.kind === 'date' ? calendarDate(when.day) : undefined;
@@ -264,7 +335,8 @@ export function DiscoveryClient() {
     when.kind === 'weekend' ? 'ce week-end' : `le ${dateLabel}`;
   const whenSummary = when.kind === 'today' ? 'Aujourd’hui' : when.kind === 'tomorrow' ? 'Demain' :
     when.kind === 'weekend' ? 'Ce week-end' : dateLabel;
-  const locationSummary = session.context ? sourceLabel[session.context.source] : 'Choisir un lieu';
+  const locationSummary = session.context?.source === 'place' && selectedPlaceLabel
+    ? selectedPlaceLabel : session.context ? sourceLabel[session.context.source] : 'Choisir un lieu';
   const categorySummary = category === 'all' ? 'Tout découvrir' :
     discoveryCategories.find((item) => item.id === category)?.label ?? 'Tout découvrir';
   const previousResults = showingPreviousDiscoveryResults(searchView, session.pendingBounds !== null);
@@ -281,10 +353,10 @@ export function DiscoveryClient() {
         </div>
 
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <section className="box-border w-full min-w-0 rounded-2xl border bg-card p-4 shadow-sm sm:p-5" aria-label="Recherche d’événements">
+          <section className="box-border w-full min-w-0 rounded-2xl border bg-card p-4 shadow-sm sm:p-5 lg:row-span-2 lg:self-start" aria-label="Recherche d’événements">
             <div className="lg:hidden">
               <p className="text-sm font-semibold">Votre recherche</p>
-              <p className="mt-1 text-sm text-muted-foreground" aria-live="polite">{locationSummary} · {whenSummary} · {categorySummary}</p>
+              <p className="mt-1 break-words text-sm text-muted-foreground" aria-live="polite">{locationSummary} · {whenSummary} · {categorySummary}</p>
               <Button type="button" variant="outline" size="sm" className="mt-3 w-full"
                 aria-expanded={filtersOpen} aria-controls="discovery-filters" onClick={() => {
                   if (filtersOpen) {
@@ -376,7 +448,36 @@ export function DiscoveryClient() {
             </div>
           </section>
 
-          <section ref={mapSectionRef} aria-label="Carte des événements" className="relative h-[40vh] min-h-[280px] overflow-hidden rounded-2xl border bg-muted shadow-sm sm:h-[560px]">
+          <section className="min-w-0 lg:col-start-2" aria-labelledby="results-heading" aria-live="polite">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 id="results-heading" className="text-xl font-semibold">À découvrir</h2>
+              <Button type="button" variant="outline" size="sm" onClick={showMap}>
+                <MapPin className="h-4 w-4" /> Voir sur la carte
+              </Button>
+            </div>
+            {session.pendingBounds && <p className="mt-2 text-sm text-muted-foreground">La carte a changé. Lancez « Rechercher dans cette zone » pour actualiser les résultats.</p>}
+            {session.pendingBounds && !searchResult && <p className="mt-2 text-sm text-muted-foreground">Les résultats précédents ne sont pas restaurés après navigation. Confirmez cette zone pour afficher les événements.</p>}
+            {!session.pendingBounds && status === 'idle' && !searchResult && <p className="mt-2 text-sm text-muted-foreground">Choisissez un lieu ou utilisez votre position pour commencer.</p>}
+            {status === 'loading' && <p className="mt-3 flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> Recherche des événements…</p>}
+            {message && <p role="alert" className="mt-3 rounded-xl border bg-card p-4 text-sm">{message}</p>}
+            {previousResults && <p className="mt-2 text-sm text-muted-foreground">Résultats de la dernière recherche validée.</p>}
+            {!session.pendingBounds && status === 'error' && session.context &&
+              <Button type="button" variant="outline" onClick={retrySearch} className="mt-3">Réessayer</Button>}
+            {results.length === 0 && searchResult?.meta.complete &&
+              <p className="mt-3 text-sm text-muted-foreground">{previousResults
+                ? 'Aucun événement lors de la dernière recherche.'
+                : `Aucun événement trouvé dans cette zone ${emptyTimeLabel}.`}</p>}
+            {status === 'success' && searchResult && !searchResult.meta.complete &&
+              <p className="mt-3 text-sm text-muted-foreground">Résultats partiels pour cette zone.</p>}
+            {status === 'success' && searchResult && !searchResult.meta.complete && session.context &&
+              <Button type="button" variant="outline" onClick={retrySearch} className="mt-3">Relancer la recherche</Button>}
+            {results.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {results.map((result) => <EventResult key={result.id} result={result} selected={selectedId === result.id}
+                onSelect={() => selectResult(result)} eventHref={discoveryEventHref(result.slug, returnToken)} onOpenEvent={() => recordEventOpen(result.slug)} />)}
+            </div>}
+          </section>
+
+          <section ref={mapSectionRef} tabIndex={-1} aria-label="Carte des événements" className="relative h-[40vh] min-h-[280px] overflow-hidden rounded-2xl border bg-muted shadow-sm sm:h-[560px] lg:col-start-2">
             {!hydrated ? (
               <div className="flex h-full items-center justify-center gap-2 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /> Chargement de la carte…</div>
             ) : mapUnavailable ? (
@@ -391,33 +492,14 @@ export function DiscoveryClient() {
             {selectedResult && !mapUnavailable && (
               <div className="absolute bottom-3 left-3 right-3 rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur-sm sm:right-auto sm:w-72">
                 <p className="font-semibold">{selectedResult.title}</p>
-                <Link href={`/${selectedResult.slug}/dashboard`} className="mt-2 inline-block text-sm font-medium text-primary underline">Découvrir l’événement</Link>
+                <Link href={discoveryEventHref(selectedResult.slug, returnToken)} onClick={() => recordEventOpen(selectedResult.slug)}
+                  onAuxClick={(event) => { if (event.button === 1) recordEventOpen(selectedResult.slug); }}
+                  onContextMenu={() => recordEventOpen(selectedResult.slug)}
+                  className="mt-2 inline-block text-sm font-medium text-primary underline">Découvrir l’événement</Link>
               </div>
             )}
           </section>
         </div>
-
-        <section className="mt-6" aria-labelledby="results-heading" aria-live="polite">
-          <h2 id="results-heading" className="text-xl font-semibold">Événements</h2>
-          {session.pendingBounds && <p className="mt-2 text-sm text-muted-foreground">La carte a changé. Lancez « Rechercher dans cette zone » pour actualiser les résultats.</p>}
-          {!session.pendingBounds && status === 'idle' && !searchResult && <p className="mt-2 text-sm text-muted-foreground">Choisissez un lieu ou utilisez votre position pour commencer.</p>}
-          {status === 'loading' && <p className="mt-3 flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> Recherche des événements…</p>}
-          {message && <p role="alert" className="mt-3 rounded-xl border bg-card p-4 text-sm">{message}</p>}
-          {previousResults && <p className="mt-2 text-sm text-muted-foreground">Résultats de la dernière recherche validée.</p>}
-          {!session.pendingBounds && status === 'error' && session.context &&
-            <Button type="button" variant="outline" onClick={retrySearch} className="mt-3">Réessayer</Button>}
-          {results.length === 0 && searchResult?.meta.complete &&
-            <p className="mt-3 text-sm text-muted-foreground">{previousResults
-              ? 'Aucun événement lors de la dernière recherche.'
-              : `Aucun événement trouvé dans cette zone ${emptyTimeLabel}.`}</p>}
-          {status === 'success' && searchResult && !searchResult.meta.complete &&
-            <p className="mt-3 text-sm text-muted-foreground">Résultats partiels pour cette zone.</p>}
-          {status === 'success' && searchResult && !searchResult.meta.complete && session.context &&
-            <Button type="button" variant="outline" onClick={retrySearch} className="mt-3">Relancer la recherche</Button>}
-          {results.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {results.map((result) => <EventResult key={result.id} result={result} selected={selectedId === result.id} onSelect={() => selectResult(result)} />)}
-          </div>}
-        </section>
       </div>
     </main>
   );

@@ -31,6 +31,8 @@ describe('Explicit Discovery network timestamps', () => {
       (p: any) => { p.meta.returnedCount = 2 },
       (p: any) => { p.meta.partialFailure = true },
       (p: any) => { p.results[0].startDay = '2026-09-12' },
+      (p: any) => { delete p.results[0].categoryId },
+      (p: any) => { p.results[0].categoryId = 'obsolete' },
     ]
     for (const mutate of variants) {
       const payload = JSON.parse(JSON.stringify(response()))

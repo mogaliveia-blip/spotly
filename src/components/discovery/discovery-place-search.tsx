@@ -19,7 +19,7 @@ function coordinates(location: google.maps.LatLng | google.maps.LatLngLiteral): 
 
 export function DiscoveryPlaceSearch({ locationBias, onPlaceSelected }: {
   locationBias: LatLngLiteral | null;
-  onPlaceSelected: (location: LatLngLiteral) => void;
+  onPlaceSelected: (location: LatLngLiteral, label: string) => void;
 }) {
   const placesLibrary = useMapsLibrary('places');
   const autocompleteRef = useRef<AutocompleteWithValue | null>(null);
@@ -66,7 +66,9 @@ export function DiscoveryPlaceSearch({ locationBias, onPlaceSelected }: {
         }
         if (!inputStateRef.current.validate(revision, selectedText)) return;
         setNeedsSelection(false);
-        onPlaceSelected(location);
+        // Let the public widget release focus before the mobile accordion closes.
+        if (window.matchMedia('(max-width: 1023px)').matches) autocomplete.blur();
+        onPlaceSelected(location, prediction.mainText?.text?.trim() || prediction.text?.text?.trim() || selectedText.trim());
       } catch (error) {
         if (!inputStateRef.current.isCurrent(revision, autocomplete.value) || autocomplete.value !== selectedText) return;
         console.error('[DiscoveryPlaceSearch] Places selection failed', error);
