@@ -84,6 +84,7 @@ export function DiscoveryClient() {
   const [category, setCategory] = useState<DiscoveryCategorySelection>(DEFAULT_DISCOVERY_CATEGORY);
   const [dateOpen, setDateOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOverflowVisible, setFiltersOverflowVisible] = useState(false);
   const [cameraRequest, setCameraRequest] = useState<DiscoveryCamera & { sequence: number }>({
     ...DEFAULT_DISCOVERY_CAMERA, sequence: 0,
   });
@@ -286,7 +287,10 @@ export function DiscoveryClient() {
               <p className="mt-1 text-sm text-muted-foreground" aria-live="polite">{locationSummary} · {whenSummary} · {categorySummary}</p>
               <Button type="button" variant="outline" size="sm" className="mt-3 w-full"
                 aria-expanded={filtersOpen} aria-controls="discovery-filters" onClick={() => {
-                  if (filtersOpen) setDateOpen(false);
+                  if (filtersOpen) {
+                    setDateOpen(false);
+                    setFiltersOverflowVisible(false);
+                  }
                   setFiltersOpen((open) => !open);
                 }}>
                 {filtersOpen ? 'Masquer les filtres' : 'Modifier la recherche'}
@@ -298,8 +302,13 @@ export function DiscoveryClient() {
                 </Button>
               )}
             </div>
-            <div id="discovery-filters" className={`grid min-w-0 grid-rows-[0fr] transition-[grid-template-rows,visibility] duration-300 ease-in-out motion-reduce:transition-none lg:visible lg:block lg:transition-none ${filtersOpen ? 'visible grid-rows-[1fr]' : 'invisible'}`}>
-              <div className="min-h-0 min-w-0 overflow-hidden lg:overflow-visible">
+            <div id="discovery-filters" className={`grid min-w-0 grid-rows-[0fr] transition-[grid-template-rows,visibility] duration-300 ease-in-out motion-reduce:transition-none lg:visible lg:block lg:transition-none ${filtersOpen ? 'visible grid-rows-[1fr]' : 'invisible'}`}
+              onTransitionEnd={(event) => {
+                if (event.target === event.currentTarget && event.propertyName === 'grid-template-rows' && filtersOpen) {
+                  setFiltersOverflowVisible(true);
+                }
+              }}>
+              <div className={`min-h-0 min-w-0 ${filtersOpen && filtersOverflowVisible ? 'overflow-visible' : 'overflow-hidden'} ${filtersOpen ? 'motion-reduce:overflow-visible' : ''} lg:overflow-visible`}>
                 <div className="mt-4 min-w-0 border-t pt-4 lg:mt-0 lg:border-0 lg:pt-0">
                   <h2 id="where-heading" className="text-xl font-semibold">OÙ ?</h2>
                   <p className="mt-1 text-sm text-muted-foreground">Autour de vous, d’un lieu recherché ou dans la zone de la carte.</p>
