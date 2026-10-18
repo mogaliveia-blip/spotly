@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Minus, Plus, RotateCcw, X } from 'lucide-react';
 
@@ -30,6 +31,9 @@ export function ImageViewer({ images, selectedIndex, onSelect, onClose }: ImageV
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const lastPanPoint = useRef<{ x: number; y: number } | null>(null);
   const pinchStart = useRef<{ distance: number; scale: number } | null>(null);
+  const pointerStartedOnImage = useRef(false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const canNavigate = images.length > 1;
   const imageSrc = images[selectedIndex];
@@ -63,8 +67,23 @@ export function ImageViewer({ images, selectedIndex, onSelect, onClose }: ImageV
   }, [selectedIndex]);
 
   useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const previousFocus = document.activeElement;
+    dialog.showModal();
+    closeButtonRef.current?.focus();
+
+    return () => {
+      if (dialog.open) dialog.close();
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected && previousFocus !== document.body) {
+        previousFocus.focus({ preventScroll: true });
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
       if (event.key === 'ArrowLeft' && canNavigate) goTo(selectedIndex - 1);
       if (event.key === 'ArrowRight' && canNavigate) goTo(selectedIndex + 1);
       if ((event.key === '+' || event.key === '=') && !event.metaKey && !event.ctrlKey) zoomBy(ZOOM_STEP);
@@ -91,6 +110,7 @@ export function ImageViewer({ images, selectedIndex, onSelect, onClose }: ImageV
   };
 
   const handlePointerDown = (event: React.PointerEvent) => {
+    pointerStartedOnImage.current = event.target instanceof HTMLImageElement;
     event.currentTarget.setPointerCapture(event.pointerId);
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
@@ -141,30 +161,34 @@ export function ImageViewer({ images, selectedIndex, onSelect, onClose }: ImageV
     }
   };
 
-  return (
-    <div
-      className="fixed inset-0 z-[999] bg-black/95 backdrop-blur-md animate-in fade-in duration-300"
-      role="dialog"
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <dialog
+      ref={dialogRef}
+      className="fixed inset-0 m-0 h-screen h-[100dvh] w-screen max-h-none max-w-none overflow-hidden border-0 bg-[#f7f6fa] p-0 text-slate-900 backdrop:bg-transparent"
       aria-modal="true"
       aria-label="Aperçu image"
-      onClick={onClose}
+      onCancel={(event) => { event.preventDefault(); onClose(); }}
     >
-      <div className="absolute left-1/2 top-4 z-[1002] flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/15 bg-black/60 p-1 text-white shadow-2xl backdrop-blur-sm">
-        <Button type="button" variant="ghost" size="icon" className="h-9 w-9 rounded-full text-white hover:bg-white/10 hover:text-white" onClick={(event) => { event.stopPropagation(); zoomBy(-ZOOM_STEP); }} disabled={scale <= MIN_SCALE} aria-label="Réduire le zoom">
+      <div className="absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-slate-200 bg-white p-1 text-slate-900 shadow-md" style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
+        <Button type="button" variant="ghost" size="icon" className="h-9 w-9 rounded-full hover:bg-slate-100 hover:text-slate-900" onClick={(event) => { event.stopPropagation(); zoomBy(-ZOOM_STEP); }} disabled={scale <= MIN_SCALE} aria-label="Réduire le zoom">
           <Minus className="h-4 w-4" />
         </Button>
-        <span className="min-w-14 text-center text-xs font-bold tabular-nums">{zoomLabel}</span>
-        <Button type="button" variant="ghost" size="icon" className="h-9 w-9 rounded-full text-white hover:bg-white/10 hover:text-white" onClick={(event) => { event.stopPropagation(); zoomBy(ZOOM_STEP); }} disabled={scale >= MAX_SCALE} aria-label="Augmenter le zoom">
+        <span className="min-w-12 text-center text-xs font-bold tabular-nums">{zoomLabel}</span>
+        <Button type="button" variant="ghost" size="icon" className="h-9 w-9 rounded-full hover:bg-slate-100 hover:text-slate-900" onClick={(event) => { event.stopPropagation(); zoomBy(ZOOM_STEP); }} disabled={scale >= MAX_SCALE} aria-label="Augmenter le zoom">
           <Plus className="h-4 w-4" />
         </Button>
-        <Button type="button" variant="ghost" size="icon" className="h-9 w-9 rounded-full text-white hover:bg-white/10 hover:text-white" onClick={(event) => { event.stopPropagation(); resetView(); }} aria-label="Réinitialiser le zoom">
+        <Button type="button" variant="ghost" size="icon" className="h-9 w-9 rounded-full hover:bg-slate-100 hover:text-slate-900" onClick={(event) => { event.stopPropagation(); resetView(); }} aria-label="Réinitialiser le zoom">
           <RotateCcw className="h-4 w-4" />
         </Button>
       </div>
 
       <button
-        className="absolute z-[1002] rounded-full border border-white/20 bg-black/60 p-3 text-white shadow-2xl backdrop-blur-sm transition-all hover:bg-black/80 active:scale-95"
-        onClick={onClose}
+        ref={closeButtonRef}
+        type="button"
+        className="absolute z-10 rounded-full border border-slate-200 bg-white p-3 text-slate-900 shadow-md hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
+        onClick={(event) => { event.stopPropagation(); onClose(); }}
         aria-label="Fermer l'aperçu"
         style={{
           top: 'calc(1rem + env(safe-area-inset-top, 0px))',
@@ -177,7 +201,8 @@ export function ImageViewer({ images, selectedIndex, onSelect, onClose }: ImageV
       {canNavigate && scale === 1 && (
         <>
           <button
-            className="absolute top-1/2 z-[1001] flex -translate-y-1/2 rounded-full border border-white/10 bg-black/50 p-3 text-white shadow-2xl backdrop-blur-sm transition-all hover:bg-black/70 active:scale-90 md:p-4"
+            type="button"
+            className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] z-10 flex rounded-full border border-slate-200 bg-white p-3 text-primary shadow-md hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:p-4"
             onClick={(event) => { event.stopPropagation(); goTo(selectedIndex - 1); }}
             aria-label="Image précédente"
             style={{ left: 'calc(1rem + env(safe-area-inset-left, 0px))' }}
@@ -185,7 +210,8 @@ export function ImageViewer({ images, selectedIndex, onSelect, onClose }: ImageV
             <ChevronLeft className="h-6 w-6 md:h-8 md:w-8" />
           </button>
           <button
-            className="absolute top-1/2 z-[1001] flex -translate-y-1/2 rounded-full border border-white/10 bg-black/50 p-3 text-white shadow-2xl backdrop-blur-sm transition-all hover:bg-black/70 active:scale-90 md:p-4"
+            type="button"
+            className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] z-10 flex rounded-full border border-slate-200 bg-white p-3 text-primary shadow-md hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:p-4"
             onClick={(event) => { event.stopPropagation(); goTo(selectedIndex + 1); }}
             aria-label="Image suivante"
             style={{ right: 'calc(1rem + env(safe-area-inset-right, 0px))' }}
@@ -196,8 +222,13 @@ export function ImageViewer({ images, selectedIndex, onSelect, onClose }: ImageV
       )}
 
       <div
-        className="flex h-full w-full touch-none select-none items-center justify-center overflow-hidden px-3 py-20 md:px-14"
-        onClick={(event) => event.stopPropagation()}
+        className="flex h-full w-full touch-none select-none items-center justify-center overflow-hidden px-3 md:px-14"
+        style={{ paddingTop: 'calc(5rem + env(safe-area-inset-top, 0px))', paddingBottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (event.target === event.currentTarget && !pointerStartedOnImage.current) onClose();
+          pointerStartedOnImage.current = false;
+        }}
         onWheel={handleWheel}
         onDoubleClick={handleDoubleClick}
         onPointerDown={handlePointerDown}
@@ -208,7 +239,7 @@ export function ImageViewer({ images, selectedIndex, onSelect, onClose }: ImageV
         <img
           src={imageSrc}
           alt={`Aperçu ${selectedIndex + 1}`}
-          className="max-h-[calc(100vh-10rem)] max-w-full rounded-2xl object-contain shadow-2xl will-change-transform"
+          className="max-h-full max-w-full rounded-2xl object-contain shadow-lg will-change-transform"
           draggable={false}
           style={{
             transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`,
@@ -218,9 +249,10 @@ export function ImageViewer({ images, selectedIndex, onSelect, onClose }: ImageV
         />
       </div>
 
-      <div className="pointer-events-none absolute bottom-8 left-1/2 z-[1002] -translate-x-1/2 rounded-full bg-black/50 px-4 py-1.5 text-sm font-medium text-white backdrop-blur-sm">
+      <div className="pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm font-medium text-slate-900 shadow-sm" style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
         {selectedIndex + 1} / {images.length}
       </div>
-    </div>
+    </dialog>,
+    document.body
   );
 }

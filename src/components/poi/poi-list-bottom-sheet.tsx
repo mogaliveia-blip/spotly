@@ -53,7 +53,7 @@ export function PoiListBottomSheet({
     return [...activeSponsors, ...others];
   }, [pois, userLocation]);
 
-  const resultsLabel = `${sortedPois.length} ${sortedPois.length === 1 ? 'Résultat' : 'Résultats'}`;
+  const resultsLabel = `${sortedPois.length} ${sortedPois.length === 1 ? 'résultat' : 'résultats'}`;
   const listContentId = 'poi-list-bottom-sheet-content';
 
   return (
@@ -71,17 +71,18 @@ export function PoiListBottomSheet({
           onClick={() => setIsExpanded((expanded) => !expanded)}
           aria-expanded={isExpanded}
           aria-controls={listContentId}
-          aria-label={isExpanded ? 'Fermer la liste des lieux' : 'Ouvrir la liste des lieux'}
-          className="relative mb-2 flex w-full shrink-0 flex-col items-center rounded-3xl border bg-background/80 py-3 backdrop-blur-md pointer-events-auto md:hidden"
+          aria-label={`${isExpanded ? 'Fermer' : 'Ouvrir'} la liste des lieux à découvrir — ${resultsLabel}`}
+          className="relative mb-2 flex w-full shrink-0 flex-col items-center rounded-3xl border border-primary/30 bg-card py-2.5 text-card-foreground shadow-lg pointer-events-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:hidden"
         >
-          <div className="w-12 h-1.5 bg-muted-foreground/20 rounded-full mb-2" />
-          <div className="flex items-center justify-center text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">
-            {resultsLabel}
+          <div className="mb-1.5 h-1.5 w-12 rounded-full bg-primary/45" aria-hidden="true" />
+          <div className="flex w-full items-center justify-center gap-2 pl-2 pr-7 leading-none">
+            <span className="truncate text-sm font-bold">Les lieux à découvrir</span>
+            <span className="shrink-0 text-xs font-semibold text-primary">{resultsLabel}</span>
           </div>
           {isExpanded ? (
-            <ChevronDown aria-hidden="true" className="absolute bottom-2.5 right-4 h-4 w-4 text-muted-foreground/60" />
+            <ChevronDown aria-hidden="true" className="absolute bottom-2.5 right-3 h-5 w-5 text-primary" />
           ) : (
-            <ChevronUp aria-hidden="true" className="absolute bottom-2.5 right-4 h-4 w-4 text-muted-foreground/60" />
+            <ChevronUp aria-hidden="true" className="absolute bottom-2.5 right-3 h-5 w-5 text-primary" />
           )}
         </button>
 

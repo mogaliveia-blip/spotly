@@ -198,15 +198,21 @@ export function POIDetails({ poi: initialPoi }: POIDetailsProps) {
     <div className="space-y-6 min-h-[40vh] flex flex-col">
       <div className="relative aspect-video w-full bg-muted/30 rounded-3xl overflow-hidden shadow-sm shrink-0">
         {poi.headerPhotoUrl ? (
-          <Image
-            src={poi.headerPhotoUrl}
-            alt={poi.title}
-            fill
-            sizes="(max-width: 767px) calc(100vw - 3.5rem), 408px"
-            className="object-cover cursor-zoom-in transition-transform hover:scale-105 duration-500"
-            onClick={() => setSelectedIndex(0)}
-            priority
-          />
+          <button
+            type="button"
+            aria-label={`Agrandir la photo de ${poi.title}`}
+            className="relative block h-full w-full cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setSelectedIndex(0); }}
+          >
+            <Image
+              src={poi.headerPhotoUrl}
+              alt={poi.title}
+              fill
+              sizes="(max-width: 767px) calc(100vw - 3.5rem), 408px"
+              className="object-cover transition-transform hover:scale-105 duration-500"
+              priority
+            />
+          </button>
         ) : (
           <Skeleton className="w-full h-full" />
         )}

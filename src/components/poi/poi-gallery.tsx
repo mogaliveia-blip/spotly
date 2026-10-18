@@ -22,10 +22,11 @@ export function POIGallery({ poi, onImageClick }: POIGalleryProps) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
       {poi.galleryUrls.map((photo, index) => (
-        <div
+        <button
           key={index}
-          className="relative aspect-square overflow-hidden rounded-lg border cursor-zoom-in"
-          onClick={() => onImageClick?.(index)}
+          type="button"
+          className="relative block aspect-square w-full overflow-hidden rounded-lg border cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); onImageClick?.(index); }}
         >
           <Image
             src={photo.url}
@@ -34,7 +35,7 @@ export function POIGallery({ poi, onImageClick }: POIGalleryProps) {
             className="object-cover"
             sizes="(max-width: 767px) calc((100vw - 4rem) / 2), 136px"
           />
-        </div>
+        </button>
       ))}
     </div>
   );
