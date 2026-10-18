@@ -39,9 +39,25 @@ export function DiscoveryPlaceSearch({ locationBias, onPlaceSelected }: {
     const autocomplete = autocompleteRef.current;
     if (!autocomplete || !placesLibrary) return;
 
+    let firstInputAfterFocus = true;
+    let scrollCorrectionFrame: number | null = null;
+    const armMobileScrollCorrection = () => { firstInputAfterFocus = true; };
+
     const updateDraft = () => {
       inputStateRef.current.input(autocomplete.value);
       setNeedsSelection(inputStateRef.current.needsSelection);
+      if (!firstInputAfterFocus || !autocomplete.value.trim()) return;
+      firstInputAfterFocus = false;
+      if (!window.matchMedia('(max-width: 1023px)').matches) return;
+
+      scrollCorrectionFrame = requestAnimationFrame(() => {
+        const viewport = window.visualViewport;
+        // Correct the measured iOS page shift once as the widget opens its mobile UI.
+        if (autocomplete.isConnected && viewport && viewport.scale === 1 &&
+          viewport.height < window.innerHeight && viewport.offsetTop > 0 && window.scrollY > 0) {
+          window.scrollTo(window.scrollX, 0);
+        }
+      });
     };
 
     const handlePlaceSelect = async (event: Event) => {
@@ -82,10 +98,13 @@ export function DiscoveryPlaceSearch({ locationBias, onPlaceSelected }: {
       toast({ title: 'Recherche indisponible', description: 'La dernière zone validée reste affichée.', variant: 'destructive' });
     };
 
+    autocomplete.addEventListener('focusin', armMobileScrollCorrection);
     autocomplete.addEventListener('input', updateDraft);
     autocomplete.addEventListener('gmp-select', handlePlaceSelect);
     autocomplete.addEventListener('gmp-error', handlePlaceError);
     return () => {
+      if (scrollCorrectionFrame !== null) cancelAnimationFrame(scrollCorrectionFrame);
+      autocomplete.removeEventListener('focusin', armMobileScrollCorrection);
       autocomplete.removeEventListener('input', updateDraft);
       autocomplete.removeEventListener('gmp-select', handlePlaceSelect);
       autocomplete.removeEventListener('gmp-error', handlePlaceError);
