@@ -6,7 +6,7 @@ import { APILoadingStatus, useApiLoadingStatus } from '@vis.gl/react-google-maps
 import { fr } from 'date-fns/locale';
 import { ArrowLeft, ChevronDown, Crosshair, Loader2, MapPin, Search } from 'lucide-react';
 import { DiscoveryMap } from '@/components/discovery/discovery-map';
-import { PoiLocationSearch } from '@/components/poi/poi-location-search';
+import { DiscoveryPlaceSearch } from '@/components/discovery/discovery-place-search';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -310,7 +310,7 @@ export function DiscoveryClient() {
                   <div className="mt-5 min-w-0 [&_gmp-place-autocomplete]:max-w-full [&_gmp-place-autocomplete]:min-w-0">
                     <label className="mb-2 block text-sm font-medium">Rechercher un lieu</label>
                     {mapUnavailable ? <p className="text-sm text-muted-foreground">La recherche de lieu et la carte sont indisponibles.</p> :
-                      <PoiLocationSearch locationBias={session.context?.area.kind === 'radius' ? session.context.area.center : null}
+                      <DiscoveryPlaceSearch locationBias={session.context?.area.kind === 'radius' ? session.context.area.center : null}
                         onPlaceSelected={choosePlace} />}
                   </div>
                   <p className="mt-4 text-sm text-muted-foreground">Vous pouvez aussi déplacer ou zoomer la carte, puis lancer la recherche dans la zone affichée.</p>
