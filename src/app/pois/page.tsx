@@ -67,18 +67,19 @@ function POIsTable() {
     router.push(`/pois/edit/${poiId}`);
   };
 
-  const handleDelete = (poiId: string) => {
+  const handleDelete = async (poiId: string) => {
     try {
-      deletePoi(poiId, DEFAULT_EVENT_ID);
-      setPois(pois.filter(p => p.id !== poiId));
+      const { cleanupComplete } = await deletePoi(poiId, DEFAULT_EVENT_ID);
+      setPois((current) => current.filter((poi) => poi.id !== poiId));
       toast({
-        title: "POI supprimé",
-        description: "Le point d'intérêt a été supprimé avec succès."
+        title: cleanupComplete ? 'Point supprimé' : 'Point supprimé, nettoyage incomplet',
+        description: cleanupComplete ? 'Le Point a été supprimé.' : 'Certains avis ou fichiers restent à nettoyer.',
+        variant: cleanupComplete ? 'default' : 'destructive'
       })
     } catch (error) {
        toast({
-        title: "Erreur",
-        description: "Impossible de supprimer le POI.",
+        title: 'Suppression impossible',
+        description: 'Le Point et ses avis ont été conservés.',
         variant: "destructive"
       })
     }
@@ -163,7 +164,7 @@ function POIsTable() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(poi.id)}>Supprimer</AlertDialogAction>
+                          <AlertDialogAction onClick={() => void handleDelete(poi.id)}>Supprimer</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>

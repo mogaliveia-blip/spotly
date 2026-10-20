@@ -18,22 +18,19 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { createPoi, updatePoi, fetchPoiById, uploadFile, deleteFileByPath } from '@/lib/data';
-import { deleteField } from "firebase/firestore";
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, MapPin, Crosshair, ImagePlus, X } from 'lucide-react';
-import type { POI, POISponsor } from '@/lib/types';
+import type { POI } from '@/lib/types';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { Skeleton } from '../ui/skeleton';
 import { mapsConfig } from '@/lib/firebase-config';
 import Image from 'next/image';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { useAuth } from '@/hooks/use-auth-user';
 import { useEvent } from '@/providers/event-provider';
-import { Switch } from '@/components/ui/switch';
 import { PoiLocationSearch } from './poi-location-search';
 
 const MAX_GALLERY_PHOTOS = 3;
@@ -80,18 +77,7 @@ const formSchema = z.object({
     location: z.object({ lat: z.number(), lng: z.number() }),
     headerPhotoUrl: z.string().optional(),
     galleryUrls: z.array(z.object({ url: z.string(), path: z.string() })).max(MAX_GALLERY_PHOTOS, GALLERY_LIMIT_MESSAGE).optional(),
-    sponsor: z.object({
-        enabled: z.boolean().default(false),
-        level: z.enum(['standard', 'premium', 'official']).default('standard'),
-        priority: z.coerce.number().min(0).default(0),
-        startDate: z.date().optional(),
-        endDate: z.date().optional(),
-    }).optional().default({ enabled: false, level: 'standard', priority: 0 }),
-}).refine(data => {
-    const startDate = data.sponsor?.startDate;
-    const endDate = data.sponsor?.endDate;
-    return !startDate || !endDate || startDate <= endDate;
-}, { message: 'La date de fin doit être postérieure à la date de début', path: ['sponsor.endDate'] });
+});
 
 type POIFormValues = z.infer<typeof formSchema>;
 type GalleryImage = { url: string; path: string };
@@ -124,39 +110,6 @@ function getErrorDetails(error: unknown): { code?: string; message: string } {
   }
 
   return { message: String(error) };
-}
-
-function toDateInputValue(value?: Date): string {
-  if (!value) return '';
-
-  return value.toISOString().slice(0, 10);
-}
-
-function parseDateInputValue(value: string): Date | undefined {
-  if (!value) return undefined;
-
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? undefined : date;
-}
-
-function buildSponsorPayload(sponsor?: POIFormValues['sponsor']): POISponsor | undefined {
-  if (!sponsor?.enabled) return undefined;
-
-  const sponsorPayload: POISponsor = {
-    enabled: true,
-    level: sponsor.level ?? 'standard',
-    priority: sponsor.priority ?? 0
-  };
-
-  if (sponsor.startDate) {
-    sponsorPayload.startDate = sponsor.startDate;
-  }
-
-  if (sponsor.endDate) {
-    sponsorPayload.endDate = sponsor.endDate;
-  }
-
-  return sponsorPayload;
 }
 
 interface POIFormProps {
@@ -197,11 +150,9 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
   const [formIsLoading, setFormIsLoading] = useState(false);
   const [pageIsLoading, setPageIsLoading] = useState(true);
   const { userLocation, loading: geoLoading } = useGeolocation();
-  const { role: globalRole } = useAuth();
-  const { event, userRole } = useEvent();
+  const { event } = useEvent();
 
   const isEditMode = !!poiId;
-  const canManageSponsor = globalRole === 'owner' || userRole === 'admin' || userRole === 'editor';
   const prefix = eventSlug ? `/${eventSlug}` : '';
   const eventCategories = useMemo(
     () => (event?.poiCategories ?? []).filter((category) => category.id.trim() && category.label.trim()),
@@ -218,13 +169,11 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
       location: userLocation || { lat: -21.3393, lng: 55.4781 },
       headerPhotoUrl: '',
       galleryUrls: [],
-      sponsor: { enabled: false, level: 'standard', priority: 0 }
     },
   });
 
   const selectedLocation = form.watch('location');
   const headerPhotoUrl = form.watch('headerPhotoUrl');
-  const sponsorEnabled = form.watch('sponsor.enabled');
   const [placeSelectionCount, setPlaceSelectionCount] = useState(0);
 
   const [headerImageFile, setHeaderImageFile] = useState<File | null>(null);
@@ -249,14 +198,14 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
       try {
         const data = await fetchPoiById(resolvedPoiId, resolvedEventId);
         if (data) {
-          const sponsorSafe = {
-            enabled: data.sponsor?.enabled ?? false,
-            level: data.sponsor?.level ?? 'standard',
-            priority: data.sponsor?.priority ?? 0,
-            startDate: data.sponsor?.startDate ? (data.sponsor.startDate as any).toDate?.() || new Date(data.sponsor.startDate) : undefined,
-            endDate: data.sponsor?.endDate ? (data.sponsor.endDate as any).toDate?.() || new Date(data.sponsor.endDate) : undefined,
-          };
-          form.reset({ ...data, categoryId: data.categoryId ?? '', sponsor: sponsorSafe } as POIFormValues);
+          form.reset({
+            title: data.title,
+            description: data.description,
+            categoryId: data.categoryId ?? '',
+            location: data.location,
+            headerPhotoUrl: data.headerPhotoUrl,
+            galleryUrls: data.galleryUrls ?? [],
+          });
           setExistingGalleryUrls(data.galleryUrls ?? []);
         } else {
           router.push(`${prefix}/pois`);
@@ -373,23 +322,16 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
     const storagePrefix = eventId && eventId !== 'default-event' ? `events/${eventId}/` : '';
 
     try {
-      const { sponsor, ...rest } = values;
-      const sponsorPayload = buildSponsorPayload(sponsor);
-
       if (!isEditMode) {
         const createPayload: Omit<POI, 'id' | 'averageRating' | 'reviewCount'> = {
-          title: rest.title,
-          description: rest.description,
-          categoryId: rest.categoryId,
-          location: rest.location,
+          title: values.title,
+          description: values.description,
+          categoryId: values.categoryId,
+          location: values.location,
           headerPhotoUrl: '',
           galleryUrls: [],
         };
-      
-        if (sponsorPayload) {
-          createPayload.sponsor = sponsorPayload;
-        }
-      
+
         targetId = await createPoi(createPayload, eventId);
       }
 
@@ -409,10 +351,9 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
       }
 
       const updatePayload = {
-        ...rest,
+        ...values,
         headerPhotoUrl: finalHeader,
         galleryUrls: [...existingGalleryUrls, ...newUploads],
-        sponsor: sponsorPayload ?? deleteField() as any
       };
 
       await updatePoi(targetId!, updatePayload, eventId);
@@ -530,55 +471,6 @@ export function POIForm({ poiId, eventId, eventSlug }: POIFormProps) {
                   )} />
                 </CardContent>
               </Card>
-
-              {canManageSponsor && (
-                <Card className="rounded-[2rem] border-muted/60">
-                  <CardHeader><CardTitle>Partenariat</CardTitle></CardHeader>
-                  <CardContent className="space-y-6">
-                    <FormField control={form.control} name="sponsor.enabled" render={({ field }) => (
-                      <FormItem className="flex items-center justify-between rounded-2xl border p-4 bg-muted/10"><div className="space-y-0.5"><FormLabel>Mettre en avant</FormLabel><FormDescription>Le POI apparaîtra en priorité avec un badge.</FormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>
-                    )} />
-                    {sponsorEnabled && (
-                      <div className="space-y-4 pt-4 border-t grid grid-cols-2 gap-4">
-                        <FormField control={form.control} name="sponsor.level" render={({ field }) => (
-                          <FormItem><FormLabel>Niveau</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="standard">Standard</SelectItem><SelectItem value="premium">Premium</SelectItem><SelectItem value="official">Officiel</SelectItem></SelectContent></Select></FormItem>
-                        )} />
-                        <FormField control={form.control} name="sponsor.priority" render={({ field }) => (
-                          <FormItem><FormLabel>Priorité (0-100)</FormLabel><FormControl><Input type="number" {...field} className="rounded-xl" /></FormControl></FormItem>
-                        )} />
-                        <FormField control={form.control} name="sponsor.startDate" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Date de début</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="date"
-                                value={toDateInputValue(field.value)}
-                                onChange={(event) => field.onChange(parseDateInputValue(event.target.value))}
-                                className="rounded-xl"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name="sponsor.endDate" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Date de fin</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="date"
-                                value={toDateInputValue(field.value)}
-                                onChange={(event) => field.onChange(parseDateInputValue(event.target.value))}
-                                className="rounded-xl"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
 
               <Card className="rounded-[2rem] border-muted/60">
                 <CardHeader><CardTitle>Images</CardTitle></CardHeader>

@@ -34,6 +34,7 @@ import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { PartnershipsCard } from '@/components/admin/partnerships-card';
 
 const PLATFORM_ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   owner: 'Administration globale, validation des comptes et supervision plateforme.',
@@ -923,6 +924,16 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Card className="rounded-2xl border-muted shadow-sm overflow-hidden">
+          <CardHeader className="bg-primary/5">
+            <CardTitle>Partenariats</CardTitle>
+            <CardDescription>Gestion des mises en avant des Points par l’administration plateforme.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <PartnershipsCard />
+          </CardContent>
+        </Card>
       </div>
     </AppLayout>
   );

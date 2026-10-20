@@ -274,6 +274,26 @@ service cloud.firestore {
         request.resource.data.categoryId.size() <= 80;
     }
 
+    // A partnership belongs to the platform owner, including when a Point is replaced or deleted.
+    function hasNoSponsorAt(path) {
+      return !exists(path) || !("sponsor" in get(path).data);
+    }
+
+    function canCreatePoiWithoutSponsor(otherPath) {
+      return isOwner() ||
+        (!("sponsor" in request.resource.data) && hasNoSponsorAt(otherPath));
+    }
+
+    function canUpdatePoiWithoutSponsorChange() {
+      return isOwner() ||
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(["sponsor"]);
+    }
+
+    function canDeletePoiWithoutSponsor(otherPath) {
+      return isOwner() ||
+        (!("sponsor" in resource.data) && hasNoSponsorAt(otherPath));
+    }
+
     function hasValidEventMetadataFields() {
       return (
         !("description" in request.resource.data) ||
@@ -446,13 +466,23 @@ service cloud.firestore {
         isEventMember(eventId) ||
         hasPrivateAccessGrant(eventId);
 
-      allow create, update: if
+      allow create: if
         isAdminOrEditor(eventId) &&
         hasValidPoiCategoryId() &&
-        hasValidPoiGalleryLimit();
+        hasValidPoiGalleryLimit() &&
+        canCreatePoiWithoutSponsor(
+          /databases/$(database)/documents/events/$(eventId)/pois/$(poiId));
+
+      allow update: if
+        isAdminOrEditor(eventId) &&
+        hasValidPoiCategoryId() &&
+        hasValidPoiGalleryLimit() &&
+        canUpdatePoiWithoutSponsorChange();
 
       allow delete: if
-        isAdminOrEditor(eventId);
+        isAdminOrEditor(eventId) &&
+        canDeletePoiWithoutSponsor(
+          /databases/$(database)/documents/events/$(eventId)/pois/$(poiId));
     }
 
     /* =========================
@@ -465,13 +495,23 @@ service cloud.firestore {
         isEventMember(eventId) ||
         hasPrivateAccessGrant(eventId);
 
-      allow create, update: if
+      allow create: if
         isAdminOrEditor(eventId) &&
         hasValidPoiCategoryId() &&
-        hasValidPoiGalleryLimit();
+        hasValidPoiGalleryLimit() &&
+        canCreatePoiWithoutSponsor(
+          /databases/$(database)/documents/events/$(eventId)/pois_public/$(poiId));
+
+      allow update: if
+        isAdminOrEditor(eventId) &&
+        hasValidPoiCategoryId() &&
+        hasValidPoiGalleryLimit() &&
+        canUpdatePoiWithoutSponsorChange();
 
       allow delete: if
-        isAdminOrEditor(eventId);
+        isAdminOrEditor(eventId) &&
+        canDeletePoiWithoutSponsor(
+          /databases/$(database)/documents/events/$(eventId)/pois_public/$(poiId));
 
       match /reviews/{reviewId} {
         allow read: if

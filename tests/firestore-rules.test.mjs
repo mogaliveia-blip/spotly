@@ -7,11 +7,13 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, limit, query, setDoc, updateDoc, where } from 'firebase/firestore'
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, limit, query, runTransaction, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore'
 
 const PROJECT_ID = 'un-instant-ici-rules-test'
 const EVENT_ID = 'event-sensitive-fields'
 const ADMIN_UID = 'event-admin'
+const EDITOR_UID = 'event-editor'
+const LEGACY_UID = 'legacy-admin'
 const OWNER_UID = 'platform-owner'
 
 let testEnv
@@ -29,6 +31,8 @@ async function seedFixture() {
         role: 'owner',
         isApproved: true,
       }),
+      setDoc(doc(db, 'users', EDITOR_UID), { role: 'user', isApproved: true }),
+      setDoc(doc(db, 'users', LEGACY_UID), { role: 'user', isApproved: true }),
       setDoc(doc(db, 'events', EVENT_ID), {
         name: 'Event de test',
         slug: 'event-de-test',
@@ -44,6 +48,9 @@ async function seedFixture() {
         uid: ADMIN_UID,
         role: 'admin',
         joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+      }),
+      setDoc(doc(db, `events/${EVENT_ID}/members`, EDITOR_UID), {
+        uid: EDITOR_UID, role: 'editor', joinedAt: new Date('2026-01-01T00:00:00.000Z'),
       }),
     ])
   })
@@ -122,6 +129,177 @@ describe('Event protected fields', () => {
 
     const snapshot = await assertSucceeds(getDoc(ownerEventRef))
     assert.equal(snapshot.data().capabilities.partnershipEnabled, true)
+  })
+})
+
+describe('Platform-owned Point partnerships', () => {
+  const sponsor = { enabled: true, level: 'premium', priority: 7 }
+  const point = { title: 'Point test', description: 'Description du Point', categoryId: 'parking',
+    location: { lat: 48.85, lng: 2.35 }, galleryUrls: [], averageRating: 0, reviewCount: 0 }
+  const paths = ['pois', 'pois_public']
+
+  const pointRef = (uid, kind, id = 'point') =>
+    doc(testEnv.authenticatedContext(uid).firestore(), `events/${EVENT_ID}/${kind}`, id)
+
+  async function seedPoint(withSponsor = true) {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      const data = withSponsor ? { ...point, sponsor } : point
+      await Promise.all(paths.map((kind) => setDoc(doc(db, `events/${EVENT_ID}/${kind}`, 'point'), data)))
+    })
+  }
+
+  it('allows an ordinary organizer creation of both Point copies in one transaction', async () => {
+    const db = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    const batch = writeBatch(db)
+    for (const kind of paths) batch.set(doc(db, `events/${EVENT_ID}/${kind}`, 'created'), point)
+    await assertSucceeds(batch.commit())
+    for (const kind of paths) {
+      assert.equal((await assertSucceeds(getDoc(doc(db, `events/${EVENT_ID}/${kind}`, 'created')))).exists(), true)
+    }
+  })
+
+  it('keeps sponsorship during ordinary transactional updates and removes it from both copies for the owner', async () => {
+    await seedPoint()
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    const privateRef = doc(adminDb, `events/${EVENT_ID}/pois`, 'point')
+    const publicRef = doc(adminDb, `events/${EVENT_ID}/pois_public`, 'point')
+    await assertSucceeds(runTransaction(adminDb, async (tx) => {
+      await tx.get(privateRef)
+      tx.update(privateRef, { title: 'Titre ordinaire' })
+      tx.set(publicRef, { title: 'Titre ordinaire' }, { merge: true })
+    }))
+    for (const ref of [privateRef, publicRef]) {
+      const data = (await assertSucceeds(getDoc(ref))).data()
+      assert.equal(data.title, 'Titre ordinaire')
+      assert.deepEqual(data.sponsor, sponsor)
+    }
+
+    const ownerDb = testEnv.authenticatedContext(OWNER_UID).firestore()
+    const ownerPrivateRef = doc(ownerDb, `events/${EVENT_ID}/pois`, 'point')
+    const ownerPublicRef = doc(ownerDb, `events/${EVENT_ID}/pois_public`, 'point')
+    await assertSucceeds(runTransaction(ownerDb, async (tx) => {
+      await tx.get(ownerPrivateRef)
+      tx.update(ownerPrivateRef, { sponsor: deleteField() })
+      tx.set(ownerPublicRef, { sponsor: deleteField() }, { merge: true })
+    }))
+    for (const ref of [ownerPrivateRef, ownerPublicRef]) {
+      assert.equal((await assertSucceeds(getDoc(ref))).data().sponsor, undefined)
+    }
+  })
+
+  for (const kind of paths) {
+    it(`denies organizer creation of sponsor in ${kind}, while allowing an ordinary Point`, async () => {
+      for (const uid of [ADMIN_UID, EDITOR_UID]) {
+        await assertFails(setDoc(pointRef(uid, kind, `sponsored-${uid}`), { ...point, sponsor }))
+        await assertSucceeds(setDoc(pointRef(uid, kind, `ordinary-${uid}`), point))
+      }
+    })
+
+    it(`denies direct, nested, removed and replacement sponsor changes in ${kind}`, async () => {
+      await seedPoint()
+      for (const uid of [ADMIN_UID, EDITOR_UID]) {
+        const ref = pointRef(uid, kind)
+        await assertFails(updateDoc(ref, { sponsor: { ...sponsor, priority: 9 } }))
+        await assertFails(updateDoc(ref, { 'sponsor.enabled': false }))
+        await assertFails(updateDoc(ref, { sponsor: deleteField() }))
+        await assertFails(setDoc(ref, { ...point, title: 'Remplacement' }))
+        await assertSucceeds(updateDoc(ref, { title: `Titre ${uid}` }))
+        await assertSucceeds(setDoc(ref, { ...point, title: `Remplacement ${uid}`, sponsor }))
+        const saved = await assertSucceeds(getDoc(ref))
+        assert.deepEqual(saved.data().sponsor, sponsor)
+      }
+    })
+
+    it(`protects sponsored deletion in ${kind} but permits ordinary deletion`, async () => {
+      await seedPoint()
+      for (const uid of [ADMIN_UID, EDITOR_UID]) {
+        await assertFails(deleteDoc(pointRef(uid, kind)))
+      }
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), `events/${EVENT_ID}/${kind}`, 'ordinary'), point)
+      })
+      await assertSucceeds(deleteDoc(pointRef(ADMIN_UID, kind, 'ordinary')))
+      await assertSucceeds(deleteDoc(pointRef(OWNER_UID, kind)))
+    })
+  }
+
+  it('also protects partnership data from the historical adminId authority', async () => {
+    await seedPoint()
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'events', EVENT_ID), { adminId: LEGACY_UID })
+    })
+    for (const kind of paths) {
+      await assertFails(setDoc(pointRef(LEGACY_UID, kind, 'legacy-sponsored'), { ...point, sponsor }))
+      await assertSucceeds(setDoc(pointRef(LEGACY_UID, kind, 'legacy-ordinary'), point))
+      await assertFails(updateDoc(pointRef(LEGACY_UID, kind), { 'sponsor.priority': 100 }))
+      await assertFails(deleteDoc(pointRef(LEGACY_UID, kind)))
+      await assertSucceeds(updateDoc(pointRef(LEGACY_UID, kind), { title: 'Titre ordinaire' }))
+    }
+  })
+
+  it('prevents an organizer from recreating the public copy without an existing partnership', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `events/${EVENT_ID}/pois`, 'point'), { ...point, sponsor })
+    })
+    await assertFails(setDoc(pointRef(ADMIN_UID, 'pois_public'), point))
+  })
+
+  it('lets the owner activate, deactivate while keeping values, and explicitly remove both copies', async () => {
+    await seedPoint(false)
+    const ownerDb = testEnv.authenticatedContext(OWNER_UID).firestore()
+    const refs = paths.map((kind) => doc(ownerDb, `events/${EVENT_ID}/${kind}`, 'point'))
+
+    for (const nextSponsor of [sponsor, { ...sponsor, enabled: false }]) {
+      const batch = writeBatch(ownerDb)
+      refs.forEach((ref) => batch.update(ref, { sponsor: nextSponsor }))
+      await assertSucceeds(batch.commit())
+      for (const ref of refs) {
+        const saved = await assertSucceeds(getDoc(ref))
+        assert.deepEqual(saved.data().sponsor, nextSponsor)
+      }
+      if (!nextSponsor.enabled) {
+        for (const kind of paths) await assertFails(deleteDoc(pointRef(ADMIN_UID, kind)))
+      }
+    }
+
+    const removal = writeBatch(ownerDb)
+    refs.forEach((ref) => removal.update(ref, { sponsor: deleteField() }))
+    await assertSucceeds(removal.commit())
+    for (const ref of refs) {
+      assert.equal((await assertSucceeds(getDoc(ref))).data().sponsor, undefined)
+    }
+  })
+
+  it('keeps reviews intact when a sponsored Point deletion is denied', async () => {
+    await seedPoint()
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `events/${EVENT_ID}/pois/point/reviews/review`), { comment: 'Avis conservé' })
+    })
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    const deletion = writeBatch(adminDb)
+    deletion.delete(doc(adminDb, `events/${EVENT_ID}/pois`, 'point'))
+    deletion.delete(doc(adminDb, `events/${EVENT_ID}/pois_public`, 'point'))
+    await assertFails(deletion.commit())
+    const review = await assertSucceeds(getDoc(doc(adminDb, `events/${EVENT_ID}/pois/point/reviews/review`)))
+    assert.equal(review.exists(), true)
+  })
+
+  it('keeps an existing partnership readable after its Event becomes public', async () => {
+    await seedPoint()
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'events', EVENT_ID), {
+        status: 'published', visibility: 'public',
+        commercial: { offerCode: 'public', state: 'active', offerVersion: 1 },
+      })
+    })
+    const visitorDb = testEnv.unauthenticatedContext().firestore()
+    for (const kind of paths) {
+      const publicRef = doc(visitorDb, `events/${EVENT_ID}/${kind}`, 'point')
+      assert.deepEqual((await assertSucceeds(getDoc(publicRef))).data().sponsor, sponsor)
+      await assertSucceeds(updateDoc(pointRef(ADMIN_UID, kind), { title: 'Point mis à jour' }))
+      assert.deepEqual((await assertSucceeds(getDoc(publicRef))).data().sponsor, sponsor)
+    }
   })
 })
 

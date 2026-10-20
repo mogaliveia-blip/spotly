@@ -905,7 +905,7 @@ export async function updatePoi(
   try {
     await runTransaction(db, async (tx) => {
       const currentSnap = await tx.get(poiRef);
-      if (!currentSnap.exists()) return;
+      if (!currentSnap.exists()) throw new Error('POI_NOT_FOUND');
       
       const currentData = currentSnap.data() as POI;
       const updatedData = { ...currentData, ...sanitizedPoiData };
@@ -925,8 +925,6 @@ export async function updatePoi(
 
       if ('sponsor' in sanitizedPoiData) {
         publicData.sponsor = (sanitizedPoiData as any).sponsor;
-      } else if (updatedData.sponsor) {
-        publicData.sponsor = updatedData.sponsor;
       }
 
       tx.set(poiPublicRef, publicData, { merge: true });
@@ -945,21 +943,21 @@ export async function updatePoi(
   }
 }
 
-export async function deletePoi(poiId: string, eventId: string): Promise<void> {
+export async function setPoiSponsor(poiId: string, eventId: string, sponsor: POISponsor | null): Promise<void> {
+  await updatePoi(poiId, { sponsor: sponsor ?? deleteField() as unknown as POISponsor }, eventId);
+}
+
+export async function deletePoi(poiId: string, eventId: string): Promise<{ cleanupComplete: boolean }> {
   const poiRef = doc(db, dbPaths.pois(eventId), poiId)
   const poiPublicRef = doc(db, dbPaths.poisPublic(eventId), poiId)
   const storagePrefix = eventId === DEFAULT_EVENT_ID ? '' : `events/${eventId}/`;
   const imagesFolderPath = `${storagePrefix}poi-images/${poiId}`
 
   try {
-    await deleteCollectionDocs(`${dbPaths.pois(eventId)}/${poiId}/reviews`)
-
     await runTransaction(db, async (tx) => {
       tx.delete(poiRef);
       tx.delete(poiPublicRef);
     });
-
-    await deleteStorageFolder(imagesFolderPath)
   } catch (serverError: any) {
     if (serverError.code?.includes('permission-denied')) {
       const permissionError = new FirestorePermissionError({ path: poiRef.path, operation: 'delete' })
@@ -967,4 +965,15 @@ export async function deletePoi(poiId: string, eventId: string): Promise<void> {
     }
     throw serverError
   }
+
+  // Cleanup follows the authorized document deletion so a denied delete cannot erase reviews.
+  const cleanup = await Promise.allSettled([
+    deleteCollectionDocs(`${dbPaths.pois(eventId)}/${poiId}/reviews`),
+    deleteStorageFolder(imagesFolderPath)
+  ])
+  const cleanupComplete = cleanup.every((result) => result.status === 'fulfilled')
+  if (!cleanupComplete) {
+    console.error('[Data] deletePoi cleanup incomplete', { eventId, poiId, cleanup })
+  }
+  return { cleanupComplete }
 }

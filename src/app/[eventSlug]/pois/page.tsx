@@ -52,6 +52,8 @@ function POIsTable() {
 
   const canManagePois = globalRole === 'owner' || userRole === 'admin' || userRole === 'editor';
   const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
+  const [deletingPoiId, setDeletingPoiId] = useState<string | null>(null);
+  const canDeletePoi = (poi: POI) => globalRole === 'owner' || !Object.prototype.hasOwnProperty.call(poi, 'sponsor');
 
   useEffect(() => {
     if (eventLoading) return;
@@ -82,20 +84,31 @@ function POIsTable() {
     router.push(`${prefix}/pois/edit/${poiId}`);
   };
 
-  const handleDelete = (poiId: string) => {
+  const handleDelete = async (poiId: string) => {
+    const poi = pois.find((item) => item.id === poiId);
+    if (poi && !canDeletePoi(poi)) {
+      toast({ title: 'Suppression réservée à l’administration plateforme', description: 'Ce Point possède un partenariat.', variant: 'destructive' });
+      return;
+    }
+    setDeletingPoiId(poiId);
     try {
-      deletePoi(poiId, eventId);
-      setPois(pois.filter(p => p.id !== poiId));
+      const { cleanupComplete } = await deletePoi(poiId, eventId);
+      setPois((current) => current.filter((item) => item.id !== poiId));
       toast({
-        title: "POI supprimé",
-        description: "Le point d'intérêt a été supprimé avec succès."
+        title: cleanupComplete ? 'Point supprimé' : 'Point supprimé, nettoyage incomplet',
+        description: cleanupComplete
+          ? 'Le Point a été supprimé.'
+          : 'Certains avis ou fichiers restent à nettoyer.',
+        variant: cleanupComplete ? 'default' : 'destructive'
       })
     } catch (error) {
        toast({
-        title: "Erreur",
-        description: "Impossible de supprimer le POI.",
+        title: 'Suppression impossible',
+        description: 'Le Point n’a pas été supprimé. Un partenariat peut réserver cette action à l’administration plateforme.',
         variant: "destructive"
       })
+    } finally {
+      setDeletingPoiId(null);
     }
   };
 
@@ -175,7 +188,7 @@ function POIsTable() {
                       Modifier
                     </Button>
                   )}
-                  {canManagePois && (
+                  {canManagePois && canDeletePoi(poi) && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="destructive" className="col-span-2 min-h-11 rounded-xl">
@@ -192,10 +205,13 @@ function POIsTable() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(poi.id)}>Supprimer</AlertDialogAction>
+                          <AlertDialogAction disabled={deletingPoiId === poi.id} onClick={() => void handleDelete(poi.id)}>Supprimer</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
+                  )}
+                  {canManagePois && !canDeletePoi(poi) && (
+                    <p className="col-span-2 text-sm text-muted-foreground">Suppression réservée à l’administration plateforme : ce Point possède un partenariat.</p>
                   )}
                 </div>
               </div>
@@ -259,7 +275,7 @@ function POIsTable() {
                       <Button variant="outline" size="icon" aria-label={`Modifier ${poi.title}`} onClick={() => handleEditClick(poi.id)}>
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <AlertDialog>
+                      {canDeletePoi(poi) ? <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button variant="destructive" size="icon" aria-label={`Supprimer ${poi.title}`}>
                             <Trash2 className="h-4 w-4" />
@@ -274,10 +290,10 @@ function POIsTable() {
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Annuler</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(poi.id)}>Supprimer</AlertDialogAction>
+                            <AlertDialogAction disabled={deletingPoiId === poi.id} onClick={() => void handleDelete(poi.id)}>Supprimer</AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
-                      </AlertDialog>
+                      </AlertDialog> : <span className="max-w-48 text-xs text-muted-foreground">Suppression réservée à l’administration plateforme : Point partenaire.</span>}
                     </>
                   )}
                 </TableCell>
