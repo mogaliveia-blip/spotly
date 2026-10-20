@@ -132,6 +132,136 @@ describe('Event protected fields', () => {
   })
 })
 
+describe('Event program V1', () => {
+  const path = `events/${EVENT_ID}/program`
+  const minimal = { name: 'Groupe A', published: false, sortOrder: 0 }
+  const refFor = (uid, id = 'item') => doc(testEnv.authenticatedContext(uid).firestore(), path, id)
+
+  async function publishEvent(visibility = 'public') {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'events', EVENT_ID), {
+        status: 'published', visibility,
+        commercial: { offerCode: visibility, state: 'active', offerVersion: 1 },
+      })
+    })
+  }
+
+  it('creates a name-only draft for owner, member admin and historical adminId, but not editor or visitor', async () => {
+    await assertSucceeds(setDoc(refFor(ADMIN_UID, 'admin'), minimal))
+    await assertSucceeds(setDoc(refFor(OWNER_UID, 'owner'), minimal))
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'events', EVENT_ID), { adminId: LEGACY_UID })
+    })
+    await assertSucceeds(setDoc(refFor(LEGACY_UID, 'legacy'), minimal))
+    await assertFails(setDoc(refFor(EDITOR_UID, 'editor'), minimal))
+    await assertFails(setDoc(doc(testEnv.unauthenticatedContext().firestore(), path, 'visitor'), minimal))
+    await assertFails(setDoc(refFor(ADMIN_UID, 'prepublished'), { ...minimal, published: true }))
+    for (const uid of [ADMIN_UID, OWNER_UID, LEGACY_UID]) {
+      assert.equal((await assertSucceeds(getDoc(refFor(uid, 'admin')))).data().published, false)
+    }
+    await assertFails(getDoc(refFor(EDITOR_UID, 'admin')))
+    await assertFails(getDoc(doc(testEnv.unauthenticatedContext().firestore(), path, 'admin')))
+  })
+
+  it('allows name-only publication and exposes only published items after the Event is accessible', async () => {
+    await assertSucceeds(setDoc(refFor(ADMIN_UID), minimal))
+    await assertSucceeds(setDoc(refFor(ADMIN_UID, 'draft'), { ...minimal, name: 'En préparation' }))
+    await assertSucceeds(updateDoc(refFor(ADMIN_UID), { published: true }))
+    const visitorDb = testEnv.unauthenticatedContext().firestore()
+    await assertFails(getDoc(doc(visitorDb, path, 'item')))
+    await publishEvent()
+    assert.equal((await assertSucceeds(getDoc(doc(visitorDb, path, 'item')))).data().name, 'Groupe A')
+    await assertFails(getDoc(doc(visitorDb, path, 'draft')))
+    await assertFails(getDocs(collection(visitorDb, path)))
+    const publishedQuery = query(collection(visitorDb, path), where('published', '==', true))
+    const listed = await assertSucceeds(getDocs(publishedQuery))
+    assert.deepEqual(listed.docs.map((item) => item.id), ['item'])
+    const adminList = await assertSucceeds(getDocs(collection(testEnv.authenticatedContext(ADMIN_UID).firestore(), path)))
+    assert.equal(adminList.size, 2)
+    await assertFails(getDoc(refFor(EDITOR_UID, 'draft')))
+    await assertSucceeds(getDoc(refFor(EDITOR_UID)))
+    await assertSucceeds(updateDoc(refFor(OWNER_UID), { published: false }))
+    await assertFails(getDoc(doc(visitorDb, path, 'item')))
+  })
+
+  it('requires the existing private Event grant for a visitor to read published items', async () => {
+    await assertSucceeds(setDoc(refFor(ADMIN_UID), minimal))
+    await assertSucceeds(updateDoc(refFor(ADMIN_UID), { published: true }))
+    await publishEvent('private')
+    const visitorDb = testEnv.authenticatedContext('private-visitor').firestore()
+    await assertFails(getDoc(doc(visitorDb, path, 'item')))
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `events/${EVENT_ID}/privateAccess/private-visitor`), {
+        expiresAt: new Date('2030-01-01T00:00:00.000Z'), accessVersion: 1,
+      })
+      await updateDoc(doc(context.firestore(), 'events', EVENT_ID), { privateAccessVersion: 1 })
+    })
+    assert.equal((await assertSucceeds(getDoc(doc(visitorDb, path, 'item')))).data().published, true)
+  })
+
+  it('reserves updates and deletion to owner, member admin and historical adminId', async () => {
+    await assertSucceeds(setDoc(refFor(ADMIN_UID), minimal))
+    await assertFails(updateDoc(refFor(EDITOR_UID), { name: 'Édition refusée' }))
+    await assertFails(deleteDoc(refFor(EDITOR_UID)))
+    const visitorRef = doc(testEnv.unauthenticatedContext().firestore(), path, 'item')
+    await assertFails(updateDoc(visitorRef, { published: true }))
+    await assertFails(deleteDoc(visitorRef))
+    await assertSucceeds(updateDoc(refFor(OWNER_UID), { name: 'Édition owner' }))
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'events', EVENT_ID), { adminId: LEGACY_UID })
+    })
+    await assertSucceeds(updateDoc(refFor(LEGACY_UID), { name: 'Édition historique' }))
+    await assertSucceeds(deleteDoc(refFor(LEGACY_UID)))
+  })
+
+  it('rejects extra fields, wrong types, invalid dates and inconsistent hours on create or update', async () => {
+    const badFields = [
+      { name: '  ' }, { name: 'x'.repeat(121) }, { published: 'true' },
+      { sortOrder: 1.5 }, { sortOrder: 1000001 }, { hidden: true },
+      { day: '2026-02-30' }, { day: '2026-02-29' }, { day: '2026-04-31' },
+      { day: '0000-01-01' }, { day: '2026-2-3' },
+      { startTime: '21:00' }, { endTime: '22:00' },
+      { day: '2026-10-25', endTime: '22:00' },
+      { day: '2026-10-25', startTime: '24:00' },
+      { day: '2026-10-25', startTime: '21:00', endTime: '21:00' },
+      { day: '2026-10-25', startTime: '21:00', endTime: '20:59' },
+      { photoPath: 'events/other/program/item/photo.jpg' },
+      { photoPath: 'events/event-sensitive-fields/program/item/photo.jpg', poiId: 'missing' },
+    ]
+    for (const fields of badFields) {
+      await assertFails(setDoc(refFor(ADMIN_UID), { ...minimal, ...fields }))
+    }
+    await assertSucceeds(setDoc(refFor(ADMIN_UID), {
+      ...minimal, day: '2026-10-25', startTime: '21:00', endTime: '22:30',
+      photoPath: `events/${EVENT_ID}/program/item/photo.jpg`,
+    }))
+    await assertSucceeds(setDoc(refFor(ADMIN_UID, 'leap-day'), { ...minimal, day: '2028-02-29' }))
+    await assertSucceeds(setDoc(refFor(ADMIN_UID, 'century-leap-day'), { ...minimal, day: '2000-02-29' }))
+    await assertFails(setDoc(refFor(ADMIN_UID, 'century-nonleap'), { ...minimal, day: '1900-02-29' }))
+    await assertFails(updateDoc(refFor(ADMIN_UID), { day: deleteField() }))
+    await assertFails(updateDoc(refFor(ADMIN_UID), { startTime: deleteField() }))
+    await assertFails(setDoc(refFor(ADMIN_UID), { ...minimal, hidden: true }))
+    await assertSucceeds(updateDoc(refFor(ADMIN_UID), {
+      day: deleteField(), startTime: deleteField(), endTime: deleteField(),
+    }))
+    assert.equal((await assertSucceeds(getDoc(refFor(ADMIN_UID)))).data().day, undefined)
+  })
+
+  it('keeps a linked prestation after its Point is deleted, while rejecting new nonexistent links', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `events/${EVENT_ID}/pois`, 'stage'), { categoryId: 'stage' })
+    })
+    await assertSucceeds(setDoc(refFor(ADMIN_UID), { ...minimal, poiId: 'stage' }))
+    await assertFails(setDoc(refFor(ADMIN_UID, 'missing'), { ...minimal, poiId: 'missing' }))
+    await assertSucceeds(deleteDoc(doc(testEnv.authenticatedContext(OWNER_UID).firestore(), `events/${EVENT_ID}/pois`, 'stage')))
+    await assertSucceeds(updateDoc(refFor(ADMIN_UID), { name: 'Scène à confirmer' }))
+    await assertFails(updateDoc(refFor(ADMIN_UID), { poiId: 'missing' }))
+    assert.equal((await assertSucceeds(getDoc(refFor(ADMIN_UID)))).data().poiId, 'stage')
+    await assertSucceeds(updateDoc(refFor(ADMIN_UID), { poiId: deleteField() }))
+    await assertSucceeds(deleteDoc(refFor(ADMIN_UID)))
+  })
+})
+
 describe('Platform-owned Point partnerships', () => {
   const sponsor = { enabled: true, level: 'premium', priority: 7 }
   const point = { title: 'Point test', description: 'Description du Point', categoryId: 'parking',

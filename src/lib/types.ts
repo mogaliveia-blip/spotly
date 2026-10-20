@@ -45,6 +45,31 @@ export interface POI {
   sponsor?: POISponsor
 }
 
+/** Local civil times belong to the parent Event's timezone; absent values stay absent. */
+export interface EventProgramItemData {
+  name: string
+  published: boolean
+  sortOrder: number
+  description?: string
+  photoPath?: string
+  day?: string
+  startTime?: string
+  endTime?: string
+  poiId?: string
+}
+
+export interface EventProgramItem extends EventProgramItemData {
+  id: string
+}
+
+export type CreateEventProgramItemInput = Pick<EventProgramItemData, 'name'> &
+  Partial<Omit<EventProgramItemData, 'name' | 'published'>>
+
+export type UpdateEventProgramItemInput = Partial<
+  Pick<EventProgramItemData, 'name' | 'published' | 'sortOrder'> &
+  { [K in 'description' | 'photoPath' | 'day' | 'startTime' | 'endTime' | 'poiId']: string | null }
+>
+
 export type POILite = Pick<
   POI,
   | 'id'

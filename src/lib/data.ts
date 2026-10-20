@@ -43,6 +43,8 @@ import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { isSponsorActive } from './sponsor-utils'
 import { getEventMonitorTiming } from './event-time'
+import { createEventProgramItemData, updateEventProgramItemData } from './event-program'
+import type { CreateEventProgramItemInput, EventProgramItem, EventProgramItemData, UpdateEventProgramItemInput } from './types'
 import {
   ref,
   uploadBytes,
@@ -976,4 +978,58 @@ export async function deletePoi(poiId: string, eventId: string): Promise<{ clean
     console.error('[Data] deletePoi cleanup incomplete', { eventId, poiId, cleanup })
   }
   return { cleanupComplete }
+}
+
+function programCollection(eventId: string) {
+  return collection(db, 'events', eventId, 'program')
+}
+
+function programItemFromDoc(snapshot: { id: string; data: () => Record<string, unknown> }): EventProgramItem {
+  return { id: snapshot.id, ...snapshot.data() } as EventProgramItem
+}
+
+export async function createProgramItem(eventId: string, input: CreateEventProgramItemInput): Promise<string> {
+  const itemRef = doc(programCollection(eventId))
+  const data = createEventProgramItemData(input, eventId, itemRef.id)
+  await setDoc(itemRef, data)
+  return itemRef.id
+}
+
+export async function fetchProgramItemsForAdmin(eventId: string): Promise<EventProgramItem[]> {
+  const snapshot = await getDocsFromServer(programCollection(eventId))
+  return snapshot.docs.map(programItemFromDoc)
+}
+
+export async function updateProgramItem(
+  eventId: string, itemId: string, patch: UpdateEventProgramItemInput
+): Promise<void> {
+  const itemRef = doc(programCollection(eventId), itemId)
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(itemRef)
+    if (!snapshot.exists()) throw new Error('PROGRAM_ITEM_NOT_FOUND')
+    const next = updateEventProgramItemData(
+      snapshot.data() as EventProgramItemData, patch, eventId, itemId
+    )
+    const update: Record<string, any> = {}
+    for (const key of Object.keys(patch)) {
+      update[key] = patch[key as keyof UpdateEventProgramItemInput] === null
+        ? deleteField()
+        : next[key as keyof EventProgramItemData]
+    }
+    transaction.update(itemRef, update)
+  })
+}
+
+export async function setProgramItemPublished(eventId: string, itemId: string, published: boolean): Promise<void> {
+  await updateProgramItem(eventId, itemId, { published })
+}
+
+export async function deleteProgramItem(eventId: string, itemId: string): Promise<void> {
+  await deleteDoc(doc(programCollection(eventId), itemId))
+}
+
+export async function fetchPublishedProgramItems(eventId: string): Promise<EventProgramItem[]> {
+  const publishedQuery = query(programCollection(eventId), where('published', '==', true))
+  const snapshot = await getDocsFromServer(publishedQuery)
+  return snapshot.docs.map(programItemFromDoc)
 }
