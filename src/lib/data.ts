@@ -644,7 +644,7 @@ export async function updateUserApproval(uid: string, isApproved: boolean): Prom
   }
 }
 
-export async function fetchPois(eventId: string): Promise<POI[]> {
+export async function fetchPois(eventId: string, options: { throwOnReadError?: boolean } = {}): Promise<POI[]> {
   try {
     const poiCollection = collection(db, dbPaths.pois(eventId))
     const poiSnapshot = await getDocs(poiCollection)
@@ -655,6 +655,7 @@ export async function fetchPois(eventId: string): Promise<POI[]> {
       code: error?.code ?? null,
       message: error?.message ?? null,
     })
+    if (options.throwOnReadError) throw error
     return []
   }
 }

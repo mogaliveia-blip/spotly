@@ -56,6 +56,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useEvent } from '@/providers/event-provider';
 import { EventCalendarTimeForm } from '@/components/admin/event-calendar-time-form';
 import { EventDiscoveryForm } from '@/components/admin/event-discovery-form';
+import { EventProgramCard } from '@/components/admin/event-program-card';
 
 const EVENT_DESCRIPTION_MAX_LENGTH = 400;
 const EVENT_COVER_STORAGE_PATH = (eventId: string) => `events/${eventId}/event-cover/cover.jpg`;
@@ -1522,6 +1523,16 @@ export default function AdminPage() {
             </CardHeader>
             <CardContent className="pt-6">
               <EventDiscoveryForm event={event} />
+            </CardContent>
+          </Card>}
+
+          {event && <Card className="rounded-[2rem] border-muted/60 shadow-sm overflow-hidden lg:col-span-2">
+            <CardHeader className="bg-primary/5">
+              <CardTitle>Programme</CardTitle>
+              <CardDescription>Préparez les prestations de l’événement et publiez-les à votre rythme.</CardDescription>
+            </CardHeader>
+            <CardContent className="px-3 pt-6 sm:px-6">
+              <EventProgramCard eventId={event.id} timezone={event.timezone} />
             </CardContent>
           </Card>}
 
