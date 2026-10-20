@@ -44,10 +44,12 @@ import { FirestorePermissionError } from '@/firebase/errors'
 import { isSponsorActive } from './sponsor-utils'
 import { getEventMonitorTiming } from './event-time'
 import { createEventProgramItemData, updateEventProgramItemData } from './event-program'
+import { isOwnProgramPhotoPath, makeProgramPhotoPath } from './program-photo'
 import type { CreateEventProgramItemInput, EventProgramItem, EventProgramItemData, UpdateEventProgramItemInput } from './types'
 import {
   ref,
   uploadBytes,
+  getBlob,
   getDownloadURL,
   deleteObject,
   listAll
@@ -1001,6 +1003,82 @@ export async function fetchProgramItemsForAdmin(eventId: string): Promise<EventP
   return snapshot.docs.map(programItemFromDoc)
 }
 
+export async function fetchOwnEventMemberRole(eventId: string, userId: string): Promise<EventRole | null> {
+  const snapshot = await getDocFromServer(doc(db, 'events', eventId, 'members', userId))
+  return snapshot.exists() && snapshot.data().role === 'admin' ? 'admin' : null
+}
+
+export async function getProgramPhotoBlob(eventId: string, itemId: string, path: string): Promise<Blob> {
+  if (!isOwnProgramPhotoPath(eventId, itemId, path)) throw new Error('PROGRAM_PHOTO_INVALID_PATH')
+  return getBlob(ref(storage, path))
+}
+
+async function deleteProgramPhotoObject(path: string): Promise<void> {
+  try {
+    await deleteObject(ref(storage, path))
+  } catch (error: any) {
+    if (error?.code !== 'storage/object-not-found') throw error
+  }
+}
+
+async function changeProgramPhotoPath(
+  eventId: string, itemId: string, expectedPath: string | undefined, nextPath: string | null
+): Promise<void> {
+  const itemRef = doc(programCollection(eventId), itemId)
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(itemRef)
+    if (!snapshot.exists()) throw new Error('PROGRAM_ITEM_NOT_FOUND')
+    const current = snapshot.data() as EventProgramItemData
+    if (!current.published || current.photoPath !== expectedPath) throw new Error('PROGRAM_PHOTO_STALE_ITEM')
+    updateEventProgramItemData(current, { photoPath: nextPath }, eventId, itemId)
+    transaction.update(itemRef, { photoPath: nextPath === null ? deleteField() : nextPath })
+  })
+}
+
+export async function replaceProgramItemPhoto(
+  eventId: string, item: EventProgramItem, file: File
+): Promise<{ photoPath: string; cleanupComplete: boolean }> {
+  if (!item.published) throw new Error('PROGRAM_PHOTO_REQUIRES_PUBLICATION')
+  const nextPath = makeProgramPhotoPath(eventId, item.id, file, crypto.randomUUID())
+  await uploadBytes(ref(storage, nextPath), file, { contentType: file.type })
+  try {
+    await changeProgramPhotoPath(eventId, item.id, item.photoPath, nextPath)
+  } catch (error) {
+    try {
+      await deleteProgramPhotoObject(nextPath)
+    } catch (cleanupError) {
+      console.error('[Program photo] unlinked upload cleanup failed', { eventId, itemId: item.id, path: nextPath, cleanupError })
+      throw new Error('PROGRAM_PHOTO_UNLINKED_UPLOAD')
+    }
+    throw error
+  }
+  if (item.photoPath && isOwnProgramPhotoPath(eventId, item.id, item.photoPath)) {
+    try {
+      await deleteProgramPhotoObject(item.photoPath)
+    } catch (error) {
+      console.error('[Program photo] replaced object cleanup failed', { eventId, itemId: item.id, path: item.photoPath, error })
+      return { photoPath: nextPath, cleanupComplete: false }
+    }
+  }
+  return { photoPath: nextPath, cleanupComplete: true }
+}
+
+export async function removeProgramItemPhoto(
+  eventId: string, item: EventProgramItem
+): Promise<{ cleanupComplete: boolean }> {
+  if (!item.photoPath) return { cleanupComplete: true }
+  await changeProgramPhotoPath(eventId, item.id, item.photoPath, null)
+  if (isOwnProgramPhotoPath(eventId, item.id, item.photoPath)) {
+    try {
+      await deleteProgramPhotoObject(item.photoPath)
+    } catch (error) {
+      console.error('[Program photo] removed object cleanup failed', { eventId, itemId: item.id, path: item.photoPath, error })
+      return { cleanupComplete: false }
+    }
+  }
+  return { cleanupComplete: true }
+}
+
 export async function updateProgramItem(
   eventId: string, itemId: string, patch: UpdateEventProgramItemInput
 ): Promise<void> {
@@ -1025,8 +1103,20 @@ export async function setProgramItemPublished(eventId: string, itemId: string, p
   await updateProgramItem(eventId, itemId, { published })
 }
 
-export async function deleteProgramItem(eventId: string, itemId: string): Promise<void> {
-  await deleteDoc(doc(programCollection(eventId), itemId))
+export async function deleteProgramItem(eventId: string, itemId: string): Promise<{ cleanupComplete: boolean }> {
+  const itemRef = doc(programCollection(eventId), itemId)
+  const snapshot = await getDocFromServer(itemRef)
+  const photoPath = snapshot.data()?.photoPath
+  await deleteDoc(itemRef)
+  if (typeof photoPath === 'string' && isOwnProgramPhotoPath(eventId, itemId, photoPath)) {
+    try {
+      await deleteProgramPhotoObject(photoPath)
+    } catch (error) {
+      console.error('[Program photo] deleted item cleanup failed', { eventId, itemId, path: photoPath, error })
+      return { cleanupComplete: false }
+    }
+  }
+  return { cleanupComplete: true }
 }
 
 export async function fetchPublishedProgramItems(eventId: string): Promise<EventProgramItem[]> {

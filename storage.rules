@@ -106,6 +106,38 @@ service firebase.storage {
              isEventAdmin(eventId);
     }
 
+    function isProgramPhotoAdmin(eventId) {
+      let memberPath = /databases/(default)/documents/events/$(eventId)/members/$(request.auth.uid);
+      return isSignedIn() && firestore.exists(memberPath) &&
+        firestore.get(memberPath).data.role == 'admin';
+    }
+
+    function validProgramPhotoName(filename) {
+      return filename.matches('^photo-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(jpg|png|webp)$');
+    }
+
+    function validProgramPhotoUpload(filename) {
+      return request.resource.size > 0 && request.resource.size <= 2 * 1024 * 1024 &&
+        ((filename.matches('.*\\.jpg$') && request.resource.contentType == 'image/jpeg') ||
+         (filename.matches('.*\\.png$') && request.resource.contentType == 'image/png') ||
+         (filename.matches('.*\\.webp$') && request.resource.contentType == 'image/webp'));
+    }
+
+    match /events/{eventId}/program/{itemId}/{filename} {
+      // Photo access intentionally has separate two-document read and write paths.
+      allow read: if validProgramPhotoName(filename) && isEventPublic(eventId) &&
+        firestore.exists(/databases/(default)/documents/events/$(eventId)/program/$(itemId)) &&
+        firestore.get(/databases/(default)/documents/events/$(eventId)/program/$(itemId)).data.published == true &&
+        'photoPath' in firestore.get(/databases/(default)/documents/events/$(eventId)/program/$(itemId)).data &&
+        firestore.get(/databases/(default)/documents/events/$(eventId)/program/$(itemId)).data.photoPath ==
+          'events/' + eventId + '/program/' + itemId + '/' + filename;
+
+      allow create: if resource == null && validProgramPhotoName(filename) && validProgramPhotoUpload(filename) &&
+        isEventPublic(eventId) && isProgramPhotoAdmin(eventId);
+      allow delete: if validProgramPhotoName(filename) && isEventPublic(eventId) &&
+        isProgramPhotoAdmin(eventId);
+    }
+
     match /events/{eventId}/poi-images/{allPaths=**} {
       allow read: if isEventPublic(eventId) || isAdminOrEditor(eventId) || hasPrivateAccessGrant(eventId);
       allow write: if isAdminOrEditor(eventId);

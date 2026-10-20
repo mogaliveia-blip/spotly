@@ -231,9 +231,11 @@ describe('Event program V1', () => {
     for (const fields of badFields) {
       await assertFails(setDoc(refFor(ADMIN_UID), { ...minimal, ...fields }))
     }
+    await assertFails(setDoc(refFor(ADMIN_UID), {
+      ...minimal, photoPath: `events/${EVENT_ID}/program/item/photo.jpg`,
+    }))
     await assertSucceeds(setDoc(refFor(ADMIN_UID), {
       ...minimal, day: '2026-10-25', startTime: '21:00', endTime: '22:30',
-      photoPath: `events/${EVENT_ID}/program/item/photo.jpg`,
     }))
     await assertSucceeds(setDoc(refFor(ADMIN_UID, 'leap-day'), { ...minimal, day: '2028-02-29' }))
     await assertSucceeds(setDoc(refFor(ADMIN_UID, 'century-leap-day'), { ...minimal, day: '2000-02-29' }))
@@ -245,6 +247,28 @@ describe('Event program V1', () => {
       day: deleteField(), startTime: deleteField(), endTime: deleteField(),
     }))
     assert.equal((await assertSucceeds(getDoc(refFor(ADMIN_UID)))).data().day, undefined)
+  })
+
+  it('reserves photoPath changes to member admins after publication without changing text rights', async () => {
+    const photoPath = `events/${EVENT_ID}/program/item/photo-11111111-1111-4111-8111-111111111111.jpg`
+    await assertSucceeds(setDoc(refFor(ADMIN_UID), minimal))
+    await assertFails(updateDoc(refFor(ADMIN_UID), { photoPath }))
+    await publishEvent()
+    await assertFails(updateDoc(refFor(ADMIN_UID), { photoPath }))
+    await assertSucceeds(updateDoc(refFor(OWNER_UID), { published: true, name: 'Texte owner' }))
+    await assertFails(updateDoc(refFor(OWNER_UID), { photoPath }))
+    await assertFails(updateDoc(refFor(EDITOR_UID), { photoPath }))
+    await assertSucceeds(updateDoc(refFor(ADMIN_UID), { photoPath }))
+    await assertFails(updateDoc(refFor(OWNER_UID), { photoPath: deleteField() }))
+    await assertSucceeds(updateDoc(refFor(ADMIN_UID), { photoPath: deleteField() }))
+    await assertSucceeds(updateDoc(refFor(ADMIN_UID), { photoPath }))
+    await assertSucceeds(updateDoc(refFor(OWNER_UID), { published: false }))
+    await assertFails(updateDoc(refFor(ADMIN_UID), { photoPath: deleteField() }))
+    await assertSucceeds(updateDoc(refFor(OWNER_UID), { published: true }))
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `events/${EVENT_ID}/members/${OWNER_UID}`), { uid: OWNER_UID, role: 'admin' })
+    })
+    await assertSucceeds(updateDoc(refFor(OWNER_UID), { photoPath: deleteField() }))
   })
 
   it('keeps a linked prestation after its Point is deleted, while rejecting new nonexistent links', async () => {

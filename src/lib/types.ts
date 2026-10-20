@@ -63,7 +63,7 @@ export interface EventProgramItem extends EventProgramItemData {
 }
 
 export type CreateEventProgramItemInput = Pick<EventProgramItemData, 'name'> &
-  Partial<Omit<EventProgramItemData, 'name' | 'published'>>
+  Partial<Omit<EventProgramItemData, 'name' | 'published' | 'photoPath'>>
 
 export type UpdateEventProgramItemInput = Partial<
   Pick<EventProgramItemData, 'name' | 'published' | 'sortOrder'> &

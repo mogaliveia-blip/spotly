@@ -457,10 +457,16 @@ service cloud.firestore {
       allow create: if isEventAdmin(eventId) &&
         hasValidProgramItem(eventId, itemId) &&
         request.resource.data.published == false &&
+        !("photoPath" in request.resource.data) &&
         hasExistingProgramPoi(eventId);
 
       allow update: if isEventAdmin(eventId) &&
         hasValidProgramItem(eventId, itemId) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["photoPath"]) ||
+          (resource.data.published == true && request.resource.data.published == true &&
+            isEventPublic(eventId) && isAuthenticated() &&
+            exists(/databases/$(database)/documents/events/$(eventId)/members/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/events/$(eventId)/members/$(request.auth.uid)).data.role == "admin")) &&
         keepsOrLinksExistingProgramPoi(eventId);
 
       allow delete: if isEventAdmin(eventId);

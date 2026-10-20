@@ -54,9 +54,13 @@ describe('Event program V1', () => {
     ]) {
       assert.throws(() => createEventProgramItemData(input as any, eventId, itemId), /PROGRAM_INVALID_PAYLOAD/)
     }
-    assert.equal(createEventProgramItemData({
+    assert.throws(() => createEventProgramItemData({
       name: 'Concert', photoPath: 'events/festival/program/concert/photo.jpg',
-    }, eventId, itemId).photoPath, 'events/festival/program/concert/photo.jpg')
+    } as any, eventId, itemId), /PROGRAM_INVALID_PAYLOAD/)
+    assert.equal(updateEventProgramItemData(
+      createEventProgramItemData({ name: 'Concert' }, eventId, itemId),
+      { photoPath: 'events/festival/program/concert/photo.jpg' }, eventId, itemId
+    ).photoPath, 'events/festival/program/concert/photo.jpg')
   })
 
   it('validates full replacements and refuses partial changes that leave invalid hours', () => {

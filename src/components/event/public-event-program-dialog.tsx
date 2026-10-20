@@ -5,12 +5,13 @@ import { ArrowLeft, Clock3, MapPin } from 'lucide-react'
 import type { EventProgramItem, POILite } from '@/lib/types'
 import { findProgramPoi, groupPublicProgram } from '@/lib/public-event-program'
 import { Button } from '@/components/ui/button'
+import { ProgramPhoto } from './program-photo'
 import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 
 export function PublicEventProgramDialog({
-  open, onOpenChange, items, pois, timezone, onSelectPoi,
+  open, onOpenChange, items, pois, timezone, onSelectPoi, eventId, photosEnabled,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -18,6 +19,8 @@ export function PublicEventProgramDialog({
   pois: POILite[]
   timezone?: string
   onSelectPoi: (poiId: string) => void
+  eventId: string
+  photosEnabled: boolean
 }) {
   const groups = useMemo(() => groupPublicProgram(items), [items])
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
@@ -53,13 +56,13 @@ export function PublicEventProgramDialog({
         {activeGroup && <section aria-labelledby="program-active-day" className="space-y-5">
           <h3 id="program-active-day" className="text-xl font-semibold capitalize">{activeGroup.label}</h3>
 
-          {timed.map((item) => <ProgramItemCard key={item.id} item={item} poi={findProgramPoi(item, pois)} onSelectPoi={onSelectPoi} />)}
+          {timed.map((item) => <ProgramItemCard key={item.id} item={item} poi={findProgramPoi(item, pois)} onSelectPoi={onSelectPoi} eventId={eventId} photosEnabled={photosEnabled} />)}
 
           {untimed.length > 0 && <div className="space-y-4">
             {activeGroup.key !== 'undated' && <h4 className="flex items-center gap-2 border-t pt-5 text-sm font-semibold text-muted-foreground">
               <Clock3 className="h-4 w-4" /> Horaire à venir
             </h4>}
-            {untimed.map((item) => <ProgramItemCard key={item.id} item={item} poi={findProgramPoi(item, pois)} onSelectPoi={onSelectPoi} />)}
+            {untimed.map((item) => <ProgramItemCard key={item.id} item={item} poi={findProgramPoi(item, pois)} onSelectPoi={onSelectPoi} eventId={eventId} photosEnabled={photosEnabled} />)}
           </div>}
         </section>}
       </div>
@@ -68,19 +71,27 @@ export function PublicEventProgramDialog({
 }
 
 function ProgramItemCard({
-  item, poi, onSelectPoi,
+  item, poi, onSelectPoi, eventId, photosEnabled,
 }: {
   item: EventProgramItem
   poi?: POILite
   onSelectPoi: (poiId: string) => void
+  eventId: string
+  photosEnabled: boolean
 }) {
   return <article className="rounded-2xl border bg-card p-4 shadow-sm sm:p-5">
-    {item.startTime && <p className="mb-2 text-sm font-semibold text-primary">
-      <time dateTime={item.startTime}>{item.startTime}</time>
-      {item.endTime && <> – <time dateTime={item.endTime}>{item.endTime}</time></>}
-    </p>}
-    <h4 className="break-words text-lg font-semibold">{item.name}</h4>
-    {item.description && <p className="mt-2 whitespace-pre-line break-words text-sm leading-relaxed text-muted-foreground">{item.description}</p>}
+    <div className="flex items-start gap-4">
+      <ProgramPhoto eventId={eventId} itemId={item.id} path={item.photoPath}
+        enabled={photosEnabled} alt={`Photo de ${item.name}`} className="h-20 w-20 sm:h-24 sm:w-24" />
+      <div className="min-w-0 flex-1">
+        {item.startTime && <p className="mb-2 text-sm font-semibold text-primary">
+          <time dateTime={item.startTime}>{item.startTime}</time>
+          {item.endTime && <> – <time dateTime={item.endTime}>{item.endTime}</time></>}
+        </p>}
+        <h4 className="break-words text-lg font-semibold">{item.name}</h4>
+        {item.description && <p className="mt-2 whitespace-pre-line break-words text-sm leading-relaxed text-muted-foreground">{item.description}</p>}
+      </div>
+    </div>
     {poi && <div className="mt-4 flex flex-wrap items-center gap-3 border-t pt-3 text-sm">
       <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground"><MapPin className="h-4 w-4 shrink-0" /> {poi.title}</span>
       <Button type="button" variant="outline" size="sm" className="h-10 rounded-full" onClick={() => onSelectPoi(poi.id)}>

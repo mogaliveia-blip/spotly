@@ -4,7 +4,7 @@ import { POIMapAdapter } from '@/components/poi/poi-map-adapter'
 import type { POI, POILite, MarketingConfig, EventProgramItem } from '@/lib/types'
 import { useSearchParams, usePathname } from 'next/navigation'
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
-import { DEFAULT_EVENT_ID, fetchPoisLite, fetchPoiById, fetchMarketingConfig, fetchPublishedProgramItems } from '@/lib/data'
+import { DEFAULT_EVENT_ID, fetchPoisLite, fetchPoiById, fetchMarketingConfig, fetchPublishedProgramItems, isPubliclyAccessibleEvent } from '@/lib/data'
 import { useAuth } from '@/hooks/use-auth-user'
 import { CategoryFilter } from '@/components/poi/category-filter'
 import { HeroOverlay } from '@/components/marketing/hero-overlay'
@@ -612,6 +612,8 @@ export function DashboardClient() {
       {programAvailability === 'available' && <PublicEventProgramDialog
         open={programOpen}
         onOpenChange={setProgramOpen}
+        eventId={eventId}
+        photosEnabled={isPubliclyAccessibleEvent(event)}
         items={currentProgram.items}
         pois={poiLoadStatus === 'success' ? pois : []}
         timezone={event?.timezone}

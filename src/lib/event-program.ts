@@ -10,7 +10,7 @@ export const PROGRAM_SORT_ORDER_MAX = 1000000
 const requiredKeys = ['name', 'published', 'sortOrder'] as const
 const optionalKeys = ['description', 'photoPath', 'day', 'startTime', 'endTime', 'poiId'] as const
 const allowedKeys = new Set<string>([...requiredKeys, ...optionalKeys])
-const createKeys = new Set<string>(['name', 'sortOrder', ...optionalKeys])
+const createKeys = new Set<string>(['name', 'sortOrder', 'description', 'day', 'startTime', 'endTime', 'poiId'])
 const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/
 const photoFilenamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/
 

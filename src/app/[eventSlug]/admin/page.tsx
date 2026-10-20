@@ -12,7 +12,8 @@ import {
   updateEventPrivatePreviewEnabled,
   fetchPoiCategoryUsageCount,
   uploadFile,
-  deleteFileByPath
+  deleteFileByPath,
+  isPubliclyAccessibleEvent
 } from '@/lib/data';
 import type { AppConfig, EventPoiCategory, EventPrivateLink, EventVisibility, MarketingConfig } from '@/lib/types';
 import {
@@ -1532,7 +1533,8 @@ export default function AdminPage() {
               <CardDescription>Préparez les prestations de l’événement et publiez-les à votre rythme.</CardDescription>
             </CardHeader>
             <CardContent className="px-3 pt-6 sm:px-6">
-              <EventProgramCard eventId={event.id} timezone={event.timezone} />
+              <EventProgramCard eventId={event.id} timezone={event.timezone}
+                photoEventPublic={isPubliclyAccessibleEvent(event)} />
             </CardContent>
           </Card>}
 

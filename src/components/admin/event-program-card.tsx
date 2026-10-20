@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import {
   createProgramItem, deleteProgramItem, fetchPois, fetchProgramItemsForAdmin,
+  fetchOwnEventMemberRole, removeProgramItemPhoto, replaceProgramItemPhoto,
   setProgramItemPublished, updateProgramItem,
 } from '@/lib/data'
 import {
@@ -11,7 +12,10 @@ import {
   type ProgramItemDraft,
 } from '@/lib/event-program-form'
 import { PROGRAM_DESCRIPTION_MAX_LENGTH, PROGRAM_NAME_MAX_LENGTH, PROGRAM_SORT_ORDER_MAX } from '@/lib/event-program'
+import { validateProgramPhotoFile } from '@/lib/program-photo'
 import type { EventProgramItem, POI } from '@/lib/types'
+import { useAuth } from '@/hooks/use-auth-user'
+import { ProgramPhoto } from '@/components/event/program-photo'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -31,8 +35,11 @@ function sortedItems(items: EventProgramItem[]): EventProgramItem[] {
     a.name.localeCompare(b.name, 'fr'))
 }
 
-export function EventProgramCard({ eventId, timezone }: { eventId: string; timezone?: string }) {
+export function EventProgramCard({ eventId, timezone, photoEventPublic }: {
+  eventId: string; timezone?: string; photoEventPublic: boolean
+}) {
   const { toast } = useToast()
+  const { user } = useAuth()
   const [items, setItems] = useState<EventProgramItem[]>([])
   const [pois, setPois] = useState<POI[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,6 +51,11 @@ export function EventProgramCard({ eventId, timezone }: { eventId: string; timez
   const [formError, setFormError] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState('')
+  const [photoAdmin, setPhotoAdmin] = useState(false)
+  const [photoAccessLoading, setPhotoAccessLoading] = useState(true)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [filePreview, setFilePreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const selected = items.find((item) => item.id === selectedId)
   const deleteTarget = items.find((item) => item.id === deleteId)
@@ -62,6 +74,7 @@ export function EventProgramCard({ eventId, timezone }: { eventId: string; timez
     setPois([])
     setSelectedId(null)
     setDraft(null)
+    setSelectedFile(null)
     void Promise.all([fetchProgramItemsForAdmin(eventId), fetchPois(eventId, { throwOnReadError: true })])
       .then(([programItems, eventPois]) => {
         if (!active) return
@@ -72,6 +85,31 @@ export function EventProgramCard({ eventId, timezone }: { eventId: string; timez
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [eventId])
+
+  useEffect(() => {
+    let active = true
+    setPhotoAdmin(false)
+    setPhotoAccessLoading(!!user?.uid)
+    if (user?.uid) {
+      void fetchOwnEventMemberRole(eventId, user.uid)
+        .then((role) => { if (active) setPhotoAdmin(role === 'admin') })
+        .catch(() => { if (active) setPhotoAdmin(false) })
+        .finally(() => { if (active) setPhotoAccessLoading(false) })
+    }
+    return () => { active = false }
+  }, [eventId, user?.uid])
+
+  useEffect(() => {
+    if (!selectedFile) { setFilePreview(null); return }
+    const url = URL.createObjectURL(selectedFile)
+    setFilePreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [selectedFile])
+
+  function clearPhotoSelection() {
+    setSelectedFile(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   async function reload() {
     setLoading(true)
@@ -117,6 +155,7 @@ export function EventProgramCard({ eventId, timezone }: { eventId: string; timez
     setSelectedId(item.id)
     setDraft(programDraftFromItem(item))
     setFormError('')
+    clearPhotoSelection()
   }
 
   async function saveItem(event: React.FormEvent<HTMLFormElement>) {
@@ -160,6 +199,7 @@ export function EventProgramCard({ eventId, timezone }: { eventId: string; timez
       await setProgramItemPublished(eventId, item.id, !item.published)
       setItems((current) => current.map((entry) => entry.id === item.id
         ? { ...entry, published: !item.published } : entry))
+      if (item.published && selectedId === item.id) clearPhotoSelection()
       toast({ title: item.published ? 'Prestation dépubliée' : 'Prestation publiée' })
     } catch {
       setFormError('Changement de publication impossible. Vérifiez vos droits ou votre connexion.')
@@ -174,13 +214,57 @@ export function EventProgramCard({ eventId, timezone }: { eventId: string; timez
     setBusy(true)
     setDeleteError('')
     try {
-      await deleteProgramItem(eventId, id)
+      const result = await deleteProgramItem(eventId, id)
       setItems((current) => current.filter((item) => item.id !== id))
-      if (selectedId === id) { setSelectedId(null); setDraft(null) }
+      if (selectedId === id) { setSelectedId(null); setDraft(null); clearPhotoSelection() }
       setDeleteId(null)
-      toast({ title: 'Prestation supprimée' })
+      toast(result.cleanupComplete
+        ? { title: 'Prestation supprimée' }
+        : { title: 'Prestation supprimée, nettoyage de la photo incomplet',
+            description: 'Le fichier restant n’est plus lisible depuis le programme. Signalez ce nettoyage incomplet.', variant: 'destructive' })
     } catch {
       setDeleteError('Suppression impossible. La prestation est conservée. Réessayez.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function savePhoto() {
+    if (!selected || !selectedFile || !photoEventPublic || !photoAdmin || busy) return
+    setBusy(true)
+    setFormError('')
+    try {
+      const result = await replaceProgramItemPhoto(eventId, selected, selectedFile)
+      setItems((current) => current.map((item) => item.id === selected.id
+        ? { ...item, photoPath: result.photoPath } : item))
+      clearPhotoSelection()
+      toast(result.cleanupComplete
+        ? { title: 'Photo enregistrée' }
+        : { title: 'Photo enregistrée, ancien fichier non nettoyé', variant: 'destructive' })
+    } catch (error) {
+      setFormError((error as Error).message === 'PROGRAM_PHOTO_UNLINKED_UPLOAD'
+        ? 'Photo non associée à la prestation ; le nettoyage du transfert a échoué. Signalez cet incident.'
+        : 'Photo non enregistrée. Vérifiez la publication, vos droits ou votre connexion, puis réessayez.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removePhoto() {
+    if (!selected?.photoPath || !photoEventPublic || !photoAdmin || busy) return
+    setBusy(true)
+    setFormError('')
+    try {
+      const result = await removeProgramItemPhoto(eventId, selected)
+      setItems((current) => current.map((item) => item.id === selected.id
+        ? { ...item, photoPath: undefined } : item))
+      clearPhotoSelection()
+      toast(result.cleanupComplete
+        ? { title: 'Photo retirée' }
+        : { title: 'Photo retirée, fichier non nettoyé',
+            description: 'Le fichier n’est plus lisible depuis le programme. Signalez ce nettoyage incomplet.', variant: 'destructive' })
+    } catch {
+      setFormError('Retrait impossible. La photo reste associée à la prestation.')
     } finally {
       setBusy(false)
     }
@@ -280,7 +364,40 @@ export function EventProgramCard({ eventId, timezone }: { eventId: string; timez
               value={draft.sortOrder} onChange={(event) => field('sortOrder', event.target.value)} disabled={busy} />
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">Photo : ajout indisponible pour le moment. Les photos des brouillons nécessitent une protection Storage adaptée.</p>
+        {photoEventPublic && selected.published && photoAdmin ? <div className="space-y-3 rounded-xl border p-4">
+          <Label htmlFor="program-photo">Photo de la prestation (facultative)</Label>
+          <div className="flex flex-wrap items-start gap-4">
+            {selectedFile && filePreview
+              ? <div className="h-24 w-24 overflow-hidden rounded-xl bg-muted"><img src={filePreview} alt="Aperçu de la photo choisie" className="h-full w-full object-cover" /></div>
+              : <ProgramPhoto eventId={eventId} itemId={selected.id} path={selected.photoPath}
+                  alt={`Photo de ${selected.name}`} className="h-24 w-24" />}
+            <div className="min-w-0 flex-1 space-y-2">
+              <Input ref={fileInputRef} id="program-photo" type="file" accept="image/jpeg,image/png,image/webp"
+                disabled={busy} onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null
+                  if (!file) { clearPhotoSelection(); return }
+                  try { validateProgramPhotoFile(file); setSelectedFile(file); setFormError('') }
+                  catch {
+                    clearPhotoSelection()
+                    setFormError('Choisissez une image JPEG, PNG ou WebP de 2 Mo maximum.')
+                  }
+                }} />
+              <p className="text-xs text-muted-foreground">JPEG, PNG ou WebP · 2 Mo maximum. La photo peut être ajoutée après publication.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" disabled={busy || !selectedFile} onClick={() => void savePhoto()}>
+              {busy ? 'Transfert…' : selected.photoPath ? 'Remplacer la photo' : 'Ajouter la photo'}
+            </Button>
+            {selected.photoPath && <Button type="button" size="sm" variant="outline" disabled={busy}
+              onClick={() => void removePhoto()}>Retirer la photo</Button>}
+          </div>
+        </div> : <p className="text-xs text-muted-foreground">
+          {!photoEventPublic ? 'Les photos du programme sont réservées aux événements publics.'
+            : !selected.published ? 'Publiez la prestation avant d’ajouter une photo.'
+              : photoAccessLoading ? 'Vérification des droits photo…'
+                : 'La gestion des photos est réservée aux administrateurs membres de cet événement.'}
+        </p>}
         <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={busy || !dirty}>{busy ? 'Enregistrement…' : 'Enregistrer'}</Button>
           {dirty && <span className="text-xs text-muted-foreground">Enregistrez avant de publier.</span>}

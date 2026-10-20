@@ -1,0 +1,11 @@
+[
+  {
+    "origin": [
+      "https://uninstantici.com",
+      "http://localhost:9002",
+      "http://127.0.0.1:9002"
+    ],
+    "method": ["GET"],
+    "maxAgeSeconds": 3600
+  }
+]
