@@ -97,7 +97,6 @@ export default function PortalPage() {
   const [configAttempt, setConfigAttempt] = useState(0);
   const [events, setEvents] = useState<AppEvent[]>(publishedEventsMemoryCache?.events ?? []);
   const [eventsStatus, setEventsStatus] = useState<EventsLoadStatus>(publishedEventsMemoryCache?.events.length ? 'refreshing' : 'loading');
-  const [initialEventsResolved, setInitialEventsResolved] = useState(false);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [lastEventsLoadedAt, setLastEventsLoadedAt] = useState<number | null>(publishedEventsMemoryCache?.loadedAt ?? null);
   const [hasEventMembership, setHasEventMembership] = useState(false);
@@ -267,7 +266,6 @@ export default function PortalPage() {
       setLastEventsLoadedAt(loadedAt);
       setEventsStatus('success');
       setEventsError(null);
-      setInitialEventsResolved(true);
     } catch (error: any) {
       if (activeEventsRequestRef.current !== requestId || eventRequestSeqRef.current !== requestId) {
         return;
@@ -279,7 +277,6 @@ export default function PortalPage() {
           ? 'Le chargement des événements prend trop de temps. Vérifiez votre connexion puis réessayez.'
           : 'Impossible de charger les événements.'
       );
-      setInitialEventsResolved(true);
     } finally {
       if (activeEventsRequestRef.current === requestId) {
         activeEventsRequestRef.current = null;
@@ -398,25 +395,21 @@ export default function PortalPage() {
     void loadPublishedEvents('manual');
   }, [loadPublishedEvents]);
 
-  const portalView = selectPortalView(config, initialEventsResolved, events.length, eventsStatus, lastEventsLoadedAt !== null);
+  const portalView = selectPortalView(config);
 
   if (portalView === 'loading') {
     return <main role="status" className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">Chargement de l’accueil…</main>;
   }
 
-  if (portalView === 'config-error' || portalView === 'events-error') {
+  if (portalView === 'config-error') {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 text-center">
         <p role="alert" className="text-sm text-muted-foreground">
-          {portalView === 'config-error' ? 'Impossible de charger la configuration de l’accueil.' : eventsError}
+          Impossible de charger la configuration de l’accueil.
         </p>
         <Button variant="outline" onClick={() => {
-          if (portalView === 'config-error') {
-            setConfig(undefined);
-            setConfigAttempt((attempt) => attempt + 1);
-          } else {
-            void loadPublishedEvents('retry');
-          }
+          setConfig(undefined);
+          setConfigAttempt((attempt) => attempt + 1);
         }}>Réessayer</Button>
       </main>
     );
