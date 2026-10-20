@@ -1,22 +1,24 @@
 'use client'
 
 import { POIMapAdapter } from '@/components/poi/poi-map-adapter'
-import type { POI, POILite, MarketingConfig } from '@/lib/types'
+import type { POI, POILite, MarketingConfig, EventProgramItem } from '@/lib/types'
 import { useSearchParams, usePathname } from 'next/navigation'
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
-import { DEFAULT_EVENT_ID, fetchPoisLite, fetchPoiById, fetchMarketingConfig } from '@/lib/data'
+import { DEFAULT_EVENT_ID, fetchPoisLite, fetchPoiById, fetchMarketingConfig, fetchPublishedProgramItems } from '@/lib/data'
 import { useAuth } from '@/hooks/use-auth-user'
 import { CategoryFilter } from '@/components/poi/category-filter'
 import { HeroOverlay } from '@/components/marketing/hero-overlay'
 import { PoiListBottomSheet } from '@/components/poi/poi-list-bottom-sheet'
 import { useGeolocation } from '@/providers/geolocation-provider'
 import { Button } from '@/components/ui/button'
-import { AlertCircle, List, Loader2, RefreshCw, X } from 'lucide-react'
+import { AlertCircle, CalendarDays, List, Loader2, RefreshCw, X } from 'lucide-react'
 import { useEvent } from '@/providers/event-provider'
 import { POIDetails } from '@/components/poi/poi-details'
 import { useToast } from '@/hooks/use-toast'
 import { EventShareButton } from '@/components/event/event-share-button'
 import { getUsedEventPoiCategories } from '@/lib/event-poi-categories'
+import { PublicEventProgramDialog } from '@/components/event/public-event-program-dialog'
+import { publicProgramAvailability, type PublicProgramStatus } from '@/lib/public-event-program'
 
 type AppMode = 'normal' | 'map-fallback'
 type PoiLoadStatus = 'loading' | 'success' | 'error'
@@ -70,9 +72,14 @@ export function DashboardClient() {
   const [heroVisible, setHeroVisible] = useState(false)
   const [appMode, setAppMode] = useState<AppMode>('normal')
   const [isListVisible, setIsListVisible] = useState(true)
+  const [programOpen, setProgramOpen] = useState(false)
+  const [programState, setProgramState] = useState<{ eventId: string; status: PublicProgramStatus; items: EventProgramItem[] }>({
+    eventId: '', status: 'loading', items: [],
+  })
 
   const categoryFilter = searchParams.get('category') || 'all'
   const fullPoiRequestSeqRef = useRef(0)
+  const programRequestSeqRef = useRef(0)
   const poiRequestSeqRef = useRef(0)
   const activePoiRequestRef = useRef<{ eventId: string; requestId: number } | null>(null)
   const latestEventIdRef = useRef(eventId)
@@ -230,6 +237,29 @@ export function DashboardClient() {
     },
     [selectPoiId]
   )
+
+  const loadProgram = useCallback(async () => {
+    if (eventLoading || !eventId || eventId === DEFAULT_EVENT_ID) return
+    const requestId = ++programRequestSeqRef.current
+    setProgramState({ eventId, status: 'loading', items: [] })
+    try {
+      const items = await fetchPublishedProgramItems(eventId)
+      if (programRequestSeqRef.current === requestId) {
+        setProgramState({ eventId, status: 'success', items })
+      }
+    } catch (error: any) {
+      if (programRequestSeqRef.current === requestId) {
+        setProgramState({ eventId, status: 'error', items: [] })
+        console.warn('[Event program] public read failed', { eventId, code: error?.code ?? null })
+      }
+    }
+  }, [eventId, eventLoading])
+
+  useEffect(() => {
+    setProgramOpen(false)
+    if (!eventLoading && eventId !== DEFAULT_EVENT_ID) void loadProgram()
+    return () => { programRequestSeqRef.current += 1 }
+  }, [eventId, eventLoading, loadProgram])
 
   useEffect(() => {
     latestEventIdRef.current = eventId
@@ -396,6 +426,17 @@ export function DashboardClient() {
     setIsListVisible(true) 
   }
 
+  const handleProgramPoiSelect = (poiId: string) => {
+    const params = new URLSearchParams(window.location.search)
+    params.delete('category')
+    params.set('poi', poiId)
+    updateUrl(params)
+    setSelectedPoiId(poiId)
+    setIsListVisible(false)
+    setProgramOpen(false)
+    void loadFullPoi(poiId)
+  }
+
   const closeMarketingOverlay = useCallback(() => {
     sessionStorage.setItem(`heroDismissed_${eventId}`, 'true')
     setHeroVisible(false)
@@ -412,6 +453,9 @@ export function DashboardClient() {
 
   const showHero = heroVisible && !user && marketingConfig?.heroEnabled
   const showPoiStatusOverlay = poiLoadStatus !== 'success' || visiblePois.length === 0
+  const currentProgram = programState.eventId === eventId
+    ? programState : { eventId, status: 'loading' as const, items: [] }
+  const programAvailability = publicProgramAvailability(currentProgram.status, currentProgram.items)
 
   if (eventLoading) {
     return (
@@ -433,6 +477,17 @@ export function DashboardClient() {
             />
           </div>
           <EventShareButton className="mr-2 mt-2 hidden md:inline-flex" />
+          {programAvailability === 'available' && <Button type="button" size="sm" variant="outline"
+            className="mr-2 mt-2 h-9 shrink-0 gap-2 rounded-full px-3 sm:px-4"
+            onClick={() => setProgramOpen(true)} aria-haspopup="dialog">
+            <CalendarDays className="h-4 w-4" /> Programme
+          </Button>}
+          {programAvailability === 'error' && <Button type="button" size="sm" variant="outline"
+            className="mr-2 mt-2 h-9 shrink-0 gap-1 rounded-full px-3 text-destructive"
+            onClick={() => void loadProgram()} aria-label="Programme indisponible, réessayer le chargement">
+            <RefreshCw className="h-4 w-4" /> Programme : réessayer
+          </Button>}
+          {programAvailability === 'loading' && <span role="status" className="sr-only">Chargement du programme…</span>}
         </div>
       </div>
 
@@ -554,6 +609,14 @@ export function DashboardClient() {
         categories={event?.poiCategories ?? []}
         isVisible={isListVisible && (poiLoadStatus !== 'loading' || visiblePois.length > 0)}
       />
+      {programAvailability === 'available' && <PublicEventProgramDialog
+        open={programOpen}
+        onOpenChange={setProgramOpen}
+        items={currentProgram.items}
+        pois={poiLoadStatus === 'success' ? pois : []}
+        timezone={event?.timezone}
+        onSelectPoi={handleProgramPoiSelect}
+      />}
     </div>
   )
 }
