@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { CalendarDays, ImagePlus, Loader2, Search, ShieldCheck, UserCheck, UserX, UsersRound } from 'lucide-react';
+import { CalendarDays, Database, ImagePlus, Loader2, Search, ShieldCheck, UserCheck, UserX, UsersRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -882,6 +882,14 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Card className="rounded-2xl border-muted shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base"><Database className="h-4 w-4 text-primary" /> DATAtourisme</CardTitle>
+            <CardDescription>Préparer le pilote Bretagne et consulter la maquette des contrôles éditoriaux.</CardDescription>
+          </CardHeader>
+          <CardContent><Button asChild variant="outline"><Link href="/admin/datatourisme">Ouvrir DATAtourisme</Link></Button></CardContent>
+        </Card>
         
         <Card className="rounded-2xl border-muted shadow-sm overflow-hidden">
             <CardHeader className="bg-primary/5">

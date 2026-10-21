@@ -1,7 +1,7 @@
 'use client';
 
 import { UserNav } from './user-nav';
-import { Mountain, LayoutDashboard, MapPin, Users, Monitor, CalendarDays, UsersRound, Menu, LogOut, Search } from 'lucide-react';
+import { Mountain, LayoutDashboard, MapPin, Users, Monitor, CalendarDays, UsersRound, Menu, LogOut, Search, Database } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-user';
 import { Button } from '@/components/ui/button';
 import { usePathname, useParams, useRouter } from 'next/navigation';
@@ -72,6 +72,7 @@ export function Header() {
     ] : []),
     ...(showPlatformAdmin ? [
         { href: `/admin/seo`, icon: Search, label: 'SEO' },
+        { href: `/admin/datatourisme`, icon: Database, label: 'DATAtourisme' },
         { href: `/admin`, icon: Users, label: 'Administration Plateforme' }
     ] : [])
   ];
@@ -83,7 +84,7 @@ export function Header() {
   // Filtrage intelligent de la navigation
   const filteredNavItems = navItems.filter((item) => {
     if (!item.href.includes(prefix) && prefix !== '') {
-       return item.href === '/admin/events' || ((item.href === '/admin' || item.href === '/admin/seo') && globalRole === 'owner');
+       return item.href === '/admin/events' || ((item.href === '/admin' || item.href === '/admin/seo' || item.href === '/admin/datatourisme') && globalRole === 'owner');
     }
     return true;
   });
@@ -115,7 +116,7 @@ export function Header() {
       <nav className="hidden xl:flex items-center gap-1 md:gap-2 ml-4">
         {filteredNavItems.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+          const isActive = pathname === item.href || (item.href !== '/' && item.href !== '/admin' && pathname.startsWith(`${item.href}/`));
           return (
             <Button
               key={item.href}
@@ -175,7 +176,7 @@ export function Header() {
                 <nav className="flex flex-col gap-1">
                   {filteredNavItems.map((item) => {
                     const Icon = item.icon;
-                    const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+                    const isActive = pathname === item.href || (item.href !== '/' && item.href !== '/admin' && pathname.startsWith(`${item.href}/`));
                     return (
                       <SheetClose asChild key={item.href}>
                         <Link
