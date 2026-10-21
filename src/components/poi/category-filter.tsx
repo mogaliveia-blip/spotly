@@ -26,19 +26,22 @@ export function CategoryFilter({
   ];
 
   return (
-    <div className="w-full overflow-x-auto relative z-20 bg-background">
-      <div className="flex gap-2 p-2 min-w-max">
+    <div className="relative z-20 w-full overflow-x-auto bg-violet-50/95 [-webkit-overflow-scrolling:touch]">
+      <div className="flex min-w-max gap-2 p-2">
         {allCategories.map((category) => {
           const Icon = category.icon;
 
           return (
             <Button
               key={category.id}
-              variant={
-                selectedCategoryId === category.id ? 'default' : 'outline'
-              }
+              variant="outline"
               size="sm"
-              className="h-9 rounded-full px-4 whitespace-nowrap"
+              aria-pressed={selectedCategoryId === category.id}
+              className={
+                selectedCategoryId === category.id
+                  ? 'h-11 whitespace-nowrap rounded-full border-violet-700 bg-violet-700 px-4 font-semibold text-white shadow-sm hover:bg-violet-800 hover:text-white focus-visible:ring-violet-700'
+                  : 'h-11 whitespace-nowrap rounded-full border-violet-200 bg-white px-4 font-medium text-violet-900 shadow-sm hover:bg-violet-100 hover:text-violet-950 focus-visible:ring-violet-700'
+              }
               onClick={() =>
                 onSelectCategory(category.id)
               }

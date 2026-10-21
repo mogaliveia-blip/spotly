@@ -5,9 +5,11 @@ import type { EventPoiCategory, POILite } from '@/lib/types';
 import { findEventPoiCategory, getEventPoiCategoryColor, getEventPoiCategoryLabel, resolveCategoryIcon } from '@/lib/event-poi-categories';
 import { isSponsorActive } from '@/lib/sponsor-utils';
 import { getDistance, cn } from '@/lib/utils';
-import { ChevronDown, ChevronUp, Navigation, Star } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronUp, Navigation, RefreshCw, Star } from 'lucide-react';
 import { SponsorBadge } from '../sponsor/sponsor-badge';
+import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
+import type { PublicProgramAvailability } from '@/lib/public-event-program';
 
 interface PoiListBottomSheetProps {
   pois: POILite[];
@@ -16,6 +18,9 @@ interface PoiListBottomSheetProps {
   userLocation: { lat: number; lng: number } | null;
   categories: EventPoiCategory[];
   isVisible?: boolean;
+  programAvailability?: PublicProgramAvailability;
+  onOpenProgram?: () => void;
+  onRetryProgram?: () => void;
 }
 
 export function PoiListBottomSheet({
@@ -25,6 +30,9 @@ export function PoiListBottomSheet({
   userLocation,
   categories,
   isVisible = true,
+  programAvailability = 'empty',
+  onOpenProgram,
+  onRetryProgram,
 }: PoiListBottomSheetProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -59,39 +67,59 @@ export function PoiListBottomSheet({
   return (
     <div
       className={cn(
-        "fixed bottom-0 left-1/2 -translate-x-1/2 z-40 bg-transparent transition-all duration-500 ease-in-out overflow-hidden pointer-events-none w-[90%] pb-[env(safe-area-inset-bottom)] md:h-[50vh] md:w-[60%] md:pb-0",
-        isExpanded ? "h-[50vh]" : "h-[calc(4rem+env(safe-area-inset-bottom))]",
+        "fixed bottom-0 left-1/2 -translate-x-1/2 z-40 w-[94%] overflow-hidden bg-transparent pb-[env(safe-area-inset-bottom)] pointer-events-none transition-all duration-500 ease-in-out md:h-[50vh] md:w-[60%] md:pb-0",
+        isExpanded ? "h-[50vh]" : "h-[calc(5.75rem+env(safe-area-inset-bottom))]",
         !isVisible && "translate-y-full opacity-0"
       )}
     >
-      <div className="flex flex-col h-full w-full pointer-events-none px-4">
+      <div className="flex h-full w-full flex-col px-3 pointer-events-none md:px-4">
 
-        <button
-          type="button"
-          onClick={() => setIsExpanded((expanded) => !expanded)}
-          aria-expanded={isExpanded}
-          aria-controls={listContentId}
-          aria-label={`${isExpanded ? 'Fermer' : 'Ouvrir'} la liste des lieux à découvrir — ${resultsLabel}`}
-          className="relative mb-2 flex w-full shrink-0 flex-col items-center rounded-3xl border border-primary/30 bg-card py-2.5 text-card-foreground shadow-lg pointer-events-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:hidden"
-        >
-          <div className="mb-1.5 h-1.5 w-12 rounded-full bg-primary/45" aria-hidden="true" />
-          <div className="flex w-full items-center justify-center gap-2 pl-2 pr-7 leading-none">
-            <span className="truncate text-sm font-bold">Les lieux à découvrir</span>
-            <span className="shrink-0 text-xs font-semibold text-primary">{resultsLabel}</span>
-          </div>
-          {isExpanded ? (
-            <ChevronDown aria-hidden="true" className="absolute bottom-2.5 right-3 h-5 w-5 text-primary" />
-          ) : (
-            <ChevronUp aria-hidden="true" className="absolute bottom-2.5 right-3 h-5 w-5 text-primary" />
+        <div className="mb-2 flex shrink-0 items-center gap-2 rounded-3xl border border-violet-200 bg-[#fffaf5] px-2.5 py-1.5 text-slate-900 shadow-lg pointer-events-auto md:hidden">
+          <button
+            type="button"
+            onClick={() => setIsExpanded((expanded) => !expanded)}
+            aria-expanded={isExpanded}
+            aria-controls={listContentId}
+            aria-label={`${isExpanded ? 'Fermer' : 'Ouvrir'} la liste des lieux à découvrir — ${resultsLabel}`}
+            className="flex min-h-[4.25rem] min-w-0 flex-1 flex-col items-start justify-center rounded-2xl px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-700 focus-visible:ring-offset-2"
+          >
+            <span className="mb-1 h-1.5 w-12 self-center rounded-full bg-violet-500" aria-hidden="true" />
+            <span className="text-sm font-bold leading-tight">Les lieux à découvrir</span>
+            <span className="flex items-center gap-1 text-xs font-bold text-violet-800">
+              {resultsLabel}
+              {isExpanded ? <ChevronDown aria-hidden="true" className="h-4 w-4" /> : <ChevronUp aria-hidden="true" className="h-4 w-4" />}
+            </span>
+          </button>
+          {programAvailability === 'available' && onOpenProgram && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={onOpenProgram}
+              aria-haspopup="dialog"
+              className="h-11 shrink-0 gap-1.5 rounded-2xl bg-orange-300 px-2.5 text-xs font-bold text-orange-950 shadow-sm hover:bg-orange-400 active:bg-orange-500 focus-visible:ring-orange-700"
+            >
+              <CalendarDays aria-hidden="true" /> Programme
+            </Button>
           )}
-        </button>
+          {programAvailability === 'error' && onRetryProgram && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onRetryProgram}
+              aria-label="Programme indisponible, réessayer le chargement"
+              className="h-11 shrink-0 gap-1 rounded-2xl border-orange-300 bg-orange-50 px-2.5 text-xs font-bold text-orange-950 hover:bg-orange-100"
+            >
+              <RefreshCw aria-hidden="true" /> Réessayer
+            </Button>
+          )}
+        </div>
 
         {/* Le panneau reste ouvert sur tablette/desktop, comme avant. */}
-        <div className="mb-2 hidden shrink-0 flex-col items-center rounded-3xl border bg-background/80 py-3 backdrop-blur-md pointer-events-auto md:flex">
-          <div className="mb-2 h-1.5 w-12 rounded-full bg-muted-foreground/20" />
-          <div className="flex items-center justify-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-            {resultsLabel}
-          </div>
+        <div className="mb-2 hidden shrink-0 flex-col items-center rounded-3xl border border-violet-200 bg-[#fffaf5] py-2 text-slate-900 shadow-sm pointer-events-auto md:flex">
+          <div className="mb-1 h-1.5 w-12 rounded-full bg-violet-500" aria-hidden="true" />
+          <div className="text-sm font-bold">Les lieux à découvrir</div>
+          <div className="text-xs font-bold text-violet-800">{resultsLabel}</div>
         </div>
 
         <ScrollArea

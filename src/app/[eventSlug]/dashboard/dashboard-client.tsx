@@ -477,13 +477,13 @@ export function DashboardClient() {
             />
           </div>
           <EventShareButton className="mr-2 mt-2 hidden md:inline-flex" />
-          {programAvailability === 'available' && <Button type="button" size="sm" variant="outline"
-            className="mr-2 mt-2 h-9 shrink-0 gap-2 rounded-full px-3 sm:px-4"
+          {programAvailability === 'available' && <Button type="button" size="sm"
+            className="mr-2 mt-2 hidden h-11 shrink-0 gap-2 rounded-full bg-orange-300 px-4 text-orange-950 shadow-sm hover:bg-orange-400 active:bg-orange-500 focus-visible:ring-orange-700 md:inline-flex"
             onClick={() => setProgramOpen(true)} aria-haspopup="dialog">
             <CalendarDays className="h-4 w-4" /> Programme
           </Button>}
           {programAvailability === 'error' && <Button type="button" size="sm" variant="outline"
-            className="mr-2 mt-2 h-9 shrink-0 gap-1 rounded-full px-3 text-destructive"
+            className="mr-2 mt-2 hidden h-11 shrink-0 gap-1 rounded-full px-3 text-destructive md:inline-flex"
             onClick={() => void loadProgram()} aria-label="Programme indisponible, réessayer le chargement">
             <RefreshCw className="h-4 w-4" /> Programme : réessayer
           </Button>}
@@ -608,6 +608,9 @@ export function DashboardClient() {
         userLocation={userLocation}
         categories={event?.poiCategories ?? []}
         isVisible={isListVisible && (poiLoadStatus !== 'loading' || visiblePois.length > 0)}
+        programAvailability={programAvailability}
+        onOpenProgram={() => setProgramOpen(true)}
+        onRetryProgram={() => void loadProgram()}
       />
       {programAvailability === 'available' && <PublicEventProgramDialog
         open={programOpen}
