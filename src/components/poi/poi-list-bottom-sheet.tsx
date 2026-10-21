@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { EventPoiCategory, POILite } from '@/lib/types';
 import { findEventPoiCategory, getEventPoiCategoryColor, getEventPoiCategoryLabel, resolveCategoryIcon } from '@/lib/event-poi-categories';
 import { isSponsorActive } from '@/lib/sponsor-utils';
@@ -18,6 +18,8 @@ interface PoiListBottomSheetProps {
   userLocation: { lat: number; lng: number } | null;
   categories: EventPoiCategory[];
   isVisible?: boolean;
+  isExpanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
   programAvailability?: PublicProgramAvailability;
   onOpenProgram?: () => void;
   onRetryProgram?: () => void;
@@ -30,12 +32,12 @@ export function PoiListBottomSheet({
   userLocation,
   categories,
   isVisible = true,
+  isExpanded,
+  onExpandedChange,
   programAvailability = 'empty',
   onOpenProgram,
   onRetryProgram,
 }: PoiListBottomSheetProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
   const sortedPois = useMemo(() => {
     const activeSponsors: POILite[] = [];
     const others: POILite[] = [];
@@ -77,7 +79,7 @@ export function PoiListBottomSheet({
         <div className="mb-2 flex shrink-0 items-center gap-2 rounded-3xl border border-violet-200 bg-[#fffaf5] px-2.5 py-1.5 text-slate-900 shadow-lg pointer-events-auto md:hidden">
           <button
             type="button"
-            onClick={() => setIsExpanded((expanded) => !expanded)}
+            onClick={() => onExpandedChange(!isExpanded)}
             aria-expanded={isExpanded}
             aria-controls={listContentId}
             aria-label={`${isExpanded ? 'Fermer' : 'Ouvrir'} la liste des lieux à découvrir — ${resultsLabel}`}

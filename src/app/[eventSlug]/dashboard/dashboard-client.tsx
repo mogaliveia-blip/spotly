@@ -72,6 +72,7 @@ export function DashboardClient() {
   const [heroVisible, setHeroVisible] = useState(false)
   const [appMode, setAppMode] = useState<AppMode>('normal')
   const [isListVisible, setIsListVisible] = useState(true)
+  const [isListExpanded, setIsListExpanded] = useState(false)
   const [programOpen, setProgramOpen] = useState(false)
   const [programState, setProgramState] = useState<{ eventId: string; status: PublicProgramStatus; items: EventProgramItem[] }>({
     eventId: '', status: 'loading', items: [],
@@ -80,6 +81,7 @@ export function DashboardClient() {
   const categoryFilter = searchParams.get('category') || 'all'
   const fullPoiRequestSeqRef = useRef(0)
   const programRequestSeqRef = useRef(0)
+  const programReturnCategoryRef = useRef<string | null>(null)
   const poiRequestSeqRef = useRef(0)
   const activePoiRequestRef = useRef<{ eventId: string; requestId: number } | null>(null)
   const latestEventIdRef = useRef(eventId)
@@ -222,7 +224,13 @@ export function DashboardClient() {
         params.set('poi', poiId)
       } else {
         params.delete('poi')
+        if (programReturnCategoryRef.current) {
+          params.set('category', programReturnCategoryRef.current)
+          programReturnCategoryRef.current = null
+        }
         fullPoiRequestSeqRef.current += 1
+        setIsListVisible(true)
+        setIsListExpanded(false)
       }
       setSelectedPoiId(poiId)
       updateUrl(params)
@@ -263,6 +271,7 @@ export function DashboardClient() {
 
   useEffect(() => {
     latestEventIdRef.current = eventId
+    programReturnCategoryRef.current = null
 
     if (eventLoading || eventId === DEFAULT_EVENT_ID) {
       activePoiRequestRef.current = null
@@ -416,6 +425,7 @@ export function DashboardClient() {
   }, [categoryFilter, eventLoading, poiLoadStatus, updateUrl, validCategoryIds])
 
   const handleCategorySelect = (categoryId: string | 'all') => {
+    programReturnCategoryRef.current = null
     const params = new URLSearchParams(window.location.search)
     if (categoryId === 'all') params.delete('category')
     else params.set('category', categoryId)
@@ -428,11 +438,13 @@ export function DashboardClient() {
 
   const handleProgramPoiSelect = (poiId: string) => {
     const params = new URLSearchParams(window.location.search)
+    programReturnCategoryRef.current = params.get('category')
     params.delete('category')
     params.set('poi', poiId)
     updateUrl(params)
     setSelectedPoiId(poiId)
     setIsListVisible(false)
+    setIsListExpanded(false)
     setProgramOpen(false)
     void loadFullPoi(poiId)
   }
@@ -608,6 +620,8 @@ export function DashboardClient() {
         userLocation={userLocation}
         categories={event?.poiCategories ?? []}
         isVisible={isListVisible && (poiLoadStatus !== 'loading' || visiblePois.length > 0)}
+        isExpanded={isListExpanded}
+        onExpandedChange={setIsListExpanded}
         programAvailability={programAvailability}
         onOpenProgram={() => setProgramOpen(true)}
         onRetryProgram={() => void loadProgram()}
