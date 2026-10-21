@@ -1,9 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AdvancedMarker, Map, useMap } from '@vis.gl/react-google-maps';
 import { MapPin } from 'lucide-react';
-import type { DiscoveryResult } from '@/lib/discovery-search-dto';
+import type { DiscoveryDisplayEvent } from '@/lib/discovery-external-demo';
+import { clusterDiscoveryMarkers, markerClusterTitle } from '@/lib/discovery-marker-clusters';
+import type { MarkerViewport } from '@/lib/discovery-marker-clusters';
 import type { DiscoveryCamera } from '@/lib/discovery-geography';
 import type { DiscoveryArea } from '../../../functions/src/discovery-search-contract';
 import { mapsConfig } from '@/lib/firebase-config';
@@ -28,13 +30,54 @@ function CameraController({ request, onMoveStart }: {
   return null;
 }
 
-export function DiscoveryMap({ camera, cameraRequest, searchSequence, results, selectedId, onSelect, onManualMoveStart, onManualViewport }: {
+function MarkerLayer({ results, selectedId, onSelect, onClusterSelect }: {
+  results: DiscoveryDisplayEvent[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  onClusterSelect: (ids: string[]) => void;
+}) {
+  const map = useMap();
+  const [viewport, setViewport] = useState<MarkerViewport | null>(null);
+  useEffect(() => {
+    if (!map) return;
+    const update = () => {
+      const center = map.getCenter()?.toJSON();
+      const zoom = map.getZoom();
+      const div = map.getDiv();
+      if (center && zoom !== undefined) setViewport({ center, zoom, width: div.clientWidth, height: div.clientHeight });
+    };
+    update();
+    const idle = map.addListener('idle', update);
+    const resize = new ResizeObserver(update);
+    resize.observe(map.getDiv());
+    return () => { idle.remove(); resize.disconnect(); };
+  }, [map]);
+  const clusters = viewport ? clusterDiscoveryMarkers(results, viewport) : [];
+  return <>{clusters.map((cluster) => {
+    const single = cluster.members.length === 1 ? cluster.members[0] : null;
+    const selected = !!single && selectedId === single.id;
+    return <AdvancedMarker key={cluster.id} position={cluster.position}
+      onClick={() => single ? onSelect(single.id) : onClusterSelect(cluster.members.map((member) => member.id))}
+      title={markerClusterTitle(cluster)}>
+      {single ? <span className={`relative flex items-center justify-center rounded-full border-2 bg-white p-1 shadow-md ${selected ? 'border-accent text-accent' : single.origin === 'native' ? 'border-primary text-primary' : 'border-teal-700 text-teal-800'}`}>
+        <MapPin aria-hidden="true" className="h-6 w-6" />
+        {cluster.approximateCount > 0 && <span aria-hidden="true" className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-white bg-orange-500" />}
+      </span> : <span className="relative flex h-10 min-w-10 items-center justify-center rounded-full border-2 border-white bg-primary px-2 text-sm font-bold text-primary-foreground shadow-md">
+        {cluster.members.length}
+        {cluster.approximateCount > 0 && <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-white bg-orange-500" />}
+      </span>}
+    </AdvancedMarker>;
+  })}</>;
+}
+
+export function DiscoveryMap({ camera, cameraRequest, searchSequence, results, selectedId, onSelect, onClusterSelect, onManualMoveStart, onManualViewport }: {
   camera: DiscoveryCamera;
   cameraRequest: DiscoveryCamera & { sequence: number };
   searchSequence: number;
-  results: DiscoveryResult[];
+  results: DiscoveryDisplayEvent[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onClusterSelect: (ids: string[]) => void;
   onManualMoveStart: () => void;
   onManualViewport: (bounds: BoundsArea, camera: DiscoveryCamera) => void;
 }) {
@@ -82,13 +125,7 @@ export function DiscoveryMap({ camera, cameraRequest, searchSequence, results, s
       }}
     >
       <CameraController request={cameraRequest} onMoveStart={beginProgrammaticMove} />
-      {results.map((result) => (
-        <AdvancedMarker key={result.id} position={result.position} onClick={() => onSelect(result.id)} title={result.title}>
-          <span className={`flex items-center justify-center rounded-full border-2 bg-white p-1 shadow-md ${selectedId === result.id ? 'border-accent text-accent' : 'border-primary text-primary'}`}>
-            <MapPin className="h-6 w-6" />
-          </span>
-        </AdvancedMarker>
-      ))}
+      <MarkerLayer results={results} selectedId={selectedId} onSelect={onSelect} onClusterSelect={onClusterSelect} />
     </Map>
     </div>
   );

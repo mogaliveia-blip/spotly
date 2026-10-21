@@ -20,6 +20,9 @@ import {
   discoverySearchViewReducer, initialDiscoverySearchView, showingPreviousDiscoveryResults,
 } from '@/lib/discovery-search-view';
 import type { DiscoveryResult } from '@/lib/discovery-search-dto';
+import type { DiscoverySearchResult } from '@/lib/discovery-search-dto';
+import { createExternalDemoEvents, displayDiscoveryEvents, nextResultsCount, parisDay } from '@/lib/discovery-external-demo';
+import type { DiscoveryDisplayEvent, DisplaySearchContext, ExternalDemoEvent } from '@/lib/discovery-external-demo';
 import { discoveryCategories, isCatalogId } from '@/lib/event-discovery';
 import type { DiscoveryCategoryId } from '@/lib/event-discovery';
 import {
@@ -114,6 +117,46 @@ function EventResult({ result, selected, onSelect, eventHref, onOpenEvent }: {
   );
 }
 
+function positionLabel(precision: ExternalDemoEvent['positionPrecision']): string {
+  if (precision === 'commune_center') return 'Position approximative — centre de commune';
+  if (precision === 'address_geocoded') return 'Position géocodée depuis une adresse';
+  return 'Coordonnées fournies par la source — précision à vérifier';
+}
+
+function ExternalResult({ result, selected, onSelect }: {
+  result: ExternalDemoEvent;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const category = discoveryCategories.find((item) => item.id === result.categoryId);
+  const appearance = category ? categoryAppearance[category.id] : unknownCategoryAppearance;
+  const date = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(`${result.startDay}T12:00:00Z`));
+  return <article className={`flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-l-4 bg-card shadow-sm ${appearance.border} ${selected ? 'border-primary ring-2 ring-primary' : 'border-border'}`}>
+    <button type="button" onClick={onSelect} className="w-full min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      aria-label={`Localiser ${result.title} sur la carte`}>
+      <div className={`flex h-20 items-center justify-center ${appearance.image}`}><CalendarDays aria-hidden="true" className="h-9 w-9" /></div>
+      <div className="space-y-2 p-3">
+        <span className="inline-flex rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-950">Donnée fictive — démonstration</span>
+        <div><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${appearance.badge}`}>{category?.label ?? 'Autre'}</span></div>
+        <h3 className="break-words font-semibold leading-snug">{result.title}</h3>
+        <p className="text-sm">{date} · {result.city} ({result.department})</p>
+        <p className="text-sm text-muted-foreground">{result.description}</p>
+        <p className="text-xs text-muted-foreground">{positionLabel(result.positionPrecision)}</p>
+        <p className="text-xs text-muted-foreground">Provenance fictive : {result.sourceName}. Producteur fictif : {result.producer}. Mise à jour fictive : {result.updatedDay}.</p>
+        <span className="inline-flex items-center gap-1 text-sm font-medium text-teal-800 underline-offset-2 hover:underline dark:text-teal-300">
+          <MapPin aria-hidden="true" className="h-4 w-4" /> Localiser sur la carte
+        </span>
+      </div>
+    </button>
+    {result.sourceLinkKind === 'direct_event' && result.sourceUrl?.startsWith('https://') && <div className="mt-auto px-3 pb-3">
+      <a href={result.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-teal-800 underline dark:text-teal-300">
+        Voir l’annonce source
+      </a>
+    </div>}
+  </article>;
+}
+
 export function DiscoveryClient() {
   const { userLocation, requestPosition } = useGeolocation();
   const mapsStatus = useApiLoadingStatus();
@@ -135,7 +178,14 @@ export function DiscoveryClient() {
   const [searchView, dispatchSearch] = useReducer(discoverySearchViewReducer, initialDiscoverySearchView);
   const { status, message, result: searchResult, selectedId } = searchView;
   const [gpsPending, setGpsPending] = useState(false);
+  const [demoEnabled, setDemoEnabled] = useState(false);
+  const [demoOffline, setDemoOffline] = useState(false);
+  const [demoEvents, setDemoEvents] = useState<ExternalDemoEvent[]>([]);
+  const [completedQuery, setCompletedQuery] = useState<DisplaySearchContext | null>(null);
+  const [visibleCount, setVisibleCount] = useState(20);
+  const [selectedClusterIds, setSelectedClusterIds] = useState<string[]>([]);
   const requestSequenceRef = useRef(0);
+  const demoOfflineRef = useRef(false);
   const whenRef = useRef<DiscoveryWhen>(DEFAULT_DISCOVERY_WHEN);
   const categoryRef = useRef<DiscoveryCategorySelection>(DEFAULT_DISCOVERY_CATEGORY);
   const locationIntentRef = useRef<DiscoveryLocationIntent | null>(null);
@@ -147,6 +197,17 @@ export function DiscoveryClient() {
     try { setReturnToken(createDiscoveryReturnToken()); } catch { /* Direct Event navigation still works. */ }
   }, []);
 
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development' || !['localhost', '127.0.0.1'].includes(window.location.hostname)) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('d7demo') !== '1') return;
+    const offline = params.get('d7offline') === '1';
+    demoOfflineRef.current = offline;
+    setDemoOffline(offline);
+    setDemoEvents(createExternalDemoEvents(parisDay()));
+    setDemoEnabled(true);
+  }, []);
+
   const runSearch = useCallback(async (
     area: DiscoveryArea, selectedWhen: DiscoveryWhen = whenRef.current,
     selectedCategory: DiscoveryCategorySelection = categoryRef.current,
@@ -154,8 +215,13 @@ export function DiscoveryClient() {
     const sequence = ++requestSequenceRef.current;
     dispatchSearch({ type: 'start' });
     try {
-      const response = await searchDiscovery(discoverySearchRequest(area, selectedWhen, selectedCategory));
+      const response: DiscoverySearchResult = demoOfflineRef.current
+        ? { results: [], meta: { complete: true, truncated: false, partialFailure: false, returnedCount: 0 } }
+        : await searchDiscovery(discoverySearchRequest(area, selectedWhen, selectedCategory));
       if (sequence !== requestSequenceRef.current) return;
+      setCompletedQuery({ area, when: selectedWhen, category: selectedCategory });
+      setVisibleCount(20);
+      setSelectedClusterIds([]);
       dispatchSearch({ type: 'success', result: response });
     } catch (error) {
       if (sequence !== requestSequenceRef.current) return;
@@ -279,9 +345,10 @@ export function DiscoveryClient() {
     });
   };
 
-  const selectResult = (result: DiscoveryResult) => {
+  const selectResult = (result: DiscoveryDisplayEvent) => {
     locationIntent.invalidate();
     setGpsPending(false);
+    setSelectedClusterIds([]);
     dispatchSearch({ type: 'select', id: result.id });
     const nextSession = focusDiscoveryResult(session, result.position);
     setSession(nextSession);
@@ -325,8 +392,10 @@ export function DiscoveryClient() {
     } catch { /* Navigation still works when storage is unavailable. */ }
   };
 
-  const results = searchResult?.results ?? [];
+  const results = displayDiscoveryEvents(searchResult, completedQuery, demoEvents, demoEnabled, parisDay());
   const selectedResult = results.find((result) => result.id === selectedId) ?? null;
+  const selectedCluster = selectedClusterIds.map((id) => results.find((result) => result.id === id))
+    .filter((result): result is DiscoveryDisplayEvent => !!result);
   const selectedDate = when.kind === 'date' ? calendarDate(when.day) : undefined;
   const dateLabel = selectedDate ? new Intl.DateTimeFormat('fr-FR', {
     day: 'numeric', month: 'short', year: 'numeric',
@@ -350,6 +419,11 @@ export function DiscoveryClient() {
         <div className="mb-5">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Carte Découverte</h1>
           <p className="mt-2 text-muted-foreground">Choisissez où, quand et quoi découvrir.</p>
+          {demoEnabled && <div className="mt-3 rounded-xl border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950" role="status">
+            Mode de démonstration locale : événements externes entièrement fictifs, sans importation{demoOffline ? ' ni recherche Firebase' : ''}.
+            <Button type="button" size="sm" variant="outline" className="ml-0 mt-2 block sm:ml-3 sm:mt-0 sm:inline-flex"
+              onClick={() => choosePlace({ lat: 48.117, lng: -1.678 }, 'Rennes — démonstration')}>Tester autour de Rennes</Button>
+          </div>}
         </div>
 
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -471,10 +545,20 @@ export function DiscoveryClient() {
               <p className="mt-3 text-sm text-muted-foreground">Résultats partiels pour cette zone.</p>}
             {status === 'success' && searchResult && !searchResult.meta.complete && session.context &&
               <Button type="button" variant="outline" onClick={retrySearch} className="mt-3">Relancer la recherche</Button>}
-            {results.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {results.map((result) => <EventResult key={result.id} result={result} selected={selectedId === result.id}
-                onSelect={() => selectResult(result)} eventHref={discoveryEventHref(result.slug, returnToken)} onOpenEvent={() => recordEventOpen(result.slug)} />)}
-            </div>}
+            {results.length > 0 && <>
+              <p className="mt-3 text-sm text-muted-foreground">{Math.min(visibleCount, results.length)} sur {results.length} résultats chargés affichés dans la liste.</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {results.slice(0, visibleCount).map((result) => result.origin === 'native'
+                  ? <EventResult key={result.id} result={result.native} selected={selectedId === result.id}
+                      onSelect={() => selectResult(result)} eventHref={discoveryEventHref(result.native.slug, returnToken)} onOpenEvent={() => recordEventOpen(result.native.slug)} />
+                  : <ExternalResult key={result.id} result={result} selected={selectedId === result.id}
+                      onSelect={() => selectResult(result)} />)}
+              </div>
+              {visibleCount < results.length && <Button type="button" variant="outline" className="mt-4 w-full"
+                onClick={() => setVisibleCount((count) => Math.min(count + 20, results.length))}>
+                Afficher les {nextResultsCount(visibleCount, results.length)} suivants
+              </Button>}
+            </>}
           </section>
 
           <section ref={mapSectionRef} tabIndex={-1} aria-label="Carte des événements" className="relative h-[40vh] min-h-[280px] overflow-hidden rounded-2xl border bg-muted shadow-sm sm:h-[560px] lg:col-start-2">
@@ -486,18 +570,30 @@ export function DiscoveryClient() {
               <div className="flex h-full items-center justify-center gap-2 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /> Chargement de la carte…</div>
             ) : (
               <DiscoveryMap camera={session.camera} cameraRequest={cameraRequest} searchSequence={mapSearchSequence} results={results}
-                selectedId={selectedId} onSelect={(id) => dispatchSearch({ type: 'select', id })} onManualMoveStart={onManualMoveStart}
+                selectedId={selectedId} onSelect={(id) => { setSelectedClusterIds([]); dispatchSearch({ type: 'select', id }); }}
+                onClusterSelect={(ids) => { dispatchSearch({ type: 'select', id: '' }); setSelectedClusterIds(ids); }}
+                onManualMoveStart={onManualMoveStart}
                 onManualViewport={onManualViewport} />
             )}
             {selectedResult && !mapUnavailable && (
-              <div className="absolute bottom-3 left-3 right-3 rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur-sm sm:right-auto sm:w-72">
+              <div className="absolute bottom-3 left-3 right-3 z-10 rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur-sm sm:right-auto sm:w-72">
                 <p className="font-semibold">{selectedResult.title}</p>
-                <Link href={discoveryEventHref(selectedResult.slug, returnToken)} onClick={() => recordEventOpen(selectedResult.slug)}
-                  onAuxClick={(event) => { if (event.button === 1) recordEventOpen(selectedResult.slug); }}
-                  onContextMenu={() => recordEventOpen(selectedResult.slug)}
+                {selectedResult.origin === 'native' ? <Link href={discoveryEventHref(selectedResult.native.slug, returnToken)} onClick={() => recordEventOpen(selectedResult.native.slug)}
+                  onAuxClick={(event) => { if (event.button === 1) recordEventOpen(selectedResult.native.slug); }}
+                  onContextMenu={() => recordEventOpen(selectedResult.native.slug)}
                   className="mt-2 inline-block text-sm font-medium text-primary underline">Découvrir l’événement</Link>
+                  : <p className="mt-1 text-xs text-muted-foreground">Donnée fictive · {selectedResult.city} · {positionLabel(selectedResult.positionPrecision)}</p>}
               </div>
             )}
+            {selectedCluster.length > 1 && !mapUnavailable && <div className="absolute bottom-3 left-3 right-3 z-10 max-h-[55%] overflow-y-auto rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur-sm sm:right-auto sm:w-72"
+              role="group" aria-label={`${selectedCluster.length} événements dans ce groupe`}>
+              <p className="font-semibold">{selectedCluster.length} événements dans ce groupe</p>
+              <p className="text-xs text-muted-foreground">{selectedCluster.filter((item) => item.origin === 'external_demo' && item.positionPrecision !== 'source_gps').length} positions estimées ou approximatives.</p>
+              <ul className="mt-2 space-y-1">{selectedCluster.map((item) => <li key={item.id}>
+                <button type="button" className="w-full rounded p-1 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => selectResult(item)}>{item.title}{item.origin === 'external_demo' ? ' · fictif' : ''}</button>
+              </li>)}</ul>
+            </div>}
           </section>
         </div>
       </div>
