@@ -45,4 +45,33 @@ describe('Explicit Discovery network timestamps', () => {
     assert.equal(result.meta.complete, false)
     assert.equal(result.meta.partialFailure, true)
   })
+
+  it('accepts an explicitly attributed external result and rejects private or native aliases', () => {
+    const id = `dt_${'a'.repeat(64)}`
+    const external = {
+      ...response().results[0], id: `datatourisme_${id}`, sourceId: id,
+      origin: 'datatourisme', slug: undefined, description: 'Concert fictif.',
+      editorialType: 'Concert', city: 'Vannes', department: '56',
+      positionPrecision: 'source_coordinates',
+      attribution: { source: 'DATAtourisme', producer: 'Producteur fictif', publisher: null },
+      sourceUrl: 'https://example.test/concert',
+    }
+    delete external.slug
+    const payload = { results: [external], meta: { complete: true, truncated: false, partialFailure: false, returnedCount: 1 } }
+    const decoded = decodeDiscoverySearchResponse(JSON.parse(JSON.stringify(payload)))
+    assert.equal(decoded.results[0].origin, 'datatourisme')
+    assert.equal(decoded.results[0].id, external.id)
+    assert.equal(decoded.results[0].attribution.producer, 'Producteur fictif')
+    for (const mutate of [
+      (item: any) => { item.id = `event_${id}` },
+      (item: any) => { item.origin = 'native' },
+      (item: any) => { item.slug = 'native-event' },
+      (item: any) => { item.sourceUrl = 'javascript:alert(1)' },
+      (item: any) => { item.privateNotes = 'secret' },
+    ]) {
+      const invalid = JSON.parse(JSON.stringify(payload))
+      mutate(invalid.results[0])
+      assert.throws(() => decodeDiscoverySearchResponse(invalid), /INVALID_DISCOVERY_RESPONSE/)
+    }
+  })
 })

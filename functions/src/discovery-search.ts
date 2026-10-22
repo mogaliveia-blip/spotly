@@ -3,7 +3,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import type { Firestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { discoveryCategories, discoveryTags, eventDiscoveryTypes, isCatalogId } from './event-discovery';
 import {
-  isDataObject, isRecord, isDiscoveryResultDto, isTimestampDto,
+  isDataObject, isRecord, isDiscoveryResultDto, isTimestampDto, externalProjectionResultDto,
 } from './discovery-search-contract';
 import type {
   DiscoveryArea, DiscoveryResultDto, SearchDiscoveryRequest, SearchDiscoveryResponse, TimestampDto,
@@ -73,6 +73,8 @@ export function validateSearchDiscoveryRequest(value: unknown): SearchDiscoveryR
 /** Explicit projection-to-network allowlist. Extra source fields are never copied. */
 export function projectionResultDto(document: CandidateDocument): DiscoveryResultDto {
   const p = document.data;
+  if (p.origin === 'datatourisme') return externalProjectionResultDto(document.id, p);
+  if (p.origin !== undefined && p.origin !== 'native') throw new Error('INVALID_DISCOVERY_PROJECTION');
   const timestampDto = (value: unknown): TimestampDto => {
     if (!isRecord(value)) throw new Error('INVALID_DISCOVERY_PROJECTION');
     const dto = { seconds: value.seconds as number, nanoseconds: value.nanoseconds as number };
@@ -149,7 +151,8 @@ export async function executeDiscoverySearch(
     } else if (!pointInBounds(result.position, request.area)) continue;
     if (matchesDiscoveryWhen(result, request.when, now, segmentsFor)) matching.push(result);
   }
-  matching.sort((a, b) => (request.area.kind === 'radius' ? a.distanceMeters! - b.distanceMeters! : 0) ||
+  matching.sort((a, b) => Number(a.origin === 'datatourisme') - Number(b.origin === 'datatourisme') ||
+    (request.area.kind === 'radius' ? a.distanceMeters! - b.distanceMeters! : 0) ||
     (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const partialFailure = explorations.some((range) => range.state === 'failed');
   const truncated = explorations.some((range) => range.state === 'budget_limited') || matching.length > MAX_PUBLIC_RESULTS;

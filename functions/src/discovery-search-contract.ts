@@ -16,16 +16,24 @@ export type SearchDiscoveryRequest = {
   typeIds?: EventDiscoveryTypeId[];
   tags?: DiscoveryTagId[];
 };
-export type DiscoveryResultDto = {
-  id: string; contentType: 'event'; sourceId: string; title: string; slug: string;
+type DiscoveryResultBase = {
+  id: string; contentType: 'event'; sourceId: string; title: string;
   position: { lat: number; lng: number };
   typeId: EventDiscoveryTypeId; categoryId: DiscoveryCategoryId; tags?: DiscoveryTagId[];
   timezone: string; windowStartAt: TimestampDto; windowEndAt: TimestampDto;
   thumbnail?: string; distanceMeters?: number;
-} & (
+};
+type DiscoveryResultTime =
   | { timePrecision: 'date'; startDay: string; endDay: string }
-  | { timePrecision: 'datetime'; startDay?: never; endDay?: never }
-);
+  | { timePrecision: 'datetime'; startDay?: never; endDay?: never };
+export type NativeDiscoveryResultDto = DiscoveryResultBase & { origin?: 'native'; slug: string } & DiscoveryResultTime;
+export type ExternalDiscoveryResultDto = DiscoveryResultBase & {
+  origin: 'datatourisme'; description: string; editorialType: string | null;
+  city: string; department: string; positionPrecision: 'source_coordinates';
+  attribution: { source: 'DATAtourisme'; producer: string; publisher: string | null };
+  sourceUrl: string | null;
+} & DiscoveryResultTime;
+export type DiscoveryResultDto = NativeDiscoveryResultDto | ExternalDiscoveryResultDto;
 export type SearchDiscoveryResponse = {
   results: DiscoveryResultDto[];
   meta: { complete: boolean; truncated: boolean; partialFailure: boolean; returnedCount: number };
@@ -82,19 +90,72 @@ export function instantFromMillis(milliseconds: number): TimestampDto {
 /** Validate the public allowlist before accepting any network result or serving a projection. */
 export function isDiscoveryResultDto(value: unknown): value is DiscoveryResultDto {
   if (!isRecord(value) || !hasOnlyKeys(value, [
-    'id', 'contentType', 'sourceId', 'title', 'slug', 'position', 'typeId', 'categoryId', 'tags',
+    'id', 'contentType', 'origin', 'sourceId', 'title', 'slug', 'description', 'editorialType',
+    'city', 'department', 'positionPrecision', 'attribution', 'sourceUrl', 'position', 'typeId', 'categoryId', 'tags',
     'timePrecision', 'timezone', 'windowStartAt', 'windowEndAt', 'startDay', 'endDay', 'thumbnail', 'distanceMeters',
   ])) return false;
   if (value.contentType !== 'event' || typeof value.sourceId !== 'string' || !value.sourceId ||
-      value.sourceId.includes('/') || value.id !== `event_${value.sourceId}` ||
-      !isEventName(value.title) || !isEventSlug(value.slug) || !isDiscoveryPosition(value.position) ||
+      value.sourceId.includes('/') || !isEventName(value.title) || !isDiscoveryPosition(value.position) ||
       !isCatalogId(eventDiscoveryTypes, value.typeId) || !isCatalogId(discoveryCategories, value.categoryId) ||
       !isIanaTimezone(value.timezone) || !isTimestampDto(value.windowStartAt) || !isTimestampDto(value.windowEndAt) ||
       compareInstants(value.windowStartAt, value.windowEndAt) > 0) return false;
+  if (value.origin === 'datatourisme') {
+    if (!/^dt_[0-9a-f]{64}$/.test(value.sourceId) || value.id !== `datatourisme_${value.sourceId}` ||
+        value.slug !== undefined || typeof value.description !== 'string' ||
+        !value.description.trim() || value.description.length > 1000 ||
+        !(value.editorialType === null || (typeof value.editorialType === 'string' &&
+          !!value.editorialType.trim() && value.editorialType.length <= 100)) ||
+        typeof value.city !== 'string' || !value.city.trim() || value.city.length > 120 ||
+        typeof value.department !== 'string' || !/^(?:[0-9]{2,3}|2A|2B)$/.test(value.department) ||
+        value.positionPrecision !== 'source_coordinates' ||
+        !isDataObject(value.attribution, ['source', 'producer', 'publisher']) ||
+        value.attribution.source !== 'DATAtourisme' ||
+        typeof value.attribution.producer !== 'string' || !value.attribution.producer.trim() ||
+        value.attribution.producer.length > 200 ||
+        !(value.attribution.publisher === null || (typeof value.attribution.publisher === 'string' &&
+          !!value.attribution.publisher.trim() && value.attribution.publisher.length <= 200)) ||
+        !(value.sourceUrl === null || isSafeExternalSourceUrl(value.sourceUrl))) return false;
+  } else if ((value.origin !== undefined && value.origin !== 'native') ||
+      value.id !== `event_${value.sourceId}` || !isEventSlug(value.slug) ||
+      ['description', 'editorialType', 'city', 'department', 'positionPrecision', 'attribution', 'sourceUrl']
+        .some((key) => key in value)) return false;
   if (value.tags !== undefined && (!Array.isArray(value.tags) || value.tags.length > discoveryTags.length ||
       new Set(value.tags).size !== value.tags.length || !value.tags.every((tag) => isCatalogId(discoveryTags, tag)))) return false;
   if (value.thumbnail !== undefined && (typeof value.thumbnail !== 'string' || !value.thumbnail.trim() || value.thumbnail.length > 2048)) return false;
   if (value.distanceMeters !== undefined && (typeof value.distanceMeters !== 'number' || !Number.isFinite(value.distanceMeters) || value.distanceMeters < 0)) return false;
   return value.timePrecision === 'date' ? isCalendarRange(value.startDay, value.endDay) :
     value.timePrecision === 'datetime' && value.startDay === undefined && value.endDay === undefined;
+}
+
+export function isSafeExternalSourceUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 2000) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !!url.hostname && !url.username && !url.password;
+  } catch { return false; }
+}
+
+/** Browser detail reads and server search use the same public-field allowlist. */
+export function externalProjectionResultDto(id: string, source: Record<string, unknown>): ExternalDiscoveryResultDto {
+  const timestamp = (value: unknown): TimestampDto => {
+    const entry = isRecord(value) ? value : {};
+    return { seconds: entry.seconds as number, nanoseconds: entry.nanoseconds as number };
+  };
+  const position = isRecord(source.position) ? source.position : {};
+  const attribution = isRecord(source.attribution) ? source.attribution : {};
+  const value: Record<string, unknown> = {
+    id, contentType: source.contentType, origin: source.origin, sourceId: source.sourceId,
+    title: source.title, description: source.description, editorialType: source.editorialType,
+    city: source.city, department: source.department, positionPrecision: source.positionPrecision,
+    attribution: { source: attribution.source, producer: attribution.producer, publisher: attribution.publisher },
+    sourceUrl: source.sourceUrl,
+    position: { lat: position.lat, lng: position.lng }, typeId: source.typeId, categoryId: source.categoryId,
+    timePrecision: source.timePrecision, timezone: source.timezone,
+    windowStartAt: timestamp(source.windowStartAt), windowEndAt: timestamp(source.windowEndAt),
+  };
+  if (source.timePrecision === 'date') { value.startDay = source.startDay; value.endDay = source.endDay; }
+  if (source.tags !== undefined) value.tags = source.tags;
+  if (source.thumbnail !== undefined) value.thumbnail = source.thumbnail;
+  if (!isDiscoveryResultDto(value) || value.origin !== 'datatourisme') throw new Error('INVALID_DISCOVERY_PROJECTION');
+  return value;
 }

@@ -25,9 +25,13 @@ export type ExternalDemoEvent = {
   sourceLinkKind?: 'direct_event' | 'other';
 };
 
+type NativeDiscoveryResult = Exclude<DiscoveryResult, { origin: 'datatourisme' }>;
+
 export type DiscoveryDisplayEvent =
   | { origin: 'native'; id: string; title: string; position: { lat: number; lng: number };
-      categoryId: DiscoveryCategoryId; native: DiscoveryResult }
+      categoryId: DiscoveryCategoryId; native: NativeDiscoveryResult }
+  | { origin: 'datatourisme'; id: string; title: string; position: { lat: number; lng: number };
+      categoryId: DiscoveryCategoryId; external: Extract<DiscoveryResult, { origin: 'datatourisme' }> }
   | ExternalDemoEvent;
 
 export type DisplaySearchContext = {
@@ -115,22 +119,28 @@ function matchesArea(event: ExternalDemoEvent, area: DiscoveryArea): boolean {
     (area.west <= area.east ? lng >= area.west && lng <= area.east : lng >= area.west || lng <= area.east);
 }
 
-/** Native results keep their order and all 100 available slots; demo items use only spare slots. */
+/** Native results retain priority; real external results precede optional fictional demo items. */
 export function displayDiscoveryEvents(
-  nativeResponse: DiscoverySearchResult | null,
+  response: DiscoverySearchResult | null,
   context: DisplaySearchContext | null,
   demoEvents: readonly ExternalDemoEvent[],
   demoEnabled: boolean,
   today: string,
 ): DiscoveryDisplayEvent[] {
-  if (!nativeResponse) return [];
-  const native = nativeResponse.results.map((result) => ({
+  if (!response) return [];
+  const native = response.results.filter((result): result is NativeDiscoveryResult => result.origin !== 'datatourisme').map((result) => ({
     origin: 'native' as const, id: result.id, title: result.title,
     position: result.position, categoryId: result.categoryId, native: result,
   }));
-  if (!demoEnabled || !context || !nativeResponse.meta.complete || native.length >= 100) return native;
+  const external = response.results.filter((result): result is Extract<DiscoveryResult, { origin: 'datatourisme' }> =>
+    result.origin === 'datatourisme').map((result) => ({
+    origin: 'datatourisme' as const, id: result.id, title: result.title,
+    position: result.position, categoryId: result.categoryId, external: result,
+  }));
+  const actual = [...native, ...external];
+  if (!demoEnabled || !context || !response.meta.complete || actual.length >= 100) return actual;
   const filtered = demoEvents.filter((event) =>
     (context.category === 'all' || event.categoryId === context.category) &&
     matchesWhen(event, context.when, today) && matchesArea(event, context.area));
-  return [...native, ...filtered.slice(0, 100 - native.length)];
+  return [...actual, ...filtered.slice(0, 100 - actual.length)];
 }

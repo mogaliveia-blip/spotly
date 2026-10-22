@@ -14,6 +14,12 @@ export function discoveryEventHref(slug: string, token: string | null): string {
   return token ? `${path}?${DISCOVERY_RETURN_PARAM}=${token}` : path;
 }
 
+/** External IDs never enter the native Event slug route. */
+export function discoveryDatatourismeHref(projectionId: string): string {
+  if (!/^datatourisme_dt_[0-9a-f]{64}$/.test(projectionId)) throw new Error('INVALID_EXTERNAL_DISCOVERY_ID');
+  return `/discovery/datatourisme/${projectionId}`;
+}
+
 export function discoveryReturnIntent(slug: string, token: string, createdAt = Date.now()): string {
   return JSON.stringify({ slug, token, createdAt });
 }

@@ -1,0 +1,69 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { doc, getDocFromServer } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { discoveryCategories } from '@/lib/event-discovery';
+import { discoveryDatatourismeHref } from '@/lib/discovery-return';
+import { externalProjectionResultDto } from '../../../../../functions/src/discovery-search-contract';
+import type { ExternalDiscoveryResultDto } from '../../../../../functions/src/discovery-search-contract';
+
+function periodLabel(event: ExternalDiscoveryResultDto): string {
+  if (event.timePrecision === 'date') return event.startDay === event.endDay
+    ? event.startDay : `${event.startDay} – ${event.endDay}`;
+  const format = new Intl.DateTimeFormat('fr-FR', {
+    dateStyle: 'long', timeStyle: 'short', timeZone: event.timezone,
+  });
+  const start = new Date(event.windowStartAt.seconds * 1000);
+  const end = new Date(event.windowEndAt.seconds * 1000);
+  return `${format.format(start)} – ${format.format(end)}`;
+}
+
+/** Reads only the public projection; no private DATAtourisme source or native Event document. */
+export default function DatatourismeDiscoveryDetail() {
+  const params = useParams<{ id: string }>();
+  const id = params.id;
+  const [event, setEvent] = useState<ExternalDiscoveryResultDto | null>(null);
+  const [status, setStatus] = useState<'loading' | 'unavailable' | 'ready'>('loading');
+
+  useEffect(() => {
+    let active = true;
+    setStatus('loading');
+    setEvent(null);
+    try { discoveryDatatourismeHref(id); } catch {
+      setStatus('unavailable');
+      return;
+    }
+    void getDocFromServer(doc(db, 'discovery_public', id)).then((snapshot) => {
+      if (!active) return;
+      if (!snapshot.exists()) { setStatus('unavailable'); return; }
+      try {
+        const dto = externalProjectionResultDto(id, snapshot.data());
+        setEvent(dto);
+        setStatus('ready');
+      } catch { setStatus('unavailable'); }
+    }).catch(() => { if (active) setStatus('unavailable'); });
+    return () => { active = false; };
+  }, [id]);
+
+  const category = event && discoveryCategories.find((item) => item.id === event.categoryId);
+  return <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+    <Link href="/discovery" className="text-sm font-medium text-primary underline">Retour à la découverte</Link>
+    {status === 'loading' && <p className="mt-8" role="status">Chargement de l’événement…</p>}
+    {status === 'unavailable' && <p className="mt-8" role="status">Cette fiche n’est pas disponible publiquement.</p>}
+    {status === 'ready' && event && <article className="mt-8 space-y-4">
+      <p className="text-sm font-medium text-teal-800">Événement externe · DATAtourisme</p>
+      <h1 className="text-3xl font-bold">{event.title}</h1>
+      <p>{category?.label ?? 'Autre'}{event.editorialType ? ` · ${event.editorialType}` : ''}</p>
+      <p>{periodLabel(event)} · {event.timezone}</p>
+      <p>{event.city} ({event.department}) · Coordonnées fournies par la source</p>
+      <p className="whitespace-pre-line">{event.description}</p>
+      <p className="text-sm">Source : DATAtourisme · Producteur : {event.attribution.producer}
+        {event.attribution.publisher ? ` · Éditeur : ${event.attribution.publisher}` : ''}</p>
+      {event.sourceUrl && <a href={event.sourceUrl} target="_blank" rel="noopener noreferrer"
+        className="inline-block text-sm font-medium text-primary underline">Voir la fiche source</a>}
+    </article>}
+  </main>;
+}

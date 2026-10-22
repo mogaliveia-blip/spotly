@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  createDiscoveryReturnToken, discoveryEventHref, discoveryReturnIntent, hasDiscoveryReturnOrigin,
+  createDiscoveryReturnToken, discoveryDatatourismeHref, discoveryEventHref, discoveryReturnIntent, hasDiscoveryReturnOrigin,
 } from './discovery-return';
 
 describe('Discovery Event return origin', () => {
@@ -28,5 +28,13 @@ describe('Discovery Event return origin', () => {
       assert.equal(hasDiscoveryReturnOrigin(raw, slug, token, 1), false);
     }
     assert.equal(hasDiscoveryReturnOrigin(discoveryReturnIntent(slug, token, 1), slug, 'invalid', 1), false);
+  });
+
+  it('routes external projections separately and refuses native or malformed IDs', () => {
+    const id = `datatourisme_dt_${'a'.repeat(64)}`;
+    assert.equal(discoveryDatatourismeHref(id), `/discovery/datatourisme/${id}`);
+    for (const invalid of ['event_native', 'datatourisme_dt_invalid', '../events/native']) {
+      assert.throws(() => discoveryDatatourismeHref(invalid), /INVALID_EXTERNAL_DISCOVERY_ID/);
+    }
   });
 });

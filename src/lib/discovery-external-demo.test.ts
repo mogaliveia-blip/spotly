@@ -49,6 +49,21 @@ describe('D7.2 local external fixture', () => {
     assert.equal(displayDiscoveryEvents(nativeResponse(1, false), context, fixtures, true, day).length, 1);
   });
 
+  it('keeps real external results after native results and before fictional demo fixtures', () => {
+    const external = { ...nativeResponse(1).results[0], origin: 'datatourisme' as const,
+      id: `datatourisme_dt_${'a'.repeat(64)}`, title: 'Concert externe fictif' } as DiscoverySearchResult['results'][number];
+    const response: DiscoverySearchResult = { results: [external, ...nativeResponse(1).results],
+      meta: { complete: true, truncated: false, partialFailure: false, returnedCount: 2 } };
+    const visible = displayDiscoveryEvents(response, context, fixtures, true, day);
+    assert.deepEqual(visible.slice(0, 2).map((item) => item.origin), ['native', 'datatourisme']);
+    assert.equal(visible[2].origin, 'external_demo');
+    const clusters = clusterDiscoveryMarkers(visible.slice(0, 2), {
+      center: { lat: 48.117, lng: -1.678 }, zoom: 11, width: 390, height: 420,
+    });
+    assert.equal(clusters.length, 1);
+    assert.equal(clusters[0].members.length, 2);
+  });
+
   it('applies date, category and area locally, with date-only events excluded from Now', () => {
     const rennes = displayDiscoveryEvents(nativeResponse(0), context, fixtures, true, day);
     assert.equal(rennes.length, 25);
