@@ -28,10 +28,13 @@ describe('DATAtourisme Super Admin prototype', () => {
     assert.match(html, /Analyse sans importation/);
     assert.match(html, /Analyser les données/);
     assert.match(html, /Département/);
+    assert.match(html, /Sélection éditoriale temporaire/);
+    assert.match(html, /Voir la sélection \(0\)/);
+    assert.match(html, /Aucune sauvegarde Firestore, aucune importation et aucune publication/);
     assert.doesNotMatch(html, /événements examinés sur cette page/);
     assert.match(html, /Masquage global non disponible/);
     const buttons = html.match(/<button[^>]*>/g) ?? [];
-    assert.equal(buttons.filter((tag) => /\sdisabled=""/.test(tag)).length, 5);
+    assert.equal(buttons.filter((tag) => /\sdisabled=""/.test(tag)).length, 4);
   });
 
   it('uses the existing platform owner gate for the route and navigation', () => {
