@@ -8,6 +8,7 @@ import { db } from '@/lib/firebase';
 import { discoveryCategories } from '@/lib/event-discovery';
 import { discoveryDatatourismeHref } from '@/lib/discovery-return';
 import { externalProjectionResultDto } from '../../../../../functions/src/discovery-search-contract';
+import { externalOccurrenceFinished } from '../../../../../functions/src/discovery-time';
 import type { ExternalDiscoveryResultDto } from '../../../../../functions/src/discovery-search-contract';
 
 function periodLabel(event: ExternalDiscoveryResultDto): string {
@@ -27,6 +28,7 @@ export default function DatatourismeDiscoveryDetail() {
   const id = params.id;
   const [event, setEvent] = useState<ExternalDiscoveryResultDto | null>(null);
   const [status, setStatus] = useState<'loading' | 'unavailable' | 'ready'>('loading');
+  const [clock, setClock] = useState(() => new Date());
 
   useEffect(() => {
     let active = true;
@@ -41,6 +43,7 @@ export default function DatatourismeDiscoveryDetail() {
       if (!snapshot.exists()) { setStatus('unavailable'); return; }
       try {
         const dto = externalProjectionResultDto(id, snapshot.data());
+        setClock(new Date());
         setEvent(dto);
         setStatus('ready');
       } catch { setStatus('unavailable'); }
@@ -48,12 +51,24 @@ export default function DatatourismeDiscoveryDetail() {
     return () => { active = false; };
   }, [id]);
 
+  useEffect(() => {
+    if (!event || externalOccurrenceFinished(event, clock)) return;
+    const endMillis = event.windowEndAt.seconds * 1000 + Math.floor(event.windowEndAt.nanoseconds / 1_000_000);
+    const delay = Math.max(1, Math.min(endMillis - Date.now() + 1, 86_400_000));
+    const timer = window.setTimeout(() => setClock(new Date()), delay);
+    return () => window.clearTimeout(timer);
+  }, [event, clock]);
+
   const category = event && discoveryCategories.find((item) => item.id === event.categoryId);
+  const ended = event && externalOccurrenceFinished(event, clock);
   return <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
     <Link href="/discovery" className="text-sm font-medium text-primary underline">Retour à la découverte</Link>
     {status === 'loading' && <p className="mt-8" role="status">Chargement de l’événement…</p>}
     {status === 'unavailable' && <p className="mt-8" role="status">Cette fiche n’est pas disponible publiquement.</p>}
     {status === 'ready' && event && <article className="mt-8 space-y-4">
+      {ended && <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm font-medium text-amber-950" role="status">
+        Cette occurrence est terminée et n’est plus une sortie disponible. Les dates de la source peuvent être actualisées.
+      </p>}
       <p className="text-sm font-medium text-teal-800">Événement externe · DATAtourisme</p>
       <h1 className="text-3xl font-bold">{event.title}</h1>
       <p>{category?.label ?? 'Autre'}{event.editorialType ? ` · ${event.editorialType}` : ''}</p>

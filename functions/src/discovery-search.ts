@@ -14,7 +14,7 @@ import {
 } from './discovery-geo';
 import type { GeohashRange } from './discovery-geo';
 import { isCalendarDay } from './event-time';
-import { discoveryCandidateWindow, matchesDiscoveryWhen } from './discovery-time';
+import { discoveryCandidateWindow, externalOccurrenceFinished, matchesDiscoveryWhen } from './discovery-time';
 import type { CandidateWindow } from './discovery-time';
 import { calendarDaySegments } from './event-calendar-segments';
 import type { UtcSegment } from './event-calendar-segments';
@@ -140,7 +140,11 @@ export async function executeDiscoverySearch(
     return segmentCache.get(key)!;
   };
   const matching: DiscoveryResultDto[] = [];
+  const searchInstant = new Date(now.seconds * 1000 + Math.floor(now.nanoseconds / 1_000_000));
   for (const result of candidates.values()) {
+    // Only an explicit calendar-date search may return an ended external occurrence.
+    if (result.origin === 'datatourisme' && request.when.kind !== 'date' &&
+        externalOccurrenceFinished(result, searchInstant)) continue;
     if (request.categoryId && result.categoryId !== request.categoryId) continue;
     if (request.typeIds?.length && !request.typeIds.includes(result.typeId)) continue;
     if (request.tags?.some((tag) => !result.tags?.includes(tag))) continue;

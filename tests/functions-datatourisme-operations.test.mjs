@@ -123,6 +123,20 @@ describe('inactive DATAtourisme transactions against an optimistic fake store', 
     assert.ok(store.writes.every((write) => !write.path.startsWith('events/')));
   });
 
+  it('keeps future import and sync intents distinct inside the transaction', async () => {
+    const store = new FakeFirestore();
+    assert.equal((await importOrSyncExternalTransaction(store, input(uuid, { intent: 'sync' }))).reason,
+      'SOURCE_NOT_IMPORTED');
+    assert.equal((await importOrSyncExternalTransaction(store, input(uuid, { intent: 'import' }))).reason,
+      'SOURCE_CREATED');
+    const writes = store.writes.length;
+    assert.equal((await importOrSyncExternalTransaction(store, input(uuid, { intent: 'import' }))).reason,
+      'SOURCE_ALREADY_IMPORTED');
+    assert.equal((await importOrSyncExternalTransaction(store, input(uuid, { intent: 'sync' }))).status,
+      'unchanged');
+    assert.equal(store.writes.length, writes);
+  });
+
   it('refuses missing counter, collisions, the 100-source limit and concurrent imports at 99', async () => {
     const missing = new FakeFirestore();
     missing.docs.delete(DATATOURISME_PILOT_CONTROL_PATH);

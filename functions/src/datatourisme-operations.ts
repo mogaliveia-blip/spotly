@@ -61,12 +61,15 @@ function writeSource(tx: Transaction, reference: ReturnType<Firestore['doc']>, s
 
 export type VerifiedDetailInput = Omit<PrepareInput, 'poi' | 'complete'> & {
   detail: AttestedDetailResult;
+  /** The future owner entry point supplies an explicit operation; omitted only by legacy local callers. */
+  intent?: 'import' | 'sync';
   mode: OperationMode;
 };
 
 /** No network access here. A future owner-only caller must fetch and verify the detail first. */
 export async function importOrSyncExternalTransaction(firestore: Firestore, input: VerifiedDetailInput): Promise<OperationResult> {
-  if (!validMode(input.mode) || !validNow(input.now)) return deferred('INVALID_OPERATION');
+  if (!validMode(input.mode) || !validNow(input.now) ||
+      (input.intent !== undefined && input.intent !== 'import' && input.intent !== 'sync')) return deferred('INVALID_OPERATION');
   if (input.detail?.kind === 'not_found') return deferred('DETAIL_NOT_FOUND');
   if (input.detail?.kind === 'error') return deferred(`DETAIL_${input.detail.reason.toUpperCase()}`);
   const attestation = verifyAttestedDatatourismeDetail(input.detail, input.expectedUuid, input.timezone);
@@ -91,6 +94,8 @@ export async function importOrSyncExternalTransaction(firestore: Firestore, inpu
     }
     const existing = stored as ExternalEvent | null;
     if (!linkedProjection(existing, publicSnap.exists, publicSnap.data())) return deferred('PROJECTION_IDENTITY_MISMATCH');
+    if (input.intent === 'import' && existing) return deferred('SOURCE_ALREADY_IMPORTED');
+    if (input.intent === 'sync' && !existing) return deferred('SOURCE_NOT_IMPORTED');
     const prepared = prepareDatatourismeCandidate({
       ...input, poi: detail.poi, complete: detail.complete,
       manualCategory: existing?.editorial.categoryMode === 'manual'

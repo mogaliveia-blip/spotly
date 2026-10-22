@@ -38,6 +38,7 @@ import {
 } from '@/lib/discovery-what';
 import type { DiscoveryCategorySelection } from '@/lib/discovery-what';
 import type { DiscoveryArea, DiscoveryWhen } from '../../../functions/src/discovery-search-contract';
+import { externalOccurrenceFinished } from '../../../functions/src/discovery-time';
 
 type BoundsArea = Extract<DiscoveryArea, { kind: 'bounds' }>;
 
@@ -124,6 +125,7 @@ function DatatourismeResult({ result, selected, onSelect }: {
 }) {
   const category = discoveryCategories.find((item) => item.id === result.categoryId);
   const appearance = category ? categoryAppearance[category.id] : unknownCategoryAppearance;
+  const ended = externalOccurrenceFinished(result, new Date());
   const date = result.timePrecision === 'date'
     ? result.startDay === result.endDay ? result.startDay : `${result.startDay} – ${result.endDay}`
     : (() => {
@@ -136,6 +138,7 @@ function DatatourismeResult({ result, selected, onSelect }: {
       <div className={`flex h-20 items-center justify-center ${appearance.image}`}><CalendarDays aria-hidden="true" className="h-9 w-9" /></div>
       <div className="space-y-2 p-3">
         <span className="inline-flex rounded-full bg-teal-100 px-2.5 py-1 text-xs font-semibold text-teal-950">Événement DATAtourisme</span>
+        {ended && <span className="ml-2 inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-950">Occurrence terminée</span>}
         <div><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${appearance.badge}`}>{category?.label ?? 'Autre'}</span></div>
         <h3 className="break-words font-semibold leading-snug">{result.title}</h3>
         {result.editorialType && <p className="text-sm font-medium">{result.editorialType}</p>}

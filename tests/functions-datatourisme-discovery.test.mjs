@@ -3,10 +3,12 @@ import { describe, it } from 'node:test';
 import external from '../functions/lib/datatourisme-external.js';
 import projection from '../functions/lib/datatourisme-discovery-projection.js';
 import search from '../functions/lib/discovery-search.js';
+import time from '../functions/lib/discovery-time.js';
 
 const { prepareDatatourismeCandidate } = external;
 const { buildDatatourismeDiscoveryProjection } = projection;
 const { projectionResultDto, executeDiscoverySearch } = search;
+const { externalOccurrenceFinished } = time;
 const uuid = '11111111-2222-3333-4444-555555555555';
 const now = new Date('2026-10-22T12:00:00.000Z');
 const poi = (periods = [{ startDate: '2026-10-25', endDate: '2026-10-25' }]) => ({
@@ -122,6 +124,40 @@ describe('pure external Discovery projection', () => {
     } };
     const found = await executeDiscoverySearch(request('2026-10-25'), instant(now), [['a', 'z']],
       reader([built, native]));
+    assert.deepEqual(found.results.map((result) => result.id), ['event_native', built.id]);
+  });
+
+  it('keeps an ended occurrence only in an explicit historical date search', async () => {
+    const built = buildDatatourismeDiscoveryProjection(approvedSource(), now);
+    const dto = projectionResultDto(built);
+    const later = new Date('2026-10-26T00:00:00Z');
+    assert.equal(externalOccurrenceFinished(dto, new Date('2026-10-25T22:30:00Z')), false);
+    assert.equal(externalOccurrenceFinished(dto, later), true);
+    const current = await executeDiscoverySearch({ ...request('2026-10-25'), when: { kind: 'today' } },
+      instant(later), [['a', 'z']], reader([built]));
+    assert.equal(current.results.length, 0);
+    const historical = await executeDiscoverySearch(request('2026-10-25'), instant(later), [['a', 'z']],
+      reader([built]));
+    assert.deepEqual(historical.results.map((result) => result.id), [built.id]);
+    assert.equal(externalOccurrenceFinished(historical.results[0], later), true);
+  });
+
+  it('uses exact instants for external expiry while leaving native search unchanged', async () => {
+    const source = { ...approvedSource(),
+      periods: [{ timePrecision: 'datetime', startAt: '2026-10-25T08:00:00.000Z', endAt: '2026-10-25T10:00:00.000Z' }],
+      expiresAt: '2026-10-25T10:00:00.001Z' };
+    const built = buildDatatourismeDiscoveryProjection(source, now);
+    const dto = projectionResultDto(built);
+    assert.equal(externalOccurrenceFinished(dto, new Date('2026-10-25T09:00:00Z')), false);
+    assert.equal(externalOccurrenceFinished(dto, new Date('2026-10-25T10:00:00.001Z')), true);
+    const native = { id: 'event_native', data: {
+      contentType: 'event', sourceId: 'native', title: 'Event natif fictif', slug: 'event-natif',
+      position: { lat: 47.657, lng: -2.76 }, typeId: 'concert', categoryId: 'music',
+      timePrecision: 'date', timezone: 'Europe/Paris', startDay: '2026-10-25', endDay: '2026-10-25',
+      windowStartAt: built.data.windowStartAt, windowEndAt: built.data.windowEndAt,
+    } };
+    const found = await executeDiscoverySearch(request('2026-10-25'), instant(new Date('2026-10-26T00:00:00Z')),
+      [['a', 'z']], reader([built, native]));
     assert.deepEqual(found.results.map((result) => result.id), ['event_native', built.id]);
   });
 });

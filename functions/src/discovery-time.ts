@@ -2,12 +2,21 @@ import { calendarDayInTimezone } from './event-time';
 import { calendarDaySegments } from './event-calendar-segments';
 import type { UtcSegment } from './event-calendar-segments';
 import { compareInstants, instantFromMillis } from './discovery-search-contract';
-import type { DiscoveryResultDto, DiscoveryWhen, TimestampDto } from './discovery-search-contract';
+import type { DiscoveryResultDto, DiscoveryWhen, ExternalDiscoveryResultDto, TimestampDto } from './discovery-search-contract';
 
 const DAY = 86_400_000;
 const MIN = -62135596800000;
 const MAX = 253402300800000;
 export type CandidateWindow = { start: TimestampDto; end: TimestampDto };
+
+/** The published occurrence may end while its private DATAtourisme source remains reusable. */
+export function externalOccurrenceFinished(projection: ExternalDiscoveryResultDto, now: Date): boolean {
+  if (!(now instanceof Date) || !Number.isFinite(now.getTime())) return true;
+  if (projection.timePrecision === 'date') {
+    return projection.endDay < calendarDayInTimezone(now, projection.timezone);
+  }
+  return compareInstants(projection.windowEndAt, instantFromMillis(now.getTime())) < 0;
+}
 
 function shiftDay(day: string, days: number): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) + days * DAY).toISOString().slice(0, 10);
