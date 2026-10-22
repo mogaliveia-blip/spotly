@@ -312,7 +312,7 @@ export const searchDiscovery = onCall(
 
 /** Read-only Super Admin analysis; the API key and upstream calls stay in this Function. */
 export const analyzeDatatourismeData = onCall(
-  { region, cors: PRIVATE_ACCESS_CORS, timeoutSeconds: 15, secrets: [datatourismeApiKey], maxInstances: 2, concurrency: 1 },
+  { region, cors: PRIVATE_ACCESS_CORS, timeoutSeconds: 15, secrets: [datatourismeApiKey], maxInstances: 2, concurrency: 1, serviceAccount: 'datatourisme-analysis@spotly-app-events.iam.gserviceaccount.com' },
   async (request) => analyzeDatatourisme(db, request.auth?.uid, request.data, () => datatourismeApiKey.value())
 );
 
