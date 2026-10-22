@@ -14,6 +14,7 @@ export type ExternalPeriodsAssessment = {
 };
 
 type ParsedPeriod = { precision: 'date' | 'datetime'; start: string | number; end: string | number | null };
+const PERIOD_FIELDS = new Set(['startDate', 'endDate', 'type', '@type']);
 export type NormalizedExternalPeriod =
   | { timePrecision: 'date'; startDay: string; endDay: string | null }
   | { timePrecision: 'datetime'; startAt: string; endAt: string | null };
@@ -27,9 +28,40 @@ function exactInstant(value: string): number | null {
   return Number.isFinite(instant) ? instant : null;
 }
 
+function periodType(value: unknown): 'limited' | 'recurrent' | 'unknown' {
+  const values = Array.isArray(value) ? value : [value];
+  let limited = false;
+  for (const item of values) {
+    const identifier = typeof item === 'string' ? item :
+      item && typeof item === 'object' && !Array.isArray(item)
+        ? (item as Record<string, unknown>).uri ?? (item as Record<string, unknown>).key : null;
+    if (typeof identifier !== 'string') return 'unknown';
+    const name = identifier.split(/[\/#]/).pop();
+    if (name === 'RecurrentPeriod') return 'recurrent';
+    if (name === 'LimitedPeriod') limited = true;
+    else if (name !== 'Period') return 'unknown';
+  }
+  return limited ? 'limited' : 'unknown';
+}
+
+function unsupportedPeriodReason(value: Record<string, unknown>): string | null {
+  if ('appliesOnDay' in value || 'weekOfMonth' in value) return 'PERIOD_RECURRENT_UNSUPPORTED';
+  if ('startTime' in value || 'endTime' in value) return 'PERIOD_TIME_UNSUPPORTED';
+  if (Object.keys(value).some((key) => !PERIOD_FIELDS.has(key))) return 'PERIOD_FIELD_UNSUPPORTED';
+  for (const key of ['type', '@type']) {
+    if (key in value) {
+      const kind = periodType(value[key]);
+      if (kind !== 'limited') return kind === 'recurrent' ? 'PERIOD_RECURRENT_UNSUPPORTED' : 'PERIOD_TYPE_UNSUPPORTED';
+    }
+  }
+  return null;
+}
+
 function parsePeriod(value: unknown, timezone: string): ParsedPeriod | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const { startDate, endDate } = value as Record<string, unknown>;
+  const raw = value as Record<string, unknown>;
+  if (unsupportedPeriodReason(raw)) return null;
+  const { startDate, endDate } = raw;
   if (typeof startDate !== 'string') return null;
   const hasEnd = endDate !== undefined && endDate !== null && endDate !== '';
   if (hasEnd && typeof endDate !== 'string') return null;
@@ -46,6 +78,23 @@ function parsePeriod(value: unknown, timezone: string): ParsedPeriod | null {
   const end = hasEnd ? exactInstant(endDate as string) : null;
   if (start === null || (hasEnd && end === null) || (end !== null && end < start)) return null;
   return { precision: 'datetime', start, end };
+}
+
+/** Pilot admission is narrower than general period assessment: one unqualified civil day only. */
+export function pilotTemporalIssue(periods: unknown, timezone: string): string | null {
+  if (!isIanaTimezone(timezone)) return 'TIMEZONE_INVALID';
+  if (!Array.isArray(periods) || periods.length !== 1) return 'PERIOD_COUNT_UNSUPPORTED';
+  const raw = periods[0];
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return 'PERIOD_INVALID';
+  const unsupported = unsupportedPeriodReason(raw as Record<string, unknown>);
+  if (unsupported) return unsupported;
+  if ((raw as Record<string, unknown>).endDate == null || (raw as Record<string, unknown>).endDate === '') return 'PERIOD_END_MISSING';
+  const normalized = normalizeDatatourismePeriods(periods, timezone);
+  if (!normalized) return 'PERIOD_INVALID';
+  const period = normalized[0];
+  if (period.timePrecision !== 'date') return 'PERIOD_PRECISION_UNSUPPORTED';
+  if (period.startDay !== period.endDay) return 'PERIOD_MULTI_DAY_UNVERIFIED';
+  return null;
 }
 
 /** Retain every validated source period; a malformed entry makes the set incomplete. */

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { classifyDatatourisme } from './datatourisme-classification';
 import { canonicalDatatourismeUuid } from './datatourisme-detail';
-import { assessDatatourismePeriods, definitiveExpirationAt, normalizeDatatourismePeriods } from './datatourisme-periods';
+import { assessDatatourismePeriods, definitiveExpirationAt, normalizeDatatourismePeriods, pilotTemporalIssue } from './datatourisme-periods';
 import type { NormalizedExternalPeriod } from './datatourisme-periods';
 import { discoveryCategories, isCatalogId, isDiscoveryPosition } from './event-discovery';
 import type { DiscoveryCategoryId } from './event-discovery';
@@ -150,10 +150,8 @@ export type PrepareInput = {
   timezone: string;
   now: Date;
   manualCategory?: DiscoveryCategoryId;
-  /** Existing sources may be refreshed after expiry so their public projection can be withdrawn. */
+  /** Existing sources may be refreshed after expiry without authorizing automatic withdrawal. */
   allowExpired?: boolean;
-  /** Existing sources may retain complete periods even when the public pilot cannot represent them. */
-  allowMultipleForSync?: boolean;
 };
 export type PreparedCandidate = { kind: 'accepted'; event: ExternalEvent } | { kind: 'rejected'; reasons: string[] };
 
@@ -169,11 +167,14 @@ export function prepareDatatourismeCandidate(input: PrepareInput): PreparedCandi
   if (!(input.now instanceof Date) || !Number.isFinite(input.now.getTime())) reasons.push('REFERENCE_TIME_INVALID');
 
   const periods = poi.takesPlaceAt;
+  const temporalIssue = pilotTemporalIssue(periods, input.timezone);
+  if (temporalIssue && !reasons.includes(temporalIssue)) reasons.push(temporalIssue);
   const assessment = assessDatatourismePeriods(periods, input.timezone, input.now);
   const normalized = normalizeDatatourismePeriods(periods, input.timezone);
-  if (!Array.isArray(periods) || !periods.length ||
-      (periods.length !== 1 && !input.allowMultipleForSync)) reasons.push('PERIOD_COUNT_UNSUPPORTED');
-  if (!normalized) reasons.push('PERIOD_INVALID');
+  if (!Array.isArray(periods) || !periods.length || periods.length !== 1) {
+    if (!reasons.includes('PERIOD_COUNT_UNSUPPORTED')) reasons.push('PERIOD_COUNT_UNSUPPORTED');
+  }
+  if (!normalized && !temporalIssue) reasons.push('PERIOD_INVALID');
   if (assessment.openEndedCount || normalized?.some((period) => period.timePrecision === 'date' ? !period.endDay : !period.endAt)) reasons.push('PERIOD_END_MISSING');
   if (assessment.definitivelyExpired && !input.allowExpired) reasons.push('EXPIRED');
   if (assessment.timing === 'indeterminate') reasons.push('PERIOD_UNCERTAIN');
@@ -270,9 +271,7 @@ export function decideExternalCleanup(value: unknown, now: Date, retentionDays =
   if (Date.parse(event.sync.lastSuccessfulAt) < Date.parse(event.expiresAt)) {
     return { action: 'defer_review', reason: 'RESYNC_AFTER_EXPIRY_REQUIRED' };
   }
-  if (event.projectionIds.length) return { action: 'remove_external_projection', reason: 'EXPIRED', projectionId: event.projectionIds[0] };
-  if (Date.parse(event.expiresAt) + retentionDays * 86_400_000 <= now.getTime()) {
-    return { action: 'purge_candidate', reason: 'RETENTION_ELAPSED_VERIFIED' };
-  }
-  return { action: 'keep', reason: 'RETENTION_OR_RESYNC_PENDING' };
+  // The API has not established that the returned occurrence list is exhaustive.
+  // Neither automatic withdrawal nor a purge recommendation is safe yet.
+  return { action: 'defer_review', reason: 'TEMPORAL_EXHAUSTIVENESS_UNPROVEN' };
 }

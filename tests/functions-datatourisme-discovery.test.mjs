@@ -73,7 +73,10 @@ describe('pure external Discovery projection', () => {
   });
 
   it('keeps the strict Now interval for a single exact-time event', async () => {
-    const source = approvedSource([{ startDate: '2026-10-25T10:00:00+02:00', endDate: '2026-10-25T12:00:00+02:00' }]);
+    // A synthetic future contract fixture: the initial import pilot rejects exact-time source periods.
+    const source = { ...approvedSource(),
+      periods: [{ timePrecision: 'datetime', startAt: '2026-10-25T08:00:00.000Z', endAt: '2026-10-25T10:00:00.000Z' }],
+      expiresAt: '2026-10-25T10:00:00.001Z' };
     const built = buildDatatourismeDiscoveryProjection(source, now);
     assert.ok(built);
     assert.equal(built.data.timePrecision, 'datetime');

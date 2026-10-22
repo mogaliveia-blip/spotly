@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
-import type { DetailResult } from './datatourisme-detail';
+import { verifyAttestedDatatourismeDetail } from './datatourisme-detail';
+import type { AttestedDetailResult } from './datatourisme-detail';
 import {
   decideExternalCleanup, externalEventId, isExternalEvent, matchesExternalIdentity,
   prepareDatatourismeCandidate, reconcileExternalCandidate,
@@ -59,19 +60,19 @@ function writeSource(tx: Transaction, reference: ReturnType<Firestore['doc']>, s
 }
 
 export type VerifiedDetailInput = Omit<PrepareInput, 'poi' | 'complete'> & {
-  detail: DetailResult;
-  /** The future server entry point must establish this independently of HTTP success. */
-  periodsEvidence: 'verified_full_detail' | 'unverified';
+  detail: AttestedDetailResult;
   mode: OperationMode;
 };
 
 /** No network access here. A future owner-only caller must fetch and verify the detail first. */
 export async function importOrSyncExternalTransaction(firestore: Firestore, input: VerifiedDetailInput): Promise<OperationResult> {
   if (!validMode(input.mode) || !validNow(input.now)) return deferred('INVALID_OPERATION');
-  if (input.detail.kind === 'not_found') return deferred('DETAIL_NOT_FOUND');
-  if (input.detail.kind === 'error') return deferred(`DETAIL_${input.detail.reason.toUpperCase()}`);
-  const detail = input.detail;
-  if (input.periodsEvidence !== 'verified_full_detail') return deferred('PERIODS_NOT_VERIFIED');
+  if (input.detail?.kind === 'not_found') return deferred('DETAIL_NOT_FOUND');
+  if (input.detail?.kind === 'error') return deferred(`DETAIL_${input.detail.reason.toUpperCase()}`);
+  const attestation = verifyAttestedDatatourismeDetail(input.detail, input.expectedUuid, input.timezone);
+  if (!attestation) return deferred('DETAIL_NOT_ATTESTED');
+  if (attestation.temporalIssue) return deferred(attestation.temporalIssue);
+  const detail = attestation.detail;
   const candidateId = externalEventId(input.expectedUuid);
   if (!candidateId) return deferred('UUID_INCOHERENT');
   const sourceRef = firestore.doc(`datatourisme_events/${candidateId}`);
@@ -94,7 +95,7 @@ export async function importOrSyncExternalTransaction(firestore: Firestore, inpu
       ...input, poi: detail.poi, complete: detail.complete,
       manualCategory: existing?.editorial.categoryMode === 'manual'
         ? existing.editorial.categoryId : input.manualCategory,
-      allowExpired: true, allowMultipleForSync: true,
+      allowExpired: true,
     });
     if (prepared.kind === 'rejected') return deferred(prepared.reasons[0] ?? 'CANDIDATE_REJECTED');
     const candidate = prepared.event;
@@ -105,10 +106,9 @@ export async function importOrSyncExternalTransaction(firestore: Firestore, inpu
     const reconciled = reconcileExternalCandidate(existing, candidate);
     if (reconciled.kind === 'rejected') return deferred(reconciled.reasons[0] ?? 'CANDIDATE_REJECTED');
     const expired = Date.parse(reconciled.event.expiresAt!) <= input.now.getTime();
-    const unsupportedPeriods = reconciled.event.periods.length !== 1;
-    const withdraw = (expired || unsupportedPeriods) && reconciled.event.projectionIds.length === 1;
-    const next: ExternalEvent = withdraw
-      ? { ...reconciled.event, projectionIds: [] } : reconciled.event;
+    // A fetched detail is pilot-compatible, but the API does not guarantee occurrence exhaustiveness.
+    if (expired && reconciled.event.projectionIds.length) return deferred('TEMPORAL_EXHAUSTIVENESS_UNPROVEN');
+    const next: ExternalEvent = reconciled.event;
     let nextProjection: ReturnType<typeof buildDatatourismeDiscoveryProjection> = null;
     if (next.projectionIds.length) {
       nextProjection = buildDatatourismeDiscoveryProjection(next, input.now);
@@ -117,18 +117,16 @@ export async function importOrSyncExternalTransaction(firestore: Firestore, inpu
     const create = !existing;
     const update = !!existing && sourceChanged(existing, next);
     const refresh = !!nextProjection && !isDeepStrictEqual(publicSnap.data(), nextProjection.data);
-    if (!create && !update && !refresh && !withdraw) return unchanged('NO_USEFUL_CHANGE');
+    if (!create && !update && !refresh) return unchanged('NO_USEFUL_CHANGE');
     if (input.mode === 'apply') {
       if (create) {
         tx.create(sourceRef, next);
         tx.update(counterRef, { sourceCount: count + 1 });
       } else if (update) writeSource(tx, sourceRef, next);
       if (refresh && nextProjection) tx.set(publicRef, nextProjection.data);
-      if (withdraw) tx.delete(publicRef);
     }
-    return changed(input.mode, create ? 'SOURCE_CREATED' : unsupportedPeriods && withdraw ? 'SOURCE_PERIODS_UNSUPPORTED' :
-      withdraw ? 'SOURCE_EXPIRED' : 'SOURCE_SYNCHRONIZED',
-      { create, update, publish: refresh, withdraw });
+    return changed(input.mode, create ? 'SOURCE_CREATED' : 'SOURCE_SYNCHRONIZED',
+      { create, update, publish: refresh });
   });
 }
 
@@ -156,6 +154,10 @@ export async function decideExternalPublicationTransaction(
         if (withdraw) tx.delete(publicRef);
       }
       return changed(mode, 'EDITORIAL_HIDE', { update, withdraw });
+    }
+    if (source.periods.length !== 1 || source.periods[0].timePrecision !== 'date' ||
+        !source.periods[0].endDay || source.periods[0].startDay !== source.periods[0].endDay) {
+      return deferred('PERIOD_PILOT_UNSUPPORTED');
     }
     const next: ExternalEvent = {
       ...source, publication: { state: 'approved' }, projectionIds: [publicRef.id],

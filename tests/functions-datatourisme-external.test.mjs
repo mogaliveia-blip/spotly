@@ -49,6 +49,8 @@ describe('private DATAtourisme source candidate', () => {
     assert.ok(reasons(prepare(source([{ startDate: '2026-10-25' }]))).includes('PERIOD_END_MISSING'));
     assert.ok(reasons(prepare(source([{ startDate: '2026-10-01', endDate: '2026-10-01' }]))).includes('EXPIRED'));
     assert.ok(reasons(prepare(source([{ startDate: '2026-10-25', endDate: '2026-10-24' }]))).includes('PERIOD_INVALID'));
+    assert.ok(reasons(prepare(source([{ startDate: '2026-10-25', endDate: '2026-10-26' }]))).includes('PERIOD_MULTI_DAY_UNVERIFIED'));
+    assert.ok(reasons(prepare(source([{ startDate: '2026-10-25', endDate: '2026-10-25', appliesOnDay: ['Monday'] }]))).includes('PERIOD_RECURRENT_UNSUPPORTED'));
   });
 
   it('rejects incomplete source, invalid zone or location and missing mandatory data', () => {
@@ -93,13 +95,14 @@ describe('private DATAtourisme source candidate', () => {
     assert.equal(decideExternalCleanup({ ...projected, publication: { state: 'hidden' } }, now, 30, projection).action, 'hide_publicly');
     assert.equal(decideExternalCleanup(projected, at('2026-10-26T00:00:00Z'), 30, projection).action, 'defer_review');
     const verified = { ...projected, sync: { ...base.sync, lastSuccessfulAt: '2026-10-26T00:00:00.000Z' } };
-    assert.equal(decideExternalCleanup(verified, at('2026-10-26T00:00:00Z'), 30, projection).action, 'remove_external_projection');
+    assert.deepEqual(decideExternalCleanup(verified, at('2026-10-26T00:00:00Z'), 30, projection),
+      { action: 'defer_review', reason: 'TEMPORAL_EXHAUSTIVENESS_UNPROVEN' });
     assert.equal(decideExternalCleanup({ ...projected, completeness: 'incomplete' }, at('2026-10-26T00:00:00Z'), 30, projection).action, 'defer_review');
     assert.equal(decideExternalCleanup({ ...projected, sync: { ...base.sync, state: 'error' } }, at('2026-10-26T00:00:00Z'), 30, projection).action, 'defer_review');
     assert.equal(decideExternalCleanup({ ...projected, sync: { ...base.sync, lastSuccessfulAt: '2026-10-27T00:00:00.000Z' } }, at('2026-10-26T00:00:00Z'), 30, projection).action, 'defer_review');
     assert.equal(decideExternalCleanup({ ...projected, periods: [{ timePrecision: 'date', startDay: '2026-10-25', endDay: null }], expiresAt: null }, at('2026-12-01T00:00:00Z')).action, 'defer_review');
     assert.equal(decideExternalCleanup({ ...base, origin: 'native' }, at('2026-12-01T00:00:00Z')).action, 'defer_review');
-    assert.equal(decideExternalCleanup({ ...base, sync: { ...base.sync, lastSuccessfulAt: '2026-10-26T00:00:00.000Z' } }, at('2026-11-26T00:00:00Z')).action, 'purge_candidate');
+    assert.equal(decideExternalCleanup({ ...base, sync: { ...base.sync, lastSuccessfulAt: '2026-10-26T00:00:00.000Z' } }, at('2026-11-26T00:00:00Z')).action, 'defer_review');
     assert.equal(decideExternalCleanup(base, at('2026-11-26T00:00:00Z')).action, 'defer_review');
   });
 });

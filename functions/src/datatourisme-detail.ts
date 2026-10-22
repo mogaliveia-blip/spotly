@@ -1,4 +1,6 @@
 /** Inactive server-side detail adapter. A future authorized Function must supply the secret and fetcher. */
+import { pilotTemporalIssue } from './datatourisme-periods';
+
 const API_ORIGIN = 'https://api.datatourisme.fr';
 const DETAIL_FIELDS = [
   'uuid', 'uri', 'label', 'type', 'hasTheme', 'takesPlaceAt',
@@ -18,9 +20,15 @@ export function canonicalDatatourismeUuid(value: unknown): string | null {
 }
 
 export type DetailResult =
-  | { kind: 'found'; poi: unknown; complete: true }
+  | { kind: 'found'; poi: unknown; /** HTTP body parsed; not a proof of occurrence exhaustiveness. */ complete: true }
   | { kind: 'not_found' }
   | { kind: 'error'; reason: 'invalid_uuid' | 'not_configured' | 'quota' | 'unavailable' | 'invalid_response' | 'too_large' };
+
+export type AttestedDetailResult = Exclude<DetailResult, { kind: 'found' }> | {
+  kind: 'attested';
+  temporal: { httpUsable: true; periodsReceived: number; pilotCompatible: boolean; exhaustive: false; reason: string | null };
+};
+const attestations = new WeakMap<object, { uuid: string; timezone: string; detail: Extract<DetailResult, { kind: 'found' }>; snapshot: string }>();
 
 async function boundedJson(response: Response): Promise<{ kind: 'ok'; value: unknown } | { kind: 'error'; reason: 'invalid_response' | 'too_large' }> {
   const declared = Number(response.headers.get('content-length'));
@@ -79,4 +87,41 @@ export async function fetchDatatourismeDetail(
     return { kind: 'error', reason: 'invalid_response' };
   }
   return { kind: 'found', poi, complete: true };
+}
+
+/** An in-memory capability created only by this server fetch. HTTP success does not prove occurrence exhaustiveness. */
+export async function fetchAttestedDatatourismeDetail(
+  requestedUuid: unknown, timezone: string, apiKey: () => string, fetcher: typeof fetch = fetch,
+): Promise<AttestedDetailResult> {
+  const detail = await fetchDatatourismeDetail(requestedUuid, apiKey, fetcher);
+  if (detail.kind !== 'found') return detail;
+  const uuid = canonicalDatatourismeUuid(requestedUuid)!;
+  const periods = (detail.poi as Record<string, unknown>).takesPlaceAt;
+  const reason = pilotTemporalIssue(periods, timezone);
+  const token: AttestedDetailResult = Object.freeze({
+    kind: 'attested',
+    temporal: Object.freeze({ httpUsable: true, periodsReceived: Array.isArray(periods) ? periods.length : 0,
+      pilotCompatible: reason === null, exhaustive: false, reason }),
+  });
+  attestations.set(token, { uuid, timezone, detail, snapshot: JSON.stringify(detail.poi) });
+  return token;
+}
+
+/** Reject JSON, forged objects, cross-UUID reuse and mutation of the verified response at runtime. */
+export function verifyAttestedDatatourismeDetail(
+  token: unknown, requestedUuid: unknown, timezone: string,
+): { detail: Extract<DetailResult, { kind: 'found' }>; temporalIssue: string | null } | null {
+  if (!token || typeof token !== 'object') return null;
+  const stored = attestations.get(token);
+  const uuid = canonicalDatatourismeUuid(requestedUuid);
+  if (!stored || !uuid || stored.uuid !== uuid || stored.timezone !== timezone) return null;
+  try {
+    if (JSON.stringify(stored.detail.poi) !== stored.snapshot) return null;
+    const poi = JSON.parse(stored.snapshot) as Record<string, unknown>;
+    if (canonicalDatatourismeUuid(poi.uuid) !== uuid) return null;
+    const temporalIssue = pilotTemporalIssue(poi.takesPlaceAt, timezone);
+    return { detail: { kind: 'found', poi, complete: true }, temporalIssue };
+  } catch {
+    return null;
+  }
 }

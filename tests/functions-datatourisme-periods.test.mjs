@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import periods from '../functions/lib/datatourisme-periods.js';
 
-const { assessDatatourismePeriods, normalizeDatatourismePeriods, definitiveExpirationAt } = periods;
+const { assessDatatourismePeriods, normalizeDatatourismePeriods, definitiveExpirationAt, pilotTemporalIssue } = periods;
 const at = (value) => new Date(value);
 const period = (startDate, endDate) => ({ startDate, ...(endDate === undefined ? {} : { endDate }) });
 
@@ -87,5 +87,32 @@ describe('DATAtourisme external periods', () => {
     assert.equal(definitiveExpirationAt(normalizeDatatourismePeriods([period('2026-10-25')], 'Europe/Paris'), 'Europe/Paris'), null);
     assert.equal(normalizeDatatourismePeriods([period('2026-10-25', '2026-10-25'), period('2026-10-27', '2026-10-26')], 'Europe/Paris'), null);
     assert.equal(definitiveExpirationAt([{ timePrecision: 'date', startDay: '2026-10-27', endDay: '2026-10-26' }], 'Europe/Paris'), null);
+  });
+
+  it('admits only a known single civil day for the initial pilot', () => {
+    assert.equal(pilotTemporalIssue([period('2026-10-25', '2026-10-25')], 'Europe/Paris'), null);
+    assert.equal(pilotTemporalIssue([{ ...period('2026-10-25', '2026-10-25'), type: 'https://example.test/LimitedPeriod' }], 'Europe/Paris'), null);
+    assert.equal(pilotTemporalIssue([period('2026-10-25', '2026-10-26')], 'Europe/Paris'), 'PERIOD_MULTI_DAY_UNVERIFIED');
+    assert.equal(pilotTemporalIssue([period('2026-10-25')], 'Europe/Paris'), 'PERIOD_END_MISSING');
+    assert.equal(pilotTemporalIssue([period('2026-10-25', '2026-10-25')], 'invalid/zone'), 'TIMEZONE_INVALID');
+    assert.equal(pilotTemporalIssue([period('2026-10-25', '2026-10-25'), period('2026-10-30', '2026-10-30')], 'Europe/Paris'), 'PERIOD_COUNT_UNSUPPORTED');
+    assert.equal(pilotTemporalIssue([period('2026-10-25T08:00:00Z', '2026-10-25T12:00:00Z')], 'Europe/Paris'), 'PERIOD_PRECISION_UNSUPPORTED');
+  });
+
+  it('withholds admission and definitive expiry for recurrence, separate hours or unknown temporal fields', () => {
+    const base = period('2026-10-25', '2026-10-25');
+    const cases = [
+      [{ ...base, appliesOnDay: ['Sunday'] }, 'PERIOD_RECURRENT_UNSUPPORTED'],
+      [{ ...base, weekOfMonth: [4] }, 'PERIOD_RECURRENT_UNSUPPORTED'],
+      [{ ...base, type: 'https://example.test/RecurrentPeriod' }, 'PERIOD_RECURRENT_UNSUPPORTED'],
+      [{ ...base, type: 'https://example.test/UnknownPeriod' }, 'PERIOD_TYPE_UNSUPPORTED'],
+      [{ ...base, startTime: '08:00', endTime: '12:00' }, 'PERIOD_TIME_UNSUPPORTED'],
+      [{ ...base, openingHours: '08:00' }, 'PERIOD_FIELD_UNSUPPORTED'],
+    ];
+    for (const [candidate, reason] of cases) {
+      assert.equal(pilotTemporalIssue([candidate], 'Europe/Paris'), reason);
+      assert.equal(normalizeDatatourismePeriods([candidate], 'Europe/Paris'), null);
+      assert.equal(assessDatatourismePeriods([candidate], 'Europe/Paris', at('2026-10-26T12:00:00Z')).definitivelyExpired, false);
+    }
   });
 });

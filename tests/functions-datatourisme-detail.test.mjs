@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import detail from '../functions/lib/datatourisme-detail.js';
 
-const { canonicalDatatourismeUuid, fetchDatatourismeDetail } = detail;
+const { canonicalDatatourismeUuid, fetchDatatourismeDetail,
+  fetchAttestedDatatourismeDetail, verifyAttestedDatatourismeDetail } = detail;
 const uuid = '11111111-2222-3333-4444-555555555555';
 
 describe('inactive DATAtourisme detail adapter', () => {
@@ -47,5 +48,32 @@ describe('inactive DATAtourisme detail adapter', () => {
     assert.deepEqual(await fetchDatatourismeDetail(uuid, () => '', async () => { throw Error('unexpected'); }), { kind: 'error', reason: 'not_configured' });
     const tooLarge = async () => new Response('x'.repeat(2_000_001));
     assert.deepEqual(await fetchDatatourismeDetail(uuid, () => 'key', tooLarge), { kind: 'error', reason: 'too_large' });
+  });
+
+  it('attests the fetched UUID and exact response only inside the server process', async () => {
+    const poi = { uuid, takesPlaceAt: [{ startDate: '2026-10-25', endDate: '2026-10-25' }] };
+    const token = await fetchAttestedDatatourismeDetail(uuid, 'Europe/Paris', () => 'simulated-key',
+      async () => Response.json(poi));
+    assert.equal(token.kind, 'attested');
+    assert.deepEqual(token.temporal, { httpUsable: true, periodsReceived: 1, pilotCompatible: true,
+      exhaustive: false, reason: null });
+    assert.equal(verifyAttestedDatatourismeDetail(token, uuid, 'Europe/Paris').detail.poi.uuid, uuid);
+    assert.equal(verifyAttestedDatatourismeDetail(token, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', 'Europe/Paris'), null);
+    assert.equal(verifyAttestedDatatourismeDetail(token, uuid, 'America/New_York'), null);
+    assert.equal(verifyAttestedDatatourismeDetail(JSON.parse(JSON.stringify(token)), uuid, 'Europe/Paris'), null);
+    assert.equal(verifyAttestedDatatourismeDetail({ ...token }, uuid, 'Europe/Paris'), null);
+    verifyAttestedDatatourismeDetail(token, uuid, 'Europe/Paris').detail.poi.takesPlaceAt[0].endDate = '2026-10-26';
+    assert.equal(verifyAttestedDatatourismeDetail(token, uuid, 'Europe/Paris').temporalIssue, null);
+    poi.takesPlaceAt[0].endDate = '2026-10-26';
+    assert.equal(verifyAttestedDatatourismeDetail(token, uuid, 'Europe/Paris').temporalIssue, null);
+  });
+
+  it('separates usable HTTP from ambiguous temporal data', async () => {
+    const token = await fetchAttestedDatatourismeDetail(uuid, 'Europe/Paris', () => 'simulated-key',
+      async () => Response.json({ uuid, takesPlaceAt: [{ startDate: '2026-10-25', endDate: '2026-10-25', weekOfMonth: [4] }] }));
+    assert.equal(token.kind, 'attested');
+    assert.deepEqual(token.temporal, { httpUsable: true, periodsReceived: 1, pilotCompatible: false,
+      exhaustive: false, reason: 'PERIOD_RECURRENT_UNSUPPORTED' });
+    assert.equal(verifyAttestedDatatourismeDetail(token, uuid, 'Europe/Paris').temporalIssue, 'PERIOD_RECURRENT_UNSUPPORTED');
   });
 });

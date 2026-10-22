@@ -3,10 +3,12 @@ import { after, before, beforeEach, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import external from '../functions/lib/datatourisme-external.js';
+import detailAdapter from '../functions/lib/datatourisme-detail.js';
 import operations from '../functions/lib/datatourisme-operations.js';
 import periods from '../functions/lib/datatourisme-periods.js';
 
 const { externalEventId, prepareDatatourismeCandidate } = external;
+const { fetchAttestedDatatourismeDetail } = detailAdapter;
 const { definitiveExpirationAt, normalizeDatatourismePeriods } = periods;
 const {
   DATATOURISME_PILOT_CONTROL_PATH, importOrSyncExternalTransaction,
@@ -87,10 +89,16 @@ const poi = (id = uuid, periods = [{ startDate: '2026-10-25', endDate: '2026-10-
   isLocatedAt: [{ address: [{ hasAddressCity: { label: { '@fr': 'Vannes' }, isPartOfDepartment: { insee: '56' } } }],
     geo: { latitude: 47.657, longitude: -2.76 } }],
 });
+const attested = (id = uuid, body = poi(id)) => fetchAttestedDatatourismeDetail(
+  id, 'Europe/Paris', () => 'simulated-key', async () => Response.json(body),
+);
+const defaultDetail = await attested();
+const otherUuid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+const otherDetail = await attested(otherUuid);
 const input = (id = uuid, overrides = {}) => ({
   expectedUuid: id, expectedDepartment: '56', timezone: 'Europe/Paris', now: start,
-  detail: { kind: 'found', poi: poi(id), complete: true },
-  periodsEvidence: 'verified_full_detail', mode: 'apply', ...overrides,
+  detail: id === uuid ? defaultDetail : otherDetail,
+  mode: 'apply', ...overrides,
 });
 const fixtureSource = () => {
   const candidate = prepareDatatourismeCandidate({ expectedUuid: uuid, expectedDepartment: '56',
@@ -126,7 +134,6 @@ describe('inactive DATAtourisme transactions against an optimistic fake store', 
     const full = new FakeFirestore(100);
     assert.equal((await importOrSyncExternalTransaction(full, input())).reason, 'PILOT_LIMIT_REACHED');
     const concurrent = new FakeFirestore(99);
-    const otherUuid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
     const results = await Promise.all([
       importOrSyncExternalTransaction(concurrent, input()),
       importOrSyncExternalTransaction(concurrent, input(otherUuid)),
@@ -149,18 +156,21 @@ describe('inactive DATAtourisme transactions against an optimistic fake store', 
     assert.equal(store.writes.length, 0);
   });
 
-  it('defers 404, API error, incomplete detail, uncertain periods and unverified completeness', async () => {
+  it('defers 404, API error, forged detail and uncertain periods', async () => {
     const store = new FakeFirestore();
     const variants = [
       [input(uuid, { detail: { kind: 'not_found' } }), 'DETAIL_NOT_FOUND'],
       [input(uuid, { detail: { kind: 'error', reason: 'quota' } }), 'DETAIL_QUOTA'],
-      [input(uuid, { periodsEvidence: 'unverified' }), 'PERIODS_NOT_VERIFIED'],
-      [input(uuid, { detail: { kind: 'found', poi: poi(), complete: false } }), 'SOURCE_INCOMPLETE'],
-      [input(uuid, { detail: { kind: 'found', poi: poi(uuid, [{ startDate: '2026-10-25' }]), complete: true } }), 'PERIOD_END_MISSING'],
-      [input(uuid, { detail: { kind: 'found', poi: poi(uuid, [
+      [input(uuid, { detail: { kind: 'found', poi: poi(), complete: true }, periodsEvidence: 'verified_full_detail' }), 'DETAIL_NOT_ATTESTED'],
+      [input(uuid, { detail: JSON.parse(JSON.stringify(defaultDetail)) }), 'DETAIL_NOT_ATTESTED'],
+      [input(otherUuid, { detail: defaultDetail }), 'DETAIL_NOT_ATTESTED'],
+      [input(uuid, { detail: await attested(uuid, poi(uuid, [{ startDate: '2026-10-25' }])) }), 'PERIOD_END_MISSING'],
+      [input(uuid, { detail: await attested(uuid, poi(uuid, [{ startDate: '2026-10-25', endDate: '2026-10-25',
+        weekOfMonth: [4] }])) }), 'PERIOD_RECURRENT_UNSUPPORTED'],
+      [input(uuid, { detail: await attested(uuid, poi(uuid, [
         { startDate: '2026-10-25', endDate: '2026-10-25' },
         { startDate: '2026-10-30', endDate: '2026-10-30' },
-      ]), complete: true } }), 'PERIOD_COUNT_UNSUPPORTED'],
+      ])) }), 'PERIOD_COUNT_UNSUPPORTED'],
     ];
     for (const [request, expected] of variants) {
       assert.equal((await importOrSyncExternalTransaction(store, request)).reason, expected);
@@ -179,7 +189,7 @@ describe('inactive DATAtourisme transactions against an optimistic fake store', 
       { uri: 'https://example.test/Concert' }, { uri: 'https://example.test/TheaterEvent' },
     ] };
     const result = await importOrSyncExternalTransaction(store, input(uuid, {
-      now: new Date('2026-10-23T12:00:00Z'), detail: { kind: 'found', poi: ambiguous, complete: true },
+      now: new Date('2026-10-23T12:00:00Z'), detail: await attested(uuid, ambiguous),
     }));
     assert.equal(result.status, 'applied');
     assert.equal(store.docs.get(sourcePath).editorial.categoryId, 'culture');
@@ -219,20 +229,20 @@ describe('inactive DATAtourisme transactions against an optimistic fake store', 
     assert.equal(expiredStore.writes.length, 0);
   });
 
-  it('refreshes a published source and projection atomically, then withdraws after verified expiry', async () => {
+  it('refreshes a published source and projection atomically, then defers expiry withdrawal', async () => {
     const store = new FakeFirestore();
     await importOrSyncExternalTransaction(store, input());
     await decideExternalPublicationTransaction(store, sourceId, 'approve', start, 'apply');
     const changedPoi = { ...poi(), label: { '@fr': 'Nouveau concert fictif' } };
     const refresh = await importOrSyncExternalTransaction(store, input(uuid, {
-      now: new Date('2026-10-23T12:00:00Z'), detail: { kind: 'found', poi: changedPoi, complete: true },
+      now: new Date('2026-10-23T12:00:00Z'), detail: await attested(uuid, changedPoi),
     }));
     assert.equal(refresh.changes.update, true);
     assert.equal(refresh.changes.publish, true);
     assert.equal(store.docs.get(sourcePath).editorial.title, 'Nouveau concert fictif');
     assert.equal(store.docs.get(publicPath).title, 'Nouveau concert fictif');
     const incomplete = await importOrSyncExternalTransaction(store, input(uuid, {
-      now: afterExpiry, detail: { kind: 'found', poi: poi(uuid, [{ startDate: '2026-10-25' }]), complete: true },
+      now: afterExpiry, detail: await attested(uuid, poi(uuid, [{ startDate: '2026-10-25' }])),
     }));
     assert.equal(incomplete.status, 'deferred');
     assert.equal(store.docs.has(publicPath), true);
@@ -244,15 +254,15 @@ describe('inactive DATAtourisme transactions against an optimistic fake store', 
     }))).reason, 'DETAIL_UNAVAILABLE');
     assert.equal(store.docs.has(publicPath), true);
     const expired = await importOrSyncExternalTransaction(store, input(uuid, { now: afterExpiry }));
-    assert.equal(expired.reason, 'SOURCE_EXPIRED');
-    assert.equal(expired.changes.withdraw, true);
-    assert.equal(store.docs.has(publicPath), false);
-    assert.deepEqual(store.docs.get(sourcePath).projectionIds, []);
+    assert.equal(expired.reason, 'TEMPORAL_EXHAUSTIVENESS_UNPROVEN');
+    assert.equal(expired.changes.withdraw, false);
+    assert.equal(store.docs.has(publicPath), true);
+    assert.deepEqual(store.docs.get(sourcePath).projectionIds, [publicPath.split('/')[1]]);
     assert.equal(store.docs.get(DATATOURISME_PILOT_CONTROL_PATH).sourceCount, 1);
-    assert.equal((await importOrSyncExternalTransaction(store, input(uuid, { now: afterExpiry }))).status, 'unchanged');
+    assert.equal((await importOrSyncExternalTransaction(store, input(uuid, { now: afterExpiry }))).status, 'deferred');
   });
 
-  it('retains all newly verified sessions but withdraws the unsupported single-interval projection', async () => {
+  it('does not mutate source or projection when a later response has multiple sessions', async () => {
     const store = new FakeFirestore();
     await importOrSyncExternalTransaction(store, input());
     await decideExternalPublicationTransaction(store, sourceId, 'approve', start, 'apply');
@@ -262,19 +272,18 @@ describe('inactive DATAtourisme transactions against an optimistic fake store', 
     ]);
     const result = await importOrSyncExternalTransaction(store, input(uuid, {
       now: new Date('2026-10-26T00:00:00Z'),
-      detail: { kind: 'found', poi: multiplePoi, complete: true },
+      detail: await attested(uuid, multiplePoi),
     }));
-    assert.equal(result.reason, 'SOURCE_PERIODS_UNSUPPORTED');
-    assert.equal(result.changes.withdraw, true);
-    assert.equal(store.docs.get(sourcePath).periods.length, 2);
-    assert.equal(store.docs.get(sourcePath).expiresAt, '2026-10-30T23:00:00.000Z');
-    assert.equal(store.docs.has(publicPath), false);
+    assert.equal(result.reason, 'PERIOD_COUNT_UNSUPPORTED');
+    assert.equal(result.changes.withdraw, false);
+    assert.equal(store.docs.get(sourcePath).periods.length, 1);
+    assert.equal(store.docs.has(publicPath), true);
     assert.equal(store.docs.get(DATATOURISME_PILOT_CONTROL_PATH).sourceCount, 1);
     assert.equal((await decideExternalPublicationTransaction(store, sourceId, 'approve', afterExpiry, 'apply')).reason,
       'PUBLICATION_NOT_ELIGIBLE');
   });
 
-  it('defers uncertain cleanup, keeps future sessions, and reports purge candidates without deleting sources', async () => {
+  it('defers uncertain cleanup, keeps future sessions, and blocks purge suggestions', async () => {
     const store = new FakeFirestore(1);
     const source = fixtureSource();
     store.seed(sourcePath, source);
@@ -298,13 +307,14 @@ describe('inactive DATAtourisme transactions against an optimistic fake store', 
     store.seed(sourcePath, { ...source, sync: { ...source.sync, lastSuccessfulAt: afterExpiry.toISOString() } });
     const monthLater = new Date('2026-11-26T00:00:00Z');
     const purge = await inspectExternalCleanupTransaction(store, sourceId, monthLater, 'apply');
-    assert.equal(purge.status, 'purge_candidate');
+    assert.equal(purge.status, 'deferred');
+    assert.equal(purge.reason, 'TEMPORAL_EXHAUSTIVENESS_UNPROVEN');
     assert.equal(store.docs.has(sourcePath), true);
     assert.equal(store.docs.get(DATATOURISME_PILOT_CONTROL_PATH).sourceCount, 1);
     assert.equal(store.writes.length, 0);
   });
 
-  it('withdraws a confirmed expired external projection once, then leaves the source in place', async () => {
+  it('never withdraws a projection on temporal uncertainty, even after a later sync date', async () => {
     const store = new FakeFirestore();
     await importOrSyncExternalTransaction(store, input());
     await decideExternalPublicationTransaction(store, sourceId, 'approve', start, 'apply');
@@ -312,15 +322,16 @@ describe('inactive DATAtourisme transactions against an optimistic fake store', 
     store.seed(sourcePath, { ...current, sync: { ...current.sync, lastSuccessfulAt: afterExpiry.toISOString() } });
     const writes = store.writes.length;
     const preview = await inspectExternalCleanupTransaction(store, sourceId, afterExpiry, 'dry-run');
-    assert.equal(preview.changes.withdraw, true);
+    assert.equal(preview.reason, 'TEMPORAL_EXHAUSTIVENESS_UNPROVEN');
+    assert.equal(preview.changes.withdraw, false);
     assert.equal(store.writes.length, writes);
     const first = await inspectExternalCleanupTransaction(store, sourceId, afterExpiry, 'apply');
-    assert.equal(first.changes.withdraw, true);
-    assert.equal(store.docs.has(publicPath), false);
+    assert.equal(first.changes.withdraw, false);
+    assert.equal(store.docs.has(publicPath), true);
     assert.equal(store.docs.has(sourcePath), true);
-    assert.deepEqual(store.docs.get(sourcePath).projectionIds, []);
-    assert.equal((await inspectExternalCleanupTransaction(store, sourceId, afterExpiry, 'apply')).status, 'unchanged');
-    assert.equal(store.writes.length, writes + 2);
+    assert.deepEqual(store.docs.get(sourcePath).projectionIds, [publicPath.split('/')[1]]);
+    assert.equal((await inspectExternalCleanupTransaction(store, sourceId, afterExpiry, 'apply')).status, 'deferred');
+    assert.equal(store.writes.length, writes);
   });
 
   it('reports bounded dry-run totals and never mutates data', async () => {
@@ -335,11 +346,11 @@ describe('inactive DATAtourisme transactions against an optimistic fake store', 
     assert.equal(store.writes.length, writes);
     assert.deepEqual(summarizeExternalOperations([
       { status: 'would_apply', reason: 'SOURCE_CREATED', changes: { create: true, update: false, publish: false, withdraw: false } },
-      { status: 'deferred', reason: 'PERIODS_NOT_VERIFIED', changes: { create: false, update: false, publish: false, withdraw: false } },
+      { status: 'deferred', reason: 'DETAIL_NOT_ATTESTED', changes: { create: false, update: false, publish: false, withdraw: false } },
     ]), {
       examined: 2, creations: 1, updates: 0, publications: 0,
       withdrawals: 0, deferred: 1, purgeCandidates: 0,
-      reasons: { SOURCE_CREATED: 1, PERIODS_NOT_VERIFIED: 1 },
+      reasons: { SOURCE_CREATED: 1, DETAIL_NOT_ATTESTED: 1 },
     });
     await assert.rejects(inspectExternalCleanupBatch(store, Array(101).fill(sourceId), start, 'dry-run'),
       /INVALID_CLEANUP_BATCH/);
@@ -371,7 +382,6 @@ describe('inactive DATAtourisme transactions on local Firestore', {
 
   it('serializes competing imports on the control document at 99', async () => {
     await db.doc(DATATOURISME_PILOT_CONTROL_PATH).set(counter(99));
-    const otherUuid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
     const results = await Promise.all([
       importOrSyncExternalTransaction(db, input()),
       importOrSyncExternalTransaction(db, input(otherUuid)),
