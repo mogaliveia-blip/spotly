@@ -23,18 +23,15 @@ describe('DATAtourisme Super Admin prototype', () => {
     assert.ok(DEMO_CANDIDATES.every((item) => item.decision !== 'rejete' || !!item.reason));
   });
 
-  it('renders unavailable production metrics and disabled future operations', () => {
+  it('renders a read-only analysis action and disabled future operations', () => {
     const html = renderToStaticMarkup(createElement(DatatourismeAdminPreview));
-    assert.match(html, /Maquette locale — données entièrement fictives/);
-    assert.match(html, /Événements disponibles/);
-    assert.match(html, /Dernière synchronisation/);
-    assert.match(html, /Aucune sélection réelle/);
-    assert.match(html, /Doublon possible/);
-    assert.match(html, /Motif de rejet/);
-    assert.match(html, /fin non renseignée/);
+    assert.match(html, /Analyse sans importation/);
+    assert.match(html, /Analyser les données/);
+    assert.match(html, /Département/);
+    assert.doesNotMatch(html, /événements examinés sur cette page/);
     assert.match(html, /Masquage global non disponible/);
     const buttons = html.match(/<button[^>]*>/g) ?? [];
-    assert.equal(buttons.filter((tag) => /\sdisabled=""/.test(tag)).length, 6);
+    assert.equal(buttons.filter((tag) => /\sdisabled=""/.test(tag)).length, 5);
   });
 
   it('uses the existing platform owner gate for the route and navigation', () => {

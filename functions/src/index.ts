@@ -7,6 +7,7 @@ import {
   onDocumentUpdated
 } from 'firebase-functions/v2/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import {
   CreateEventDraftError,
@@ -20,12 +21,14 @@ import { canVisitPrivateEvent } from './commercial-policy';
 import { markEventDeletionStartedTransaction } from './event-deletion';
 import { searchDiscovery as searchDiscoveryPublic } from './discovery-search';
 import { hasReservedDiscoveryKey, isRecord } from './discovery-search-contract';
+import { analyzeDatatourisme } from './datatourisme-analysis';
 
 const app = initializeApp();
 
 const db = getFirestore();
 const storageBucket = getStorage(app).bucket();
 const region = 'europe-west1';
+const datatourismeApiKey = defineSecret('DATATOURISME_API_KEY');
 const reviewDocument = 'events/{eventId}/pois/{poiId}/reviews/{reviewId}';
 const privateAccessTokenBytes = 32;
 const privateAccessGrantDurationMs = 30 * 24 * 60 * 60 * 1000;
@@ -305,6 +308,12 @@ export const searchDiscovery = onCall(
       throw new HttpsError('internal', 'DISCOVERY_SEARCH_FAILED', { reason: 'DISCOVERY_SEARCH_FAILED' });
     }
   }
+);
+
+/** Read-only Super Admin analysis; the API key and upstream calls stay in this Function. */
+export const analyzeDatatourismeData = onCall(
+  { region, cors: PRIVATE_ACCESS_CORS, timeoutSeconds: 15, secrets: [datatourismeApiKey], maxInstances: 2, concurrency: 1 },
+  async (request) => analyzeDatatourisme(db, request.auth?.uid, request.data, () => datatourismeApiKey.value())
 );
 
 export const createEventDraft = onCall(

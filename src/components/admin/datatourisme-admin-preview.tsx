@@ -1,152 +1,100 @@
 'use client';
 
 import React, { useState } from 'react';
-import { AlertCircle, Database, EyeOff, Info } from 'lucide-react';
+import { FirebaseError } from 'firebase/app';
+import { Database, EyeOff, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { PILOT_DEPARTMENTS, demoCandidatesForDepartments } from '@/lib/datatourisme-admin-demo';
-import type { DemoCandidate, PilotDepartment } from '@/lib/datatourisme-admin-demo';
+import { analyzeDatatourismeData } from '@/lib/datatourisme-analysis';
+import type { AnalysisCandidate, AnalysisResult } from '@/lib/datatourisme-analysis';
+import { PILOT_DEPARTMENTS } from '@/lib/datatourisme-admin-demo';
+import type { PilotDepartment } from '@/lib/datatourisme-admin-demo';
 
-const metrics = [
-  { label: 'Événements disponibles', detail: 'Analyse non connectée' },
-  { label: 'Événements sélectionnés', detail: 'Aucune sélection réelle' },
-  { label: 'Événements importés', detail: 'Importation non connectée' },
-  { label: 'Événements publiés', detail: 'Publication non connectée' },
-  { label: 'Dernière synchronisation', detail: 'Historique non connecté' },
-] as const;
+const qualityLabels = { acceptable: 'Acceptable', a_verifier: 'À vérifier', rejete: 'Rejeté' } as const;
+const positionLabels = {
+  source_coordinates: 'Coordonnées fournies par la source — précision à vérifier',
+  address_only: 'Adresse renseignée, sans coordonnées',
+  commune_only: 'Commune renseignée, sans position précise',
+  unknown: 'Localisation non renseignée',
+} as const;
 
-const futureActions = [
-  { label: 'Analyser les données', detail: 'Lire les candidats et leurs motifs de qualité.' },
-  { label: 'Sélectionner les événements', detail: 'Confirmer au plus 100 fiches bretonnes.' },
-  { label: 'Importer', detail: 'Créer les fiches privées, sans les publier.' },
-  { label: 'Publier dans Discovery', detail: 'Rendre visibles uniquement les fiches validées.' },
-  { label: 'Synchroniser', detail: 'Appliquer seulement les différences contrôlées.' },
-] as const;
-
-const positionLabels: Record<DemoCandidate['positionPrecision'], string> = {
-  source_gps: 'Coordonnées fournies par la source — précision à vérifier',
-  address_geocoded: 'Position géocodée depuis une adresse',
-  commune_center: 'Position approximative — centre de commune',
-};
-
-function dateLabel(day: string): string {
-  return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
-    .format(new Date(`${day}T12:00:00Z`));
+function errorMessage(error: unknown): string {
+  const code = error instanceof FirebaseError ? error.code : '';
+  if (code === 'functions/unauthenticated') return 'Connectez-vous pour analyser les données.';
+  if (code === 'functions/permission-denied') return 'Cette action est réservée au Super Admin.';
+  if (code === 'functions/invalid-argument') return 'Département ou page non valide.';
+  if (code === 'functions/not-found') return 'La fonction d’analyse n’est pas encore disponible.';
+  if (code === 'functions/failed-precondition') return 'La connexion DATAtourisme n’est pas encore configurée.';
+  if (code === 'functions/resource-exhausted') return 'Limite DATAtourisme atteinte. Réessayez plus tard.';
+  return 'Analyse indisponible pour le moment. Réessayez plus tard.';
 }
 
-function CandidateCard({ candidate }: { candidate: DemoCandidate }) {
-  const status = candidate.decision === 'retenu' ? 'Retenu dans l’exemple' :
-    candidate.decision === 'a_confirmer' ? 'À confirmer dans l’exemple' : 'Rejeté dans l’exemple';
-  return <article className="rounded-xl border bg-card p-4 shadow-sm" aria-label={candidate.title}>
+function CandidateCard({ candidate }: { candidate: AnalysisCandidate }) {
+  return <article className="rounded-xl border bg-card p-4 shadow-sm" aria-label={candidate.title ?? candidate.id}>
     <div className="flex flex-wrap items-start justify-between gap-2">
-      <div>
-        <h3 className="font-semibold leading-snug">{candidate.title}</h3>
-        <p className="mt-1 text-sm text-muted-foreground">{dateLabel(candidate.startDay)}{candidate.endDay ? '' : ' · fin non renseignée'} · {candidate.city} ({candidate.department})</p>
-      </div>
-      <Badge variant={candidate.decision === 'rejete' ? 'destructive' : candidate.decision === 'retenu' ? 'secondary' : 'outline'}>{status}</Badge>
+      <div><h3 className="font-semibold leading-snug">{candidate.title ?? 'Titre absent'}</h3>
+        <p className="mt-1 text-sm text-muted-foreground">{candidate.startDay ?? 'Date inconnue'}{candidate.endDay ? ` → ${candidate.endDay}` : ' · fin non renseignée'} · {candidate.city ?? 'Commune inconnue'} ({candidate.department ?? 'département inconnu'})</p></div>
+      <Badge variant={candidate.quality === 'rejete' ? 'destructive' : candidate.quality === 'acceptable' ? 'secondary' : 'outline'}>{qualityLabels[candidate.quality]}</Badge>
     </div>
-    <div className="mt-3 flex flex-wrap gap-2">
-      <Badge variant="outline">Exemple fictif</Badge>
-      <Badge variant="outline">{candidate.category}</Badge>
-      {candidate.possibleNativeDuplicate && <Badge variant="outline" className="border-amber-500 text-amber-900 dark:text-amber-200">Doublon possible</Badge>}
-    </div>
+    <div className="mt-3 flex flex-wrap gap-2"><Badge variant="outline">{candidate.category ?? 'Catégorie inconnue'}</Badge>
+      {candidate.subcategory && <Badge variant="outline">{candidate.subcategory}</Badge>}
+      {candidate.possibleDuplicate && <Badge variant="outline">Doublon possible</Badge>}</div>
     <dl className="mt-3 space-y-1 text-sm">
-      <div><dt className="inline font-medium">Producteur : </dt><dd className="inline">{candidate.producer}</dd></div>
-      <div><dt className="inline font-medium">Provenance : </dt><dd className="inline">{candidate.provenance}</dd></div>
-      <div><dt className="inline font-medium">Localisation : </dt><dd className="inline">{positionLabels[candidate.positionPrecision]}</dd></div>
+      <div><dt className="inline font-medium">Identifiant source : </dt><dd className="inline">{candidate.id}</dd></div>
+      <div><dt className="inline font-medium">Description : </dt><dd className="inline">{candidate.description ?? 'Non renseignée'}</dd></div>
+      <div><dt className="inline font-medium">Producteur : </dt><dd className="inline">{candidate.producer ?? 'Non renseigné'}</dd></div>
+      <div><dt className="inline font-medium">Provenance : </dt><dd className="inline">{candidate.provenance ?? 'Non renseignée'}</dd></div>
+      <div><dt className="inline font-medium">Localisation : </dt><dd className="inline">{positionLabels[candidate.positionPrecision]}{candidate.location ? ` (${candidate.location.lat}, ${candidate.location.lng})` : ''}</dd></div>
+      <div><dt className="inline font-medium">Mise à jour : </dt><dd className="inline">{candidate.updatedAt ?? 'Non renseignée'}</dd></div>
+      {candidate.sourceUrl && <div><dt className="inline font-medium">Source : </dt><dd className="inline"><a className="underline" href={candidate.sourceUrl} target="_blank" rel="noopener noreferrer">Voir la fiche source</a></dd></div>}
     </dl>
-    {candidate.reason && <p className="mt-3 rounded-lg bg-muted/60 p-2 text-sm"><span className="font-medium">{candidate.decision === 'rejete' ? 'Motif de rejet' : 'Point de contrôle'} : </span>{candidate.reason}</p>}
+    {candidate.reasons.length > 0 && <p className="mt-3 rounded-lg bg-muted/60 p-2 text-sm"><span className="font-medium">{candidate.quality === 'rejete' ? 'Motif de rejet' : 'Points de contrôle'} : </span>{candidate.reasons.join(' ')}</p>}
   </article>;
 }
 
 export function DatatourismeAdminPreview() {
-  const [departments, setDepartments] = useState<PilotDepartment[]>(PILOT_DEPARTMENTS.map((item) => item.code));
-  const candidates = demoCandidatesForDepartments(departments);
+  const [department, setDepartment] = useState<PilotDepartment>('22');
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const toggleDepartment = (code: PilotDepartment, selected: boolean) => {
-    setDepartments((current) => selected ? [...current, code] : current.filter((item) => item !== code));
+  const analyze = async (page = 1) => {
+    setLoading(true);
+    setError(null);
+    if (page === 1) setResult(null);
+    try { setResult(await analyzeDatatourismeData(department, page)); }
+    catch (caught) { setError(errorMessage(caught)); }
+    finally { setLoading(false); }
   };
 
-  return <div className="h-full overflow-y-auto p-4 sm:p-6">
-    <div className="mx-auto max-w-6xl space-y-6 pb-10">
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-primary"><Database className="h-5 w-5" aria-hidden="true" /><span className="text-sm font-semibold">Administration des sources externes</span></div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">DATAtourisme</h1>
-        <p className="text-muted-foreground">Préparation du pilote Bretagne depuis l’espace Super Admin.</p>
-      </div>
+  const changeDepartment = (value: PilotDepartment) => {
+    setDepartment(value);
+    setResult(null);
+    setError(null);
+  };
 
-      <Alert className="border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-        <Info className="h-4 w-4" aria-hidden="true" />
-        <AlertTitle>Maquette locale — données entièrement fictives</AlertTitle>
-        <AlertDescription>Aucune analyse DATAtourisme, importation, publication ou synchronisation n’est connectée. Les chiffres de production sont indisponibles.</AlertDescription>
-      </Alert>
-
-      <section aria-labelledby="pilot-scope-heading">
-        <Card>
-          <CardHeader>
-            <CardTitle id="pilot-scope-heading">Périmètre du pilote</CardTitle>
-            <CardDescription>Région Bretagne · plafond de 100 événements. Les cases filtrent seulement l’aperçu fictif de cette page.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2"><span className="text-sm font-medium">Région</span><Badge variant="secondary">Bretagne</Badge><Badge variant="outline">100 événements maximum</Badge></div>
-            <fieldset>
-              <legend className="mb-2 text-sm font-medium">Départements de l’aperçu</legend>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {PILOT_DEPARTMENTS.map(({ code, name }) => <div key={code} className="flex items-center gap-2 rounded-lg border p-3">
-                  <Checkbox id={`department-${code}`} checked={departments.includes(code)} onCheckedChange={(checked) => toggleDepartment(code, checked === true)} />
-                  <Label htmlFor={`department-${code}`} className="cursor-pointer">{code} — {name}</Label>
-                </div>)}
-              </div>
-            </fieldset>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section aria-labelledby="pilot-dashboard-heading" className="space-y-3">
-        <h2 id="pilot-dashboard-heading" className="text-xl font-semibold">Tableau de bord</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {metrics.map((metric) => <Card key={metric.label} className="rounded-xl">
-            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">{metric.label}</CardTitle></CardHeader>
-            <CardContent><p className="text-2xl font-semibold" aria-label={`${metric.label} : indisponible`}>—</p><p className="text-xs text-muted-foreground">{metric.detail}</p></CardContent>
-          </Card>)}
-        </div>
-      </section>
-
-      <section aria-labelledby="pilot-candidates-heading" className="space-y-3">
-        <div>
-          <h2 id="pilot-candidates-heading" className="text-xl font-semibold">Qualité des candidats</h2>
-          <p className="text-sm text-muted-foreground">{candidates.length} exemple{candidates.length > 1 ? 's' : ''} fictif{candidates.length > 1 ? 's' : ''} affiché{candidates.length > 1 ? 's' : ''} après filtre local. Aucun choix n’est enregistré.</p>
-        </div>
-        {candidates.length ? <div className="grid gap-3 lg:grid-cols-2">{candidates.map((candidate) => <CandidateCard key={candidate.id} candidate={candidate} />)}</div> :
-          <p className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">Sélectionnez un département pour voir les exemples fictifs.</p>}
-      </section>
-
-      <section aria-labelledby="pilot-actions-heading">
-        <Card>
-          <CardHeader>
-            <CardTitle id="pilot-actions-heading">Opérations futures</CardTitle>
-            <CardDescription>Chaque opération sera indépendante et contrôlée côté serveur. Aucun bouton ci-dessous n’est actif.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {futureActions.map((action, index) => <div key={action.label} className="flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div><p className="font-medium">{index + 1}. {action.label}</p><p className="text-sm text-muted-foreground">{action.detail}</p></div>
-              <Button type="button" variant="outline" disabled className="shrink-0">{action.label}</Button>
-            </div>)}
-            <div className="flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div><p className="flex items-center gap-2 font-medium"><EyeOff className="h-4 w-4" aria-hidden="true" />6. Masquer les événements externes dans Discovery</p>
-                <p className="text-sm text-muted-foreground">Interrupteur global futur, sans suppression systématique des fiches. Non disponible.</p></div>
-              <Switch disabled checked={false} aria-label="Masquage global non disponible" />
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      <p className="flex items-start gap-2 text-xs text-muted-foreground"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />L’accès visuel réservé au Super Admin ne remplace pas les contrôles d’authentification et de rôle requis dans les futures opérations serveur.</p>
-    </div>
-  </div>;
+  return <div className="h-full overflow-y-auto p-4 sm:p-6"><div className="mx-auto max-w-6xl space-y-6 pb-10">
+    <div className="space-y-2"><div className="flex items-center gap-2 text-primary"><Database className="h-5 w-5" aria-hidden="true" /><span className="text-sm font-semibold">Administration des sources externes</span></div>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">DATAtourisme</h1><p className="text-muted-foreground">Analyse en lecture seule des événements du pilote Bretagne.</p></div>
+    <Alert className="border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100"><Info className="h-4 w-4" aria-hidden="true" /><AlertTitle>Analyse sans importation</AlertTitle>
+      <AlertDescription>Les résultats sont consultatifs. Aucune fiche n’est importée ni publiée. Les doublons signalés concernent seulement la page examinée.</AlertDescription></Alert>
+    <Card><CardHeader><CardTitle>Périmètre du pilote</CardTitle><CardDescription>Choisissez un département. Chaque analyse examine au plus 25 fiches sur une page ; cinq pages au maximum. Le plafond de 100 événements concerne le futur pilote d’importation.</CardDescription></CardHeader>
+      <CardContent className="flex flex-wrap items-end gap-3"><div className="space-y-1"><label htmlFor="datatourisme-department" className="text-sm font-medium">Département</label>
+        <select id="datatourisme-department" className="flex h-10 rounded-md border bg-background px-3 text-sm" value={department} disabled={loading} onChange={(event) => changeDepartment(event.target.value as PilotDepartment)}>
+          {PILOT_DEPARTMENTS.map((item) => <option key={item.code} value={item.code}>{item.code} — {item.name}</option>)}</select></div>
+        <Button type="button" disabled={loading} onClick={() => void analyze()}>{loading ? 'Analyse en cours…' : 'Analyser les données'}</Button></CardContent></Card>
+    {error && <Alert variant="destructive" role="alert"><AlertTitle>Analyse impossible</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+    {result && <section aria-label="Résultats de l’analyse" className="space-y-3"><div><h2 className="text-xl font-semibold">Qualité des candidats</h2>
+      <p className="text-sm text-muted-foreground">Département {result.meta.department} · page {result.meta.page} · {result.meta.examinedCount} événements examinés sur cette page · {result.meta.apiTotal} annoncés par l’API pour ce département. Aucun résultat n’est conservé.</p></div>
+      <div className="grid gap-3 lg:grid-cols-2">{result.candidates.map((candidate, index) => <CandidateCard key={`${candidate.id}-${index}`} candidate={candidate} />)}</div>
+      {!result.candidates.length && <p className="rounded-xl border p-5 text-sm text-muted-foreground">Aucun événement sur cette page.</p>}
+      {result.meta.hasNextPage && <Button type="button" variant="outline" disabled={loading} onClick={() => void analyze(result.meta.page + 1)}>Page suivante</Button>}</section>}
+    <Card><CardHeader><CardTitle>Opérations futures</CardTitle><CardDescription>Ces actions restent désactivées.</CardDescription></CardHeader><CardContent className="space-y-3">
+      {['Sélectionner les événements', 'Importer', 'Publier dans Discovery', 'Synchroniser'].map((action) => <div key={action} className="flex items-center justify-between gap-3 rounded-xl border p-3"><span className="font-medium">{action}</span><Button type="button" variant="outline" disabled>{action}</Button></div>)}
+      <div className="flex items-center justify-between gap-3 rounded-xl border p-3"><span className="flex items-center gap-2 font-medium"><EyeOff className="h-4 w-4" />Masquer les événements externes dans Discovery</span><Switch disabled checked={false} aria-label="Masquage global non disponible" /></div>
+    </CardContent></Card>
+  </div></div>;
 }
