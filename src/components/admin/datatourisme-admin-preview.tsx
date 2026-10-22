@@ -12,6 +12,7 @@ import { analyzeDatatourismeData } from '@/lib/datatourisme-analysis';
 import type { AnalysisCandidate, AnalysisResult } from '@/lib/datatourisme-analysis';
 import { PILOT_DEPARTMENTS } from '@/lib/datatourisme-admin-demo';
 import type { PilotDepartment } from '@/lib/datatourisme-admin-demo';
+import { classifyDatatourisme } from '@/lib/datatourisme-classification';
 import { discoveryCategories } from '@/lib/event-discovery';
 import type { DiscoveryCategoryId } from '@/lib/event-discovery';
 import {
@@ -63,6 +64,8 @@ function CandidateCard({
 }: CandidateCardProps) {
   const usableId = hasUsableSourceId(candidate);
   const editorialCandidate = selected?.candidate ?? candidate;
+  const proposal = classifyDatatourisme(editorialCandidate);
+  const proposedCategory = discoveryCategories.find((item) => item.id === proposal.categoryId)?.label ?? null;
   const requiresConfirmation = needsEditorialConfirmation(editorialCandidate);
   const reviewKey = rejectionReviewKey(candidate, examinedDepartment);
   return <article className="rounded-xl border bg-card p-4 shadow-sm" aria-label={candidate.title ?? candidate.id}>
@@ -78,6 +81,10 @@ function CandidateCard({
     <dl className="mt-3 space-y-1 text-sm">
       <div><dt className="inline font-medium">Identifiant source : </dt><dd className="inline">{candidate.id}</dd></div>
       <div><dt className="inline font-medium">Catégorie DATAtourisme d’origine : </dt><dd className="inline">{candidate.category ?? 'Non renseignée'}{candidate.subcategory ? ` · ${candidate.subcategory}` : ''}</dd></div>
+      {candidate.sourceTypes && <div><dt className="inline font-medium">Tous les types source : </dt><dd className="inline">{candidate.sourceTypes.map((term) => term.label ?? term.key).join(', ') || 'Non renseignés'}</dd></div>}
+      {candidate.sourceThemes && <div><dt className="inline font-medium">Thèmes source : </dt><dd className="inline">{candidate.sourceThemes.map((term) => term.label ?? term.key).join(', ') || 'Non renseignés'}</dd></div>}
+      <div><dt className="inline font-medium">Catégorie Discovery proposée automatiquement : </dt><dd className="inline">{proposedCategory ?? 'Aucune proposition fiable'}</dd></div>
+      <div><dt className="inline font-medium">Type éditorial identifié : </dt><dd className="inline">{proposal.editorialType ?? 'À préciser'}</dd></div>
       <div><dt className="inline font-medium">Début : </dt><dd className="inline">{candidate.startDay ?? 'Non renseigné'}</dd><dt className="inline font-medium"> · Fin : </dt><dd className="inline">{candidate.endDay ?? 'Non renseignée'}</dd></div>
       <div><dt className="inline font-medium">Commune : </dt><dd className="inline">{candidate.city ?? 'Non renseignée'} · département source {candidate.department ?? 'inconnu'}</dd></div>
       <div><dt className="inline font-medium">Description : </dt><dd className="inline">{candidate.description ?? 'Non renseignée'}</dd></div>
@@ -88,10 +95,11 @@ function CandidateCard({
       {candidate.sourceUrl && <div><dt className="inline font-medium">Source : </dt><dd className="inline"><a className="underline" href={candidate.sourceUrl} target="_blank" rel="noopener noreferrer">Voir la fiche source</a></dd></div>}
     </dl>
     {candidate.reasons.length > 0 && <p className="mt-3 rounded-lg bg-muted/60 p-2 text-sm"><span className="font-medium">{candidate.quality === 'rejete' ? 'Motif de rejet' : 'Points de contrôle'} : </span>{candidate.reasons.join(' ')}</p>}
+    {proposal.needsReview && <p className="mt-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100"><span className="font-medium">Classification à vérifier : </span>{proposal.reason}</p>}
     {hasTechnicalCategory(candidate) && <p className="mt-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">Libellé source générique : l’analyse ne restitue qu’une catégorie. Consulter la fiche source, si disponible, pour examiner les autres types et informations avant de choisir une catégorie Discovery. Aucune correspondance automatique.</p>}
     {selected && selected.candidate !== candidate && <p className="mt-3 text-sm text-muted-foreground">Cet identifiant est déjà sélectionné depuis le département {selected.examinedDepartment}. Le récapitulatif conserve la première fiche examinée.</p>}
     {selected ? <div className="mt-3 space-y-2">
-      <label className="block text-sm font-medium">Catégorie Discovery envisagée · choix manuel
+      <label className="block text-sm font-medium">{selected.categoryManuallySet ? 'Catégorie Discovery retenue · choix du Super Admin' : proposal.categoryId ? 'Catégorie Discovery retenue · proposition modifiable' : 'Catégorie Discovery à choisir manuellement'}
         <select className="mt-1 flex h-10 w-full rounded-md border bg-background px-3 text-sm" value={selected.categoryId ?? ''}
           onChange={(event) => onCategoryChange(candidate.id, event.target.value ? event.target.value as DiscoveryCategoryId : null)}>
           <option value="">À déterminer</option>
@@ -101,7 +109,7 @@ function CandidateCard({
       {editorialCandidate.quality !== 'rejete' && requiresConfirmation && <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={selected.confirmed}
         onChange={(event) => onConfirm(candidate.id, event.target.checked)} />Je confirme cette fiche après vérification éditoriale des points signalés.</label>}
       <p className="text-sm text-muted-foreground">{editorialCandidate.quality === 'rejete' ? 'Motifs réexaminés : cette fiche reste rejetée et ne sera pas considérée comme prête.' : isReadyForFuturePreparation(selected) ? 'Préparation éditoriale complète pour une étape future ; aucune importation.' : 'Sélection à compléter avant une étape future ; aucune importation.'}</p>
-    </div> : <p className="mt-3 text-sm text-muted-foreground">Catégorie Discovery envisagée : à déterminer manuellement après sélection.</p>}
+    </div> : <p className="mt-3 text-sm text-muted-foreground">La catégorie proposée peut être corrigée après sélection ; aucune importation.</p>}
     {!selected && candidate.quality === 'rejete' && usableId && <label className="mt-3 flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={rejectionReviewed}
       onChange={(event) => onReviewRejected(reviewKey, event.target.checked)} />J’ai réexaminé les motifs de rejet ci-dessus. Je conserve cette fiche uniquement pour suivi éditorial.</label>}
     {!usableId && <p className="mt-3 text-sm text-destructive">Identifiant source absent : sélection impossible.</p>}

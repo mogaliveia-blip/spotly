@@ -85,6 +85,8 @@ describe('DATAtourisme read-only analysis', () => {
     assert.equal(result.candidates[0].description, 'Une fête locale.');
     assert.equal(result.candidates[0].category, 'Festival');
     assert.equal(result.candidates[0].subcategory, 'Musique');
+    assert.deepEqual(result.candidates[0].sourceTypes, [{ key: 'festival', label: 'Festival' }]);
+    assert.deepEqual(result.candidates[0].sourceThemes, [{ key: 'music', label: 'Musique' }]);
     assert.equal(result.candidates[0].endDay, null);
     assert.equal(result.candidates[0].producer, 'Office de tourisme');
     assert.equal(result.candidates[0].provenance, 'Destination Bretagne');
@@ -98,9 +100,35 @@ describe('DATAtourisme read-only analysis', () => {
     assert.equal(new URL(calls[0].url).searchParams.get('page_size'), '25');
     assert.equal(new URL(calls[0].url).searchParams.get('department'), '22');
     const fields = new URL(calls[0].url).searchParams.get('fields').split(',');
-    for (const field of ['label', 'hasDescription', 'takesPlaceAt', 'isLocatedAt.address', 'isLocatedAt.geo', 'hasBeenCreatedBy.legalName', 'hasBeenPublishedBy.legalName', 'uuid']) {
+    for (const field of ['label', 'type', 'hasTheme', 'hasDescription', 'takesPlaceAt', 'isLocatedAt.address', 'isLocatedAt.geo', 'hasBeenCreatedBy.legalName', 'hasBeenPublishedBy.legalName', 'uuid']) {
       assert.ok(fields.includes(field), `${field} must be requested explicitly`);
     }
+  });
+
+  it('keeps every usable type and theme while preserving the first legacy labels', async () => {
+    const mixed = { ...source,
+      type: [
+        { key: 'Product', label: { '@fr': 'Product' } },
+        { uri: 'https://example.org/ontology/Concert', label: { '@fr': 'Concert' } },
+        { key: 'MusicEvent', label: { '@fr': 'Musique' } },
+        { key: 'MusicEvent', label: { '@fr': 'Musique' } },
+        {}
+      ],
+      hasTheme: [{ key: 'Culture', label: { '@fr': 'Culture' } }, { key: 'Cinema', label: { '@fr': 'Cinéma' } }]
+    };
+    const result = await analyzeDatatourisme(fakeDb().db, 'owner-1', request, () => 'test-only-key', fakeFetch([mixed]).fetcher, now);
+    assert.equal(result.candidates[0].category, 'Product');
+    assert.equal(result.candidates[0].subcategory, 'Culture');
+    assert.deepEqual(result.candidates[0].sourceTypes, [
+      { key: 'Product', label: 'Product' }, { key: 'Concert', label: 'Concert' }, { key: 'MusicEvent', label: 'Musique' }
+    ]);
+    assert.deepEqual(result.candidates[0].sourceThemes, [
+      { key: 'Culture', label: 'Culture' }, { key: 'Cinema', label: 'Cinéma' }
+    ]);
+    const incomplete = await analyzeDatatourisme(fakeDb().db, 'owner-1', request, () => 'test-only-key',
+      fakeFetch([{ ...source, type: null, hasTheme: null }]).fetcher, now);
+    assert.deepEqual(incomplete.candidates[0].sourceTypes, []);
+    assert.deepEqual(incomplete.candidates[0].sourceThemes, []);
   });
 
   it('selects a matching department and coordinates among multiple locations', async () => {

@@ -10,6 +10,7 @@ const MAX_RESPONSE_BYTES = 2_000_000;
 type Department = typeof DEPARTMENTS[number];
 type RecordValue = Record<string, unknown>;
 type Quality = 'acceptable' | 'a_verifier' | 'rejete';
+type SourceTerm = { key: string | null; label: string | null };
 
 export type AnalysisCandidate = {
   id: string;
@@ -21,6 +22,8 @@ export type AnalysisCandidate = {
   department: string | null;
   category: string | null;
   subcategory: string | null;
+  sourceTypes: SourceTerm[];
+  sourceThemes: SourceTerm[];
   producer: string | null;
   provenance: string | null;
   location: { lat: number; lng: number } | null;
@@ -62,6 +65,22 @@ function label(value: unknown): string | null {
 function frenchLabel(value: unknown): string | null {
   const data = record(value);
   return string(data['@fr']) ?? string(data.fr);
+}
+
+function sourceTerms(value: unknown): SourceTerm[] {
+  const items = Array.isArray(value) ? value : value == null ? [] : [value];
+  const seen = new Set<string>();
+  return items.map((item) => {
+    const data = record(item);
+    const uri = string(data.uri, 500);
+    const key = string(data.key, 100) ?? (uri ? string(uri.split(/[\/#]/).pop(), 100) : null);
+    return { key, label: label(data.label) ?? (typeof item === 'string' ? label(item) : null) ?? key };
+  }).filter((term) => {
+    const identity = term.key ?? term.label;
+    if (!identity || seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
 }
 
 function departmentOf(address: RecordValue): string | null {
@@ -116,6 +135,8 @@ function normalizeCandidate(raw: unknown, requestedDepartment: Department, today
   const publisherData = record(first(poi.hasBeenPublishedBy));
   const type = record(first(poi.type));
   const theme = record(first(poi.hasTheme));
+  const sourceTypes = sourceTerms(poi.type);
+  const sourceThemes = sourceTerms(poi.hasTheme);
   const reasons: string[] = [];
   let quality: Quality = 'acceptable';
   const reject = (reason: string) => { quality = 'rejete'; reasons.push(reason); };
@@ -145,6 +166,7 @@ function normalizeCandidate(raw: unknown, requestedDepartment: Department, today
     title, description, startDay, endDay, city, department,
     category,
     subcategory: label(theme.label) ?? label(first(poi.hasTheme)), producer,
+    sourceTypes, sourceThemes,
     provenance: string(publisherData.legalName) ?? string(publisherData.identifier) ?? 'DATAtourisme',
     location,
     positionPrecision: location ? 'source_coordinates' : string(address.streetAddress) ? 'address_only' : city ? 'commune_only' : 'unknown',

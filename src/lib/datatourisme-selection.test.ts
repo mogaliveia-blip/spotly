@@ -77,4 +77,26 @@ describe('temporary DATAtourisme editorial selection', () => {
     selection = reduce(selection, { type: 'confirm', id: generic.id, confirmed: true });
     assert.equal(isReadyForFuturePreparation(selection.get(generic.id)!), true);
   });
+
+  it('prefills a proposal, keeps a manual correction across duplicate pages and confirms legacy data', () => {
+    const enriched = candidate('source-music', { category: 'Product', sourceTypes: [
+      { key: 'Product', label: 'Product' }, { key: 'Concert', label: 'Concert' }
+    ], sourceThemes: [] });
+    let selection = add(new Map(), enriched, '22');
+    assert.equal(selection.get(enriched.id)?.categoryId, 'music');
+    assert.equal(selection.get(enriched.id)?.categoryManuallySet, false);
+    assert.equal(isReadyForFuturePreparation(selection.get(enriched.id)!), true);
+    selection = reduce(selection, { type: 'category', id: enriched.id, categoryId: 'culture' });
+    assert.equal(selection.get(enriched.id)?.categoryManuallySet, true);
+    assert.equal(add(selection, candidate(enriched.id, { category: 'Market' }), '29'), selection);
+    assert.equal(selection.get(enriched.id)?.categoryId, 'culture');
+    assert.equal(selection.get(enriched.id)?.examinedDepartment, '22');
+
+    const legacy = candidate('source-legacy', { category: 'Concert' });
+    selection = add(selection, legacy, '56');
+    assert.equal(selection.get(legacy.id)?.categoryId, 'music');
+    assert.equal(isReadyForFuturePreparation(selection.get(legacy.id)!), false);
+    selection = reduce(selection, { type: 'confirm', id: legacy.id, confirmed: true });
+    assert.equal(isReadyForFuturePreparation(selection.get(legacy.id)!), true);
+  });
 });

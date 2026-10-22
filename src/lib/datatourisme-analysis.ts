@@ -2,6 +2,8 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import type { PilotDepartment } from './datatourisme-admin-demo';
 
+export type SourceTerm = { key: string | null; label: string | null };
+
 export type AnalysisCandidate = {
   id: string;
   title: string | null;
@@ -12,6 +14,9 @@ export type AnalysisCandidate = {
   department: string | null;
   category: string | null;
   subcategory: string | null;
+  // Optional until the enriched Function contract is deployed.
+  sourceTypes?: SourceTerm[];
+  sourceThemes?: SourceTerm[];
   producer: string | null;
   provenance: string | null;
   location: { lat: number; lng: number } | null;

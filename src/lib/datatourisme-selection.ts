@@ -1,5 +1,6 @@
 import type { AnalysisCandidate } from './datatourisme-analysis';
 import type { PilotDepartment } from './datatourisme-admin-demo';
+import { classifyDatatourisme } from './datatourisme-classification';
 import { discoveryCategories, isCatalogId } from './event-discovery';
 import type { DiscoveryCategoryId } from './event-discovery';
 
@@ -9,6 +10,7 @@ export type SelectedCandidate = {
   candidate: AnalysisCandidate;
   examinedDepartment: PilotDepartment;
   categoryId: DiscoveryCategoryId | null;
+  categoryManuallySet: boolean;
   confirmed: boolean;
 };
 
@@ -24,11 +26,11 @@ export function hasUsableSourceId(candidate: AnalysisCandidate): boolean {
 }
 
 export function hasTechnicalCategory(candidate: AnalysisCandidate): boolean {
-  return ['product', 'traineeship', 'pointofinterest'].includes(candidate.category?.trim().toLowerCase() ?? '');
+  return !candidate.sourceTypes && ['product', 'traineeship', 'pointofinterest'].includes(candidate.category?.trim().toLowerCase() ?? '');
 }
 
 export function needsEditorialConfirmation(candidate: AnalysisCandidate): boolean {
-  return candidate.quality === 'a_verifier' || candidate.possibleDuplicate || hasTechnicalCategory(candidate);
+  return candidate.quality === 'a_verifier' || candidate.possibleDuplicate || classifyDatatourisme(candidate).needsReview;
 }
 
 export function isReadyForFuturePreparation(entry: SelectedCandidate): boolean {
@@ -44,7 +46,8 @@ export function datatourismeSelectionReducer(
         !hasUsableSourceId(action.candidate) ||
         (action.candidate.quality === 'rejete' && !action.rejectionReviewed)) return selection;
     return new Map(selection).set(action.candidate.id, {
-      candidate: action.candidate, examinedDepartment: action.department, categoryId: null, confirmed: false
+      candidate: action.candidate, examinedDepartment: action.department,
+      categoryId: classifyDatatourisme(action.candidate).categoryId, categoryManuallySet: false, confirmed: false
     });
   }
   if (!selection.has(action.id)) return selection;
@@ -55,7 +58,7 @@ export function datatourismeSelectionReducer(
     const entry = selection.get(action.id)!;
     if (action.type === 'category') {
       if (action.categoryId !== null && !isCatalogId(discoveryCategories, action.categoryId)) return selection;
-      next.set(action.id, { ...entry, categoryId: action.categoryId });
+      next.set(action.id, { ...entry, categoryId: action.categoryId, categoryManuallySet: true });
     } else {
       if (entry.candidate.quality === 'rejete' || !needsEditorialConfirmation(entry.candidate)) return selection;
       next.set(action.id, { ...entry, confirmed: action.confirmed });
