@@ -150,6 +150,10 @@ export type PrepareInput = {
   timezone: string;
   now: Date;
   manualCategory?: DiscoveryCategoryId;
+  /** Existing sources may be refreshed after expiry so their public projection can be withdrawn. */
+  allowExpired?: boolean;
+  /** Existing sources may retain complete periods even when the public pilot cannot represent them. */
+  allowMultipleForSync?: boolean;
 };
 export type PreparedCandidate = { kind: 'accepted'; event: ExternalEvent } | { kind: 'rejected'; reasons: string[] };
 
@@ -167,10 +171,11 @@ export function prepareDatatourismeCandidate(input: PrepareInput): PreparedCandi
   const periods = poi.takesPlaceAt;
   const assessment = assessDatatourismePeriods(periods, input.timezone, input.now);
   const normalized = normalizeDatatourismePeriods(periods, input.timezone);
-  if (!Array.isArray(periods) || periods.length !== 1) reasons.push('PERIOD_COUNT_UNSUPPORTED');
+  if (!Array.isArray(periods) || !periods.length ||
+      (periods.length !== 1 && !input.allowMultipleForSync)) reasons.push('PERIOD_COUNT_UNSUPPORTED');
   if (!normalized) reasons.push('PERIOD_INVALID');
   if (assessment.openEndedCount || normalized?.some((period) => period.timePrecision === 'date' ? !period.endDay : !period.endAt)) reasons.push('PERIOD_END_MISSING');
-  if (assessment.definitivelyExpired) reasons.push('EXPIRED');
+  if (assessment.definitivelyExpired && !input.allowExpired) reasons.push('EXPIRED');
   if (assessment.timing === 'indeterminate') reasons.push('PERIOD_UNCERTAIN');
 
   const title = localized(poi.label);
