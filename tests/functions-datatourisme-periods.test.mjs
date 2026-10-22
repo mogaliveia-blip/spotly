@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import periods from '../functions/lib/datatourisme-periods.js';
 
-const { assessDatatourismePeriods } = periods;
+const { assessDatatourismePeriods, normalizeDatatourismePeriods, definitiveExpirationAt } = periods;
 const at = (value) => new Date(value);
 const period = (startDate, endDate) => ({ startDate, ...(endDate === undefined ? {} : { endDate }) });
 
@@ -76,5 +76,16 @@ describe('DATAtourisme external periods', () => {
       assert.equal(assessDatatourismePeriods([bad], 'Europe/Paris', now).definitivelyExpired, false);
     }
     assert.equal(assessDatatourismePeriods([period('2026-10-20', '2026-10-20')], 'not/a-zone', now).definitivelyExpired, false);
+  });
+
+  it('retains every source period and withholds a final expiry for unresolved ends', () => {
+    const normalized = normalizeDatatourismePeriods([
+      period('2026-10-20', '2026-10-20'), period('2026-10-25', '2026-10-25'),
+    ], 'Europe/Paris');
+    assert.equal(normalized.length, 2);
+    assert.equal(definitiveExpirationAt(normalized, 'Europe/Paris'), '2026-10-25T23:00:00.000Z');
+    assert.equal(definitiveExpirationAt(normalizeDatatourismePeriods([period('2026-10-25')], 'Europe/Paris'), 'Europe/Paris'), null);
+    assert.equal(normalizeDatatourismePeriods([period('2026-10-25', '2026-10-25'), period('2026-10-27', '2026-10-26')], 'Europe/Paris'), null);
+    assert.equal(definitiveExpirationAt([{ timePrecision: 'date', startDay: '2026-10-27', endDay: '2026-10-26' }], 'Europe/Paris'), null);
   });
 });
