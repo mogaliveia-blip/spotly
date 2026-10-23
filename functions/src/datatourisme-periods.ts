@@ -13,11 +13,56 @@ export type ExternalPeriodsAssessment = {
   activePrecision: 'date' | 'datetime' | null;
 };
 
-type ParsedPeriod = { precision: 'date' | 'datetime'; start: string | number; end: string | number | null };
-const PERIOD_FIELDS = new Set(['startDate', 'endDate', 'type', '@type']);
+type ParsedPeriod = { precision: 'date' | 'datetime'; start: string | number; end: string | number | null; startTime?: string };
+const PERIOD_FIELDS = new Set(['startDate', 'endDate', 'startTime', 'endTime', 'type', '@type']);
 export type NormalizedExternalPeriod =
-  | { timePrecision: 'date'; startDay: string; endDay: string | null }
+  | { timePrecision: 'date'; startDay: string; endDay: string | null; startTime?: string }
   | { timePrecision: 'datetime'; startAt: string; endAt: string | null };
+
+function clock(value: unknown): string | null {
+  if (typeof value !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(value)) return null;
+  return value.endsWith(':00') ? value.slice(0, 5) : value;
+}
+
+/** A local clock is usable only when it identifies exactly one instant in the supplied zone. */
+function localInstants(day: string, time: string, timezone: string): number[] {
+  const [year, month, date] = day.split('-').map(Number);
+  const [hour, minute, second = 0] = time.split(':').map(Number);
+  const wall = Date.UTC(year, month - 1, date, hour, minute, second);
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  });
+  const parts = (instant: number) => Object.fromEntries(formatter.formatToParts(instant)
+    .filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
+  const offsets = new Set<number>();
+  for (const delta of [-12, 0, 12, 24]) {
+    const probe = wall + delta * 3_600_000;
+    const local = parts(probe);
+    offsets.add(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second) - probe);
+  }
+  return [...offsets].map((offset) => wall - offset).filter((instant) => {
+    const local = parts(instant);
+    return local.year === year && local.month === month && local.day === date &&
+      local.hour === hour && local.minute === minute && local.second === second;
+  });
+}
+
+function clockIssue(raw: Record<string, unknown>, timezone: string): string | null {
+  const hasStart = raw.startTime !== undefined && raw.startTime !== null && raw.startTime !== '';
+  const hasEnd = raw.endTime !== undefined && raw.endTime !== null && raw.endTime !== '';
+  if (!hasStart && !hasEnd) return null;
+  if (!hasStart) return 'PERIOD_TIME_START_MISSING';
+  const start = clock(raw.startTime);
+  const end = hasEnd ? clock(raw.endTime) : null;
+  if (!start || (hasEnd && !end) || !isCalendarDay(raw.startDate) || !isCalendarDay(raw.endDate)) return 'PERIOD_TIME_UNSUPPORTED';
+  const starts = localInstants(raw.startDate as string, start, timezone);
+  const ends = end ? localInstants(raw.endDate as string, end, timezone) : [];
+  if (starts.length > 1 || ends.length > 1) return 'PERIOD_TIME_AMBIGUOUS';
+  if (starts.length !== 1 || (end && ends.length !== 1)) return 'PERIOD_TIME_INVALID';
+  if (end && ends[0] <= starts[0]) return 'PERIOD_TIME_ORDER_INVALID';
+  return null;
+}
 
 function exactInstant(value: string): number | null {
   const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/.exec(value);
@@ -46,7 +91,6 @@ function periodType(value: unknown): 'limited' | 'recurrent' | 'unknown' {
 
 function unsupportedPeriodReason(value: Record<string, unknown>): string | null {
   if ('appliesOnDay' in value || 'weekOfMonth' in value) return 'PERIOD_RECURRENT_UNSUPPORTED';
-  if ('startTime' in value || 'endTime' in value) return 'PERIOD_TIME_UNSUPPORTED';
   if (Object.keys(value).some((key) => !PERIOD_FIELDS.has(key))) return 'PERIOD_FIELD_UNSUPPORTED';
   for (const key of ['type', '@type']) {
     if (key in value) {
@@ -72,8 +116,16 @@ function parsePeriod(value: unknown, timezone: string): ParsedPeriod | null {
     // A skipped civil day cannot be turned into a valid event instant.
     if (!calendarDaySegments(startDate, timezone).length ||
         (end !== null && !calendarDaySegments(end, timezone).length)) return null;
-    return { precision: 'date', start: startDate, end };
+    if (clockIssue(raw, timezone)) return null;
+    const startTime = raw.startTime == null || raw.startTime === '' ? null : clock(raw.startTime);
+    const endTime = raw.endTime == null || raw.endTime === '' ? null : clock(raw.endTime);
+    if (startTime && endTime) return {
+      precision: 'datetime', start: localInstants(startDate, startTime, timezone)[0],
+      end: localInstants(end!, endTime, timezone)[0],
+    };
+    return { precision: 'date', start: startDate, end, ...(startTime ? { startTime } : {}) };
   }
+  if ('startTime' in raw || 'endTime' in raw) return null;
   const start = exactInstant(startDate);
   const end = hasEnd ? exactInstant(endDate as string) : null;
   if (start === null || (hasEnd && end === null) || (end !== null && end < start)) return null;
@@ -89,11 +141,18 @@ export function pilotTemporalIssue(periods: unknown, timezone: string): string |
   const unsupported = unsupportedPeriodReason(raw as Record<string, unknown>);
   if (unsupported) return unsupported;
   if ((raw as Record<string, unknown>).endDate == null || (raw as Record<string, unknown>).endDate === '') return 'PERIOD_END_MISSING';
+  const clockProblem = clockIssue(raw as Record<string, unknown>, timezone);
+  if (clockProblem) return clockProblem;
   const normalized = normalizeDatatourismePeriods(periods, timezone);
   if (!normalized) return 'PERIOD_INVALID';
   const period = normalized[0];
-  if (period.timePrecision !== 'date') return 'PERIOD_PRECISION_UNSUPPORTED';
-  if (period.startDay !== period.endDay) return 'PERIOD_MULTI_DAY_UNVERIFIED';
+  if (period.timePrecision === 'date') {
+    if (period.startDay !== period.endDay) return 'PERIOD_MULTI_DAY_UNVERIFIED';
+  } else {
+    if (Date.parse(period.endAt!) <= Date.parse(period.startAt)) return 'PERIOD_TIME_ORDER_INVALID';
+    if (calendarDayInTimezone(new Date(period.startAt), timezone) !==
+        calendarDayInTimezone(new Date(period.endAt!), timezone)) return 'PERIOD_MULTI_DAY_UNVERIFIED';
+  }
   return null;
 }
 
@@ -105,7 +164,8 @@ export function normalizeDatatourismePeriods(periods: unknown, timezone: string)
     const period = parsePeriod(raw, timezone);
     if (!period) return null;
     normalized.push(period.precision === 'date'
-      ? { timePrecision: 'date', startDay: period.start as string, endDay: period.end as string | null }
+      ? { timePrecision: 'date', startDay: period.start as string, endDay: period.end as string | null,
+        ...(period.startTime ? { startTime: period.startTime } : {}) }
       : { timePrecision: 'datetime', startAt: new Date(period.start as number).toISOString(),
         endAt: period.end === null ? null : new Date(period.end as number).toISOString() });
   }

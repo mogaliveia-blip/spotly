@@ -170,6 +170,38 @@ describe('inactive DATAtourisme transactions against an optimistic fake store', 
     assert.equal(store.writes.length, 0);
   });
 
+  it('imports a sparse commune-only draft but refuses its cartographic publication', async () => {
+    const store = new FakeFirestore();
+    const sparse = { ...poi(), hasDescription: [], hasBeenCreatedBy: {},
+      isLocatedAt: poi().isLocatedAt.map(({ geo, ...place }) => place) };
+    const detail = await attested(uuid, sparse);
+    const preview = await importOrSyncExternalTransaction(store, input(uuid, { detail, mode: 'dry-run' }));
+    assert.equal(preview.status, 'would_apply');
+    assert.equal(store.writes.length, 0);
+    assert.equal((await importOrSyncExternalTransaction(store, input(uuid, { detail }))).status, 'applied');
+    assert.equal(store.docs.get(DATATOURISME_PILOT_CONTROL_PATH).sourceCount, 1);
+    assert.equal(store.docs.get(sourcePath).location.position, null);
+    assert.equal((await decideExternalPublicationTransaction(store, sourceId, 'approve', start, 'apply')).reason,
+      'PUBLICATION_NOT_ELIGIBLE');
+    assert.equal(store.docs.get(sourcePath).publication.state, 'draft');
+    assert.equal(store.docs.has(publicPath), false);
+    assert.ok(store.writes.every((write) => !write.path.startsWith('events/')));
+  });
+
+  it('publishes only a bounded exact-time occurrence after a separate editorial decision', async () => {
+    const store = new FakeFirestore();
+    const timed = poi(uuid, [{ startDate: '2026-10-25', endDate: '2026-10-25',
+      startTime: '18:30', endTime: '20:00' }]);
+    const detail = await attested(uuid, timed);
+    assert.equal((await importOrSyncExternalTransaction(store, input(uuid, { detail }))).status, 'applied');
+    assert.equal(store.docs.has(publicPath), false);
+    const approved = await decideExternalPublicationTransaction(store, sourceId, 'approve', start, 'apply');
+    assert.equal(approved.status, 'applied');
+    assert.equal(store.docs.get(publicPath).timePrecision, 'datetime');
+    assert.equal(store.docs.get(publicPath).windowStartAt.toDate().toISOString(), '2026-10-25T17:30:00.000Z');
+    assert.equal(store.docs.get(publicPath).windowEndAt.toDate().toISOString(), '2026-10-25T19:00:00.000Z');
+  });
+
   it('defers 404, API error, forged detail and uncertain periods', async () => {
     const store = new FakeFirestore();
     const variants = [
@@ -429,6 +461,19 @@ describe('inactive DATAtourisme transactions on local Firestore', {
     const result = await decideExternalPublicationTransaction(db, sourceId, 'approve', start, 'apply');
     assert.equal(result.reason, 'PROJECTION_IDENTITY_MISMATCH');
     assert.deepEqual((await db.doc(publicPath).get()).data(), native);
+    assert.equal((await db.collection('events').get()).size, 0);
+  });
+
+  it('stores a sparse commune-only draft without creating a public marker', async () => {
+    await db.doc(DATATOURISME_PILOT_CONTROL_PATH).set(counter());
+    const sparse = { ...poi(), hasDescription: [], hasBeenCreatedBy: {},
+      isLocatedAt: poi().isLocatedAt.map(({ geo, ...place }) => place) };
+    const detail = await attested(uuid, sparse);
+    assert.equal((await importOrSyncExternalTransaction(db, input(uuid, { detail }))).status, 'applied');
+    assert.equal((await db.doc(sourcePath).get()).data().location.position, null);
+    assert.equal((await decideExternalPublicationTransaction(db, sourceId, 'approve', start, 'apply')).reason,
+      'PUBLICATION_NOT_ELIGIBLE');
+    assert.equal((await db.doc(publicPath).get()).exists, false);
     assert.equal((await db.collection('events').get()).size, 0);
   });
 

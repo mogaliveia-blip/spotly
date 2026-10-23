@@ -74,8 +74,42 @@ describe('pure external Discovery projection', () => {
     assert.equal(buildDatatourismeDiscoveryProjection({ ...source, id: 'event_native' }, now), null);
   });
 
+  it('shows a known start without an invented end or Now eligibility', async () => {
+    const source = approvedSource([{ startDate: '2026-10-25', endDate: '2026-10-25', startTime: '18:30' }]);
+    const built = buildDatatourismeDiscoveryProjection(source, now);
+    assert.ok(built);
+    const dto = projectionResultDto(built);
+    assert.equal(dto.startTime, '18:30');
+    assert.equal(dto.timePrecision, 'date');
+    const found = await executeDiscoverySearch({ ...request('2026-10-25'), when: { kind: 'now' } },
+      instant(new Date('2026-10-25T17:00:00Z')), [['a', 'z']], reader([built]));
+    assert.equal(found.results.length, 0);
+  });
+
+  it('allows missing descriptive details but never projects a commune without coordinates', () => {
+    const source = approvedSource();
+    const sparse = { ...source, editorial: { ...source.editorial, description: '' },
+      attribution: { ...source.attribution, producer: null } };
+    const built = buildDatatourismeDiscoveryProjection(sparse, now);
+    assert.ok(built);
+    assert.equal(projectionResultDto(built).description, '');
+    assert.equal(projectionResultDto(built).attribution.producer, null);
+    assert.equal(buildDatatourismeDiscoveryProjection({ ...sparse,
+      location: { city: 'Vannes', department: '56', position: null, precision: 'commune_only' } }, now), null);
+  });
+
+  it('keeps brocantes in the existing market type and other category', () => {
+    const candidate = prepareDatatourismeCandidate({ expectedUuid: uuid, expectedDepartment: '56',
+      complete: true, poi: { ...poi(), type: [{ uri: 'https://example.test/FleaMarket' }] },
+      timezone: 'Europe/Paris', now });
+    assert.equal(candidate.kind, 'accepted');
+    const built = buildDatatourismeDiscoveryProjection({ ...candidate.event, publication: { state: 'approved' } }, now);
+    assert.equal(built.data.typeId, 'market');
+    assert.equal(built.data.categoryId, 'other');
+  });
+
   it('keeps the strict Now interval for a single exact-time event', async () => {
-    // A synthetic future contract fixture: the initial import pilot rejects exact-time source periods.
+    // A bounded same-day source period can now use exact instants.
     const source = { ...approvedSource(),
       periods: [{ timePrecision: 'datetime', startAt: '2026-10-25T08:00:00.000Z', endAt: '2026-10-25T10:00:00.000Z' }],
       expiresAt: '2026-10-25T10:00:00.001Z' };

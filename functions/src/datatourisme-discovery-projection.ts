@@ -10,20 +10,20 @@ type PublicExternalProjection = {
   contentType: 'event'; origin: 'datatourisme'; sourceId: string;
   title: string; description: string; editorialType: string | null;
   city: string; department: string; positionPrecision: 'source_coordinates';
-  attribution: { source: 'DATAtourisme'; producer: string; publisher: string | null };
+  attribution: { source: 'DATAtourisme'; producer: string | null; publisher: string | null };
   sourceUrl: string | null;
   position: { lat: number; lng: number }; geohash: string;
   typeId: 'concert' | 'festival' | 'market' | 'other';
   categoryId: ExternalEvent['editorial']['categoryId'];
   timePrecision: 'date' | 'datetime'; timezone: string;
-  startDay?: string; endDay?: string;
+  startDay?: string; endDay?: string; startTime?: string;
   windowStartAt: Timestamp; windowEndAt: Timestamp; updatedAt: Timestamp;
 };
 
 function publicType(editorialType: string | null): PublicExternalProjection['typeId'] {
   if (editorialType === 'Concert') return 'concert';
   if (editorialType === 'Festival') return 'festival';
-  if (editorialType === 'Marché') return 'market';
+  if (editorialType === 'Marché' || editorialType === 'Brocante' || editorialType === 'Vide-greniers') return 'market';
   return 'other';
 }
 
@@ -37,9 +37,9 @@ export function buildDatatourismeDiscoveryProjection(source: unknown, now: Date)
       Date.parse(source.expiresAt) <= now.getTime() ||
       !isEventName(source.editorial.title) || source.editorial.description.length > 1000 ||
       source.editorial.editorialType !== null && source.editorial.editorialType.length > 100 ||
-      source.attribution.producer.length > 200 ||
+      source.attribution.producer !== null && source.attribution.producer.length > 200 ||
       source.attribution.publisher !== null && source.attribution.publisher.length > 200 ||
-      source.location.city.length > 120) return null;
+      source.location.city.length > 120 || !source.location.position) return null;
   const period = source.periods[0];
   if (period.timePrecision === 'date' && !period.endDay ||
       period.timePrecision === 'datetime' && !period.endAt) return null;
@@ -72,6 +72,7 @@ export function buildDatatourismeDiscoveryProjection(source: unknown, now: Date)
   if (period.timePrecision === 'date') {
     data.startDay = period.startDay;
     data.endDay = period.endDay!;
+    if (period.startTime) data.startTime = period.startTime;
   }
   // The same allowlist also validates the payload that search and detail may disclose.
   externalProjectionResultDto(id, data as unknown as Record<string, unknown>);

@@ -21,7 +21,9 @@ const known = new Set([
   'concert', 'musicevent', 'opera', 'theaterevent', 'showevent', 'culturalevent',
   'exhibition', 'exhibitionevent', 'conference', 'sportsevent', 'sportscompetition',
   'rambling', 'visit', 'culturalsite', 'naturalheritage', 'traineeship', 'practice',
-  'market', 'festival', 'childrensevent', 'sportsandleisureplace'
+  'market', 'festival', 'childrensevent', 'sportsandleisureplace',
+  'fleamarket', 'brocante', 'garagesale', 'videgreniers',
+  'localfestival', 'villagefestival', 'traditionalcelebration', 'gastronomicevent', 'foodfestival'
 ]);
 
 /** A proposal is advisory; missing or conflicting source types always require review. */
@@ -40,6 +42,9 @@ export function classifyDatatourisme(candidate: ClassificationSource): Classific
   const training = has('traineeship') || has('practice');
   const market = has('market');
   const festival = has('festival');
+  const secondhand = ['fleamarket', 'brocante', 'garagesale', 'videgreniers'].some(has);
+  const localFestivity = ['localfestival', 'villagefestival', 'traditionalcelebration'].some(has);
+  const foodEvent = has('gastronomicevent') || has('foodfestival');
   const cultural = has('culturalevent') || has('exhibition') || has('exhibitionevent') || has('conference');
   const foodTheme = ['gastronomy', 'food', 'foodanddrink'].some((key) => themes.has(key));
   const categories = new Set<DiscoveryCategoryId>();
@@ -55,11 +60,15 @@ export function classifyDatatourisme(candidate: ClassificationSource): Classific
     if (themes.has('nature')) categories.add('nature');
   }
   if (market && foodTheme) categories.add('gastronomy');
+  if (foodEvent || festival && foodTheme) categories.add('gastronomy');
+  if (!categories.size && (market || secondhand || festival || localFestivity || has('childrensevent'))) categories.add('other');
 
-  const conflicting = categories.size > 1 || (market && categories.size > 0 && !categories.has('gastronomy'));
+  const conflicting = categories.size > 1 || (market && categories.size > 0 &&
+    !categories.has('gastronomy') && !categories.has('other'));
   const ambiguousVisit = rambling && visit;
   const unknown = [...types].some((key) => !generic.has(key) && !known.has(key));
-  const editorialConflict = training && (show || theater || music) ||
+  const editorialConflict = training && (show || theater || music || market || secondhand ||
+    festival || localFestivity || foodEvent) ||
     market && (music || theater || show || sport || rambling || visit);
   let editorialType: string | null = null;
   if (!conflicting && !ambiguousVisit && !unknown && !editorialConflict) {
@@ -68,8 +77,10 @@ export function classifyDatatourisme(candidate: ClassificationSource): Classific
     else if (show) editorialType = 'Spectacle';
     else if (rambling) editorialType = sport ? 'Randonnée' : 'Balade';
     else if (training) editorialType = has('traineeship') ? 'Stage / atelier' : 'Atelier';
+    else if (secondhand) editorialType = has('videgreniers') || has('garagesale') ? 'Vide-greniers' : 'Brocante';
     else if (market) editorialType = 'Marché';
-    else if (festival) editorialType = 'Festival';
+    else if (festival || has('foodfestival')) editorialType = 'Festival';
+    else if (localFestivity) editorialType = 'Fête locale';
     else if (visit) editorialType = has('culturalsite') ? 'Visite patrimoniale' : 'Visite';
     else if (sport) editorialType = 'Événement sportif';
     else if (has('exhibition') || has('exhibitionevent')) editorialType = 'Exposition';

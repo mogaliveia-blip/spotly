@@ -96,17 +96,46 @@ describe('DATAtourisme external periods', () => {
     assert.equal(pilotTemporalIssue([period('2026-10-25')], 'Europe/Paris'), 'PERIOD_END_MISSING');
     assert.equal(pilotTemporalIssue([period('2026-10-25', '2026-10-25')], 'invalid/zone'), 'TIMEZONE_INVALID');
     assert.equal(pilotTemporalIssue([period('2026-10-25', '2026-10-25'), period('2026-10-30', '2026-10-30')], 'Europe/Paris'), 'PERIOD_COUNT_UNSUPPORTED');
-    assert.equal(pilotTemporalIssue([period('2026-10-25T08:00:00Z', '2026-10-25T12:00:00Z')], 'Europe/Paris'), 'PERIOD_PRECISION_UNSUPPORTED');
+    assert.equal(pilotTemporalIssue([period('2026-10-25T08:00:00Z', '2026-10-25T12:00:00Z')], 'Europe/Paris'), null);
+    assert.equal(pilotTemporalIssue([period('2026-10-25T08:00:00Z', '2026-10-25T08:00:00Z')], 'Europe/Paris'), 'PERIOD_TIME_ORDER_INVALID');
   });
 
-  it('withholds admission and definitive expiry for recurrence, separate hours or unknown temporal fields', () => {
+  it('preserves a reliable start without inventing an end, and bounds two reliable hours', () => {
+    const base = period('2027-05-15', '2027-05-15');
+    const startOnly = [{ ...base, startTime: '18:30' }];
+    assert.equal(pilotTemporalIssue(startOnly, 'Europe/Paris'), null);
+    assert.deepEqual(normalizeDatatourismePeriods(startOnly, 'Europe/Paris'),
+      [{ timePrecision: 'date', startDay: '2027-05-15', endDay: '2027-05-15', startTime: '18:30' }]);
+    assert.equal(assessDatatourismePeriods(startOnly, 'Europe/Paris', at('2027-05-15T18:00:00Z')).activePrecision, 'date');
+    const bounded = [{ ...base, startTime: '18:30:00', endTime: '20:15' }];
+    assert.equal(pilotTemporalIssue(bounded, 'Europe/Paris'), null);
+    assert.deepEqual(normalizeDatatourismePeriods(bounded, 'Europe/Paris'),
+      [{ timePrecision: 'datetime', startAt: '2027-05-15T16:30:00.000Z', endAt: '2027-05-15T18:15:00.000Z' }]);
+  });
+
+  it('rejects invalid, contradictory, nonexistent and ambiguous local hours', () => {
+    const base = period('2027-05-15', '2027-05-15');
+    const cases = [
+      [{ ...base, startTime: '25:00' }, 'PERIOD_TIME_UNSUPPORTED'],
+      [{ ...base, startTime: '18:30', endTime: '17:00' }, 'PERIOD_TIME_ORDER_INVALID'],
+      [{ ...base, endTime: '20:00' }, 'PERIOD_TIME_START_MISSING'],
+      [{ ...period('2026-03-29', '2026-03-29'), startTime: '02:30' }, 'PERIOD_TIME_INVALID'],
+      [{ ...period('2026-10-25', '2026-10-25'), startTime: '02:30' }, 'PERIOD_TIME_AMBIGUOUS'],
+      [{ ...period('2026-10-25', '2026-10-25'), startTime: '01:30', endTime: '02:30' }, 'PERIOD_TIME_AMBIGUOUS'],
+    ];
+    for (const [candidate, reason] of cases) {
+      assert.equal(pilotTemporalIssue([candidate], 'Europe/Paris'), reason);
+      assert.equal(normalizeDatatourismePeriods([candidate], 'Europe/Paris'), null);
+    }
+  });
+
+  it('withholds admission and definitive expiry for recurrence or unknown temporal fields', () => {
     const base = period('2026-10-25', '2026-10-25');
     const cases = [
       [{ ...base, appliesOnDay: ['Sunday'] }, 'PERIOD_RECURRENT_UNSUPPORTED'],
       [{ ...base, weekOfMonth: [4] }, 'PERIOD_RECURRENT_UNSUPPORTED'],
       [{ ...base, type: 'https://example.test/RecurrentPeriod' }, 'PERIOD_RECURRENT_UNSUPPORTED'],
       [{ ...base, type: 'https://example.test/UnknownPeriod' }, 'PERIOD_TYPE_UNSUPPORTED'],
-      [{ ...base, startTime: '08:00', endTime: '12:00' }, 'PERIOD_TIME_UNSUPPORTED'],
       [{ ...base, openingHours: '08:00' }, 'PERIOD_FIELD_UNSUPPORTED'],
     ];
     for (const [candidate, reason] of cases) {

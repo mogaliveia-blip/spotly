@@ -28,9 +28,9 @@ type DiscoveryResultTime =
   | { timePrecision: 'datetime'; startDay?: never; endDay?: never };
 export type NativeDiscoveryResultDto = DiscoveryResultBase & { origin?: 'native'; slug: string } & DiscoveryResultTime;
 export type ExternalDiscoveryResultDto = DiscoveryResultBase & {
-  origin: 'datatourisme'; description: string; editorialType: string | null;
+  origin: 'datatourisme'; description: string; editorialType: string | null; startTime?: string;
   city: string; department: string; positionPrecision: 'source_coordinates';
-  attribution: { source: 'DATAtourisme'; producer: string; publisher: string | null };
+  attribution: { source: 'DATAtourisme'; producer: string | null; publisher: string | null };
   sourceUrl: string | null;
 } & DiscoveryResultTime;
 export type DiscoveryResultDto = NativeDiscoveryResultDto | ExternalDiscoveryResultDto;
@@ -92,7 +92,7 @@ export function isDiscoveryResultDto(value: unknown): value is DiscoveryResultDt
   if (!isRecord(value) || !hasOnlyKeys(value, [
     'id', 'contentType', 'origin', 'sourceId', 'title', 'slug', 'description', 'editorialType',
     'city', 'department', 'positionPrecision', 'attribution', 'sourceUrl', 'position', 'typeId', 'categoryId', 'tags',
-    'timePrecision', 'timezone', 'windowStartAt', 'windowEndAt', 'startDay', 'endDay', 'thumbnail', 'distanceMeters',
+    'timePrecision', 'timezone', 'windowStartAt', 'windowEndAt', 'startDay', 'endDay', 'startTime', 'thumbnail', 'distanceMeters',
   ])) return false;
   if (value.contentType !== 'event' || typeof value.sourceId !== 'string' || !value.sourceId ||
       value.sourceId.includes('/') || !isEventName(value.title) || !isDiscoveryPosition(value.position) ||
@@ -102,7 +102,7 @@ export function isDiscoveryResultDto(value: unknown): value is DiscoveryResultDt
   if (value.origin === 'datatourisme') {
     if (!/^dt_[0-9a-f]{64}$/.test(value.sourceId) || value.id !== `datatourisme_${value.sourceId}` ||
         value.slug !== undefined || typeof value.description !== 'string' ||
-        !value.description.trim() || value.description.length > 1000 ||
+        value.description.length > 1000 ||
         !(value.editorialType === null || (typeof value.editorialType === 'string' &&
           !!value.editorialType.trim() && value.editorialType.length <= 100)) ||
         typeof value.city !== 'string' || !value.city.trim() || value.city.length > 120 ||
@@ -110,14 +110,16 @@ export function isDiscoveryResultDto(value: unknown): value is DiscoveryResultDt
         value.positionPrecision !== 'source_coordinates' ||
         !isDataObject(value.attribution, ['source', 'producer', 'publisher']) ||
         value.attribution.source !== 'DATAtourisme' ||
-        typeof value.attribution.producer !== 'string' || !value.attribution.producer.trim() ||
-        value.attribution.producer.length > 200 ||
+        !(value.attribution.producer === null || typeof value.attribution.producer === 'string' &&
+          !!value.attribution.producer.trim() && value.attribution.producer.length <= 200) ||
+        !(value.startTime === undefined || value.timePrecision === 'date' &&
+          typeof value.startTime === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(value.startTime)) ||
         !(value.attribution.publisher === null || (typeof value.attribution.publisher === 'string' &&
           !!value.attribution.publisher.trim() && value.attribution.publisher.length <= 200)) ||
         !(value.sourceUrl === null || isSafeExternalSourceUrl(value.sourceUrl))) return false;
   } else if ((value.origin !== undefined && value.origin !== 'native') ||
       value.id !== `event_${value.sourceId}` || !isEventSlug(value.slug) ||
-      ['description', 'editorialType', 'city', 'department', 'positionPrecision', 'attribution', 'sourceUrl']
+      ['description', 'editorialType', 'city', 'department', 'positionPrecision', 'attribution', 'sourceUrl', 'startTime']
         .some((key) => key in value)) return false;
   if (value.tags !== undefined && (!Array.isArray(value.tags) || value.tags.length > discoveryTags.length ||
       new Set(value.tags).size !== value.tags.length || !value.tags.every((tag) => isCatalogId(discoveryTags, tag)))) return false;
@@ -153,7 +155,11 @@ export function externalProjectionResultDto(id: string, source: Record<string, u
     timePrecision: source.timePrecision, timezone: source.timezone,
     windowStartAt: timestamp(source.windowStartAt), windowEndAt: timestamp(source.windowEndAt),
   };
-  if (source.timePrecision === 'date') { value.startDay = source.startDay; value.endDay = source.endDay; }
+  if (source.timePrecision === 'date') {
+    value.startDay = source.startDay;
+    value.endDay = source.endDay;
+    if (source.startTime !== undefined) value.startTime = source.startTime;
+  }
   if (source.tags !== undefined) value.tags = source.tags;
   if (source.thumbnail !== undefined) value.thumbnail = source.thumbnail;
   if (!isDiscoveryResultDto(value) || value.origin !== 'datatourisme') throw new Error('INVALID_DISCOVERY_PROJECTION');

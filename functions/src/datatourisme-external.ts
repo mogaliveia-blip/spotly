@@ -16,13 +16,14 @@ export type ExternalEvent = {
   origin: 'datatourisme';
   sourceUuid: string;
   sourceUrl: string | null;
-  attribution: { producer: string; publisher: string | null; source: 'DATAtourisme' };
+  attribution: { producer: string | null; publisher: string | null; source: 'DATAtourisme' };
   editorial: {
     title: string; description: string; categoryId: DiscoveryCategoryId;
     editorialType: string | null; categoryMode: 'automatic' | 'manual';
     sourceTypes: Term[]; sourceThemes: Term[];
   };
-  location: { city: string; department: Department; position: { lat: number; lng: number }; precision: 'source_coordinates' };
+  location: { city: string; department: Department; position: { lat: number; lng: number } | null;
+    precision: 'source_coordinates' | 'commune_only' };
   timezone: string;
   periods: NormalizedExternalPeriod[];
   completeness: 'complete' | 'incomplete';
@@ -108,18 +109,20 @@ function validTerms(value: unknown): boolean {
 export function isExternalEvent(value: unknown): value is ExternalEvent {
   const event = record(value);
   if (!matchesExternalIdentity(event, event.sourceUuid) ||
-      !short(event.attribution && record(event.attribution).producer) ||
+      !(record(event.attribution).producer === null || short(record(event.attribution).producer)) ||
       record(event.attribution).source !== 'DATAtourisme' ||
       !(record(event.attribution).publisher === null || short(record(event.attribution).publisher)) ||
       !(event.sourceUrl === null || sourceUrl(event.sourceUrl) === event.sourceUrl) ||
-      !short(record(event.editorial).title) || !short(record(event.editorial).description) ||
+      !short(record(event.editorial).title) || typeof record(event.editorial).description !== 'string' ||
+      (record(event.editorial).description as string).length > 1000 ||
       !isCatalogId(discoveryCategories, record(event.editorial).categoryId) ||
       !(record(event.editorial).editorialType === null || short(record(event.editorial).editorialType)) ||
       !validTerms(record(event.editorial).sourceTypes) || !validTerms(record(event.editorial).sourceThemes) ||
       !['automatic', 'manual'].includes(String(record(event.editorial).categoryMode)) ||
       !short(record(event.location).city) || !DEPARTMENTS.includes(record(event.location).department as Department) ||
-      !isDiscoveryPosition(record(event.location).position) ||
-      record(event.location).precision !== 'source_coordinates' || !isIanaTimezone(event.timezone) ||
+      !(record(event.location).position === null && record(event.location).precision === 'commune_only' ||
+        isDiscoveryPosition(record(event.location).position) && record(event.location).precision === 'source_coordinates') ||
+      !isIanaTimezone(event.timezone) ||
       !Array.isArray(event.periods) || !event.periods.length ||
       !['complete', 'incomplete'].includes(String(event.completeness)) ||
       !['complete', 'incomplete', 'error'].includes(String(record(event.sync).state)) ||
@@ -132,7 +135,8 @@ export function isExternalEvent(value: unknown): value is ExternalEvent {
   const rawPeriods = event.periods.map((entry) => {
     const period = record(entry);
     return period.timePrecision === 'date'
-      ? { startDate: period.startDay, endDate: period.endDay }
+      ? { startDate: period.startDay, endDate: period.endDay,
+        ...(period.startTime === undefined ? {} : { startTime: period.startTime }) }
       : period.timePrecision === 'datetime'
         ? { startDate: period.startAt, endDate: period.endAt }
         : null;
@@ -186,7 +190,7 @@ export function prepareDatatourismeCandidate(input: PrepareInput): PreparedCandi
   const producer = short(producerData.legalName) ?? short(producerData.identifier);
   const publisherData = record(first(poi.hasBeenPublishedBy));
   const publisher = short(publisherData.legalName) ?? short(publisherData.identifier);
-  if (!title || !description || !producer) reasons.push('CONTENT_INCOMPLETE');
+  if (!title) reasons.push('CONTENT_INCOMPLETE');
 
   const places = Array.isArray(poi.isLocatedAt) ? poi.isLocatedAt.map(record) : [];
   const place = places.find((entry) => Array.isArray(entry.address) && entry.address.some((item) => departmentOf(record(item)) === input.expectedDepartment)) ?? record(first(poi.isLocatedAt));
@@ -195,8 +199,10 @@ export function prepareDatatourismeCandidate(input: PrepareInput): PreparedCandi
   const city = localized(record(address.hasAddressCity).label) ?? short(address.addressLocality);
   const department = departmentOf(address);
   const geo = record(place.geo);
-  const position = { lat: geo.latitude, lng: geo.longitude };
-  if (department !== input.expectedDepartment || !city || !isDiscoveryPosition(position)) reasons.push('LOCATION_UNUSABLE');
+  const hasCoordinates = geo.latitude != null || geo.longitude != null;
+  const coordinates = { lat: geo.latitude, lng: geo.longitude };
+  const position = hasCoordinates && isDiscoveryPosition(coordinates) ? coordinates : null;
+  if (department !== input.expectedDepartment || !city || hasCoordinates && !position) reasons.push('LOCATION_UNUSABLE');
 
   const types = termList(poi.type);
   const themes = termList(poi.hasTheme);
@@ -205,18 +211,19 @@ export function prepareDatatourismeCandidate(input: PrepareInput): PreparedCandi
   const manual = input.manualCategory;
   if (manual !== undefined && !isCatalogId(discoveryCategories, manual)) reasons.push('CATEGORY_INVALID');
   if (!manual && (proposal.needsReview || !proposal.categoryId)) reasons.push('CLASSIFICATION_REVIEW_REQUIRED');
-  if (reasons.length || !expected || !normalized || !title || !description || !producer || !city ||
-      !isDiscoveryPosition(position) || !DEPARTMENTS.includes(department as Department)) return { kind: 'rejected', reasons };
+  if (reasons.length || !expected || !normalized || !title || !city ||
+      !DEPARTMENTS.includes(department as Department)) return { kind: 'rejected', reasons };
 
   const categoryId = manual ?? proposal.categoryId!;
   const event: ExternalEvent = {
     id: externalEventId(expected)!, origin: 'datatourisme', sourceUuid: expected,
     sourceUrl: sourceUrl(poi.uri), attribution: { producer, publisher, source: 'DATAtourisme' },
     editorial: {
-      title, description, categoryId, editorialType: proposal.editorialType,
+      title, description: description ?? '', categoryId, editorialType: proposal.editorialType,
       categoryMode: manual ? 'manual' : 'automatic', sourceTypes: types, sourceThemes: themes,
     },
-    location: { city, department: department as Department, position, precision: 'source_coordinates' },
+    location: { city, department: department as Department, position,
+      precision: position ? 'source_coordinates' : 'commune_only' },
     timezone: input.timezone, periods: normalized, completeness: 'complete',
     sync: { state: 'complete', lastSuccessfulAt: input.now.toISOString(), sourceUpdatedAt: validIso(poi.lastUpdate) ? poi.lastUpdate : null },
     publication: { state: 'draft' }, projectionIds: [],

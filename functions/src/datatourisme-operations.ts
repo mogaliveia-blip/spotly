@@ -8,6 +8,7 @@ import {
 } from './datatourisme-external';
 import type { ExternalEvent, PrepareInput } from './datatourisme-external';
 import { buildDatatourismeDiscoveryProjection } from './datatourisme-discovery-projection';
+import { calendarDayInTimezone } from './event-time';
 
 export const DATATOURISME_PILOT_CONTROL_PATH = 'datatourisme_control/bretagne_pilot';
 export const DATATOURISME_PILOT_LIMIT = 100;
@@ -160,8 +161,14 @@ export async function decideExternalPublicationTransaction(
       }
       return changed(mode, 'EDITORIAL_HIDE', { update, withdraw });
     }
-    if (source.periods.length !== 1 || source.periods[0].timePrecision !== 'date' ||
-        !source.periods[0].endDay || source.periods[0].startDay !== source.periods[0].endDay) {
+    const period = source.periods[0];
+    const pilotPeriod = period?.timePrecision === 'date'
+      ? !!period.endDay && period.startDay === period.endDay
+      : period?.timePrecision === 'datetime' && !!period.endAt &&
+        Date.parse(period.endAt) > Date.parse(period.startAt) &&
+        calendarDayInTimezone(new Date(period.startAt), source.timezone) ===
+        calendarDayInTimezone(new Date(period.endAt), source.timezone);
+    if (source.periods.length !== 1 || !pilotPeriod) {
       return deferred('PERIOD_PILOT_UNSUPPORTED');
     }
     const next: ExternalEvent = {

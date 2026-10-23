@@ -127,7 +127,7 @@ function DatatourismeResult({ result, selected, onSelect }: {
   const appearance = category ? categoryAppearance[category.id] : unknownCategoryAppearance;
   const ended = externalOccurrenceFinished(result, new Date());
   const date = result.timePrecision === 'date'
-    ? result.startDay === result.endDay ? result.startDay : `${result.startDay} – ${result.endDay}`
+    ? `${result.startDay === result.endDay ? result.startDay : `${result.startDay} – ${result.endDay}`}${result.startTime ? ` · début ${result.startTime}, fin horaire inconnue` : ''}`
     : (() => {
       const format = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short', timeZone: result.timezone });
       return `${format.format(result.windowStartAt.toDate())} – ${format.format(result.windowEndAt.toDate())}`;
@@ -143,8 +143,8 @@ function DatatourismeResult({ result, selected, onSelect }: {
         <h3 className="break-words font-semibold leading-snug">{result.title}</h3>
         {result.editorialType && <p className="text-sm font-medium">{result.editorialType}</p>}
         <p className="text-sm">{date} · {result.city} ({result.department})</p>
-        <p className="line-clamp-3 text-sm text-muted-foreground">{result.description}</p>
-        <p className="text-xs text-muted-foreground">Source : DATAtourisme · Producteur : {result.attribution.producer}</p>
+        {result.description && <p className="line-clamp-3 text-sm text-muted-foreground">{result.description}</p>}
+        <p className="text-xs text-muted-foreground">Source : DATAtourisme{result.attribution.producer ? ` · Producteur : ${result.attribution.producer}` : ''}</p>
         <span className="inline-flex items-center gap-1 text-sm font-medium text-teal-800 underline-offset-2 hover:underline dark:text-teal-300">
           <MapPin aria-hidden="true" className="h-4 w-4" /> Localiser sur la carte
         </span>

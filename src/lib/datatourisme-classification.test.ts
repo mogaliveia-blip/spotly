@@ -23,6 +23,7 @@ describe('DATAtourisme deterministic classification', () => {
 
   it('classifies sport and distinguishes a ramble from a sporting hike', () => {
     assert.equal(classify(['SportsEvent']).categoryId, 'sport');
+    assert.equal(classify(['SportsEvent']).needsReview, false);
     assert.deepEqual([classify(['Rambling']).categoryId, classify(['Rambling']).editorialType], ['nature', 'Balade']);
     assert.deepEqual([classify(['Rambling', 'SportsEvent']).categoryId, classify(['Rambling', 'SportsEvent']).editorialType], ['sport', 'Randonnée']);
   });
@@ -48,18 +49,37 @@ describe('DATAtourisme deterministic classification', () => {
     assert.equal(mixed.needsReview, true);
   });
 
-  it('keeps market and festival subject to context', () => {
+  it('recognizes popular events without calling a non-food market gastronomic', () => {
     assert.equal(classify(['Market']).editorialType, 'Marché');
-    assert.equal(classify(['Market']).categoryId, null);
+    assert.equal(classify(['Market']).categoryId, 'other');
+    assert.equal(classify(['Market']).needsReview, false);
     assert.equal(classify(['Market'], ['Gastronomy']).categoryId, 'gastronomy');
     assert.equal(classify(['Festival']).editorialType, 'Festival');
-    assert.equal(classify(['Festival']).categoryId, null);
+    assert.equal(classify(['Festival']).categoryId, 'other');
     assert.equal(classify(['Festival', 'MusicEvent']).categoryId, 'music');
+    assert.deepEqual([classify(['FleaMarket']).categoryId, classify(['FleaMarket']).editorialType], ['other', 'Brocante']);
+    assert.deepEqual([classify(['VideGreniers']).categoryId, classify(['VideGreniers']).editorialType], ['other', 'Vide-greniers']);
+    assert.deepEqual([classify(['TraditionalCelebration']).categoryId, classify(['TraditionalCelebration']).editorialType], ['other', 'Fête locale']);
+    assert.equal(classify(['FoodFestival']).categoryId, 'gastronomy');
+  });
+
+  it('requires review when a popular event is also described as training', () => {
+    for (const types of [
+      ['Market', 'Traineeship'], ['FleaMarket', 'Practice'], ['Festival', 'Traineeship'],
+      ['TraditionalCelebration', 'Practice'],
+    ]) {
+      const proposal = classify(types);
+      assert.equal(proposal.needsReview, true, types.join(' + '));
+      assert.equal(proposal.editorialType, null, types.join(' + '));
+      assert.match(proposal.reason!, /ambigu/, types.join(' + '));
+    }
+    assert.equal(classify(['Traineeship', 'Practice', 'CulturalEvent']).needsReview, false);
   });
 
   it('does not classify generic-only, unknown or contradictory precise types', () => {
     assert.equal(classify(['Product', 'PointOfInterest', 'Event']).categoryId, null);
     assert.equal(classify(['UnrecognizedEvent', 'Concert']).categoryId, null);
+    assert.equal(classify(['UnrecognizedEvent', 'Concert']).needsReview, true);
     const conflict = classify(['Concert', 'TheaterEvent']);
     assert.equal(conflict.categoryId, null);
     assert.equal(conflict.editorialType, null);

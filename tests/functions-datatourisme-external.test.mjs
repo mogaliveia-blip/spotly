@@ -53,13 +53,37 @@ describe('private DATAtourisme source candidate', () => {
     assert.ok(reasons(prepare(source([{ startDate: '2026-10-25', endDate: '2026-10-25', appliesOnDay: ['Monday'] }]))).includes('PERIOD_RECURRENT_UNSUPPORTED'));
   });
 
-  it('rejects incomplete source, invalid zone or location and missing mandatory data', () => {
+  it('rejects incomplete source, invalid zone or unverifiable commune', () => {
     assert.ok(reasons(prepare(source(), { complete: false })).includes('SOURCE_INCOMPLETE'));
     assert.ok(reasons(prepare(source(), { timezone: 'bad/zone' })).includes('TIMEZONE_INVALID'));
     assert.ok(reasons(prepare({ ...source(), isLocatedAt: [] })).includes('LOCATION_UNUSABLE'));
-    assert.ok(reasons(prepare({ ...source(), hasDescription: [] })).includes('CONTENT_INCOMPLETE'));
-    assert.ok(reasons(prepare({ ...source(), hasBeenCreatedBy: {} })).includes('CONTENT_INCOMPLETE'));
+    assert.ok(reasons(prepare({ ...source(), label: null })).includes('CONTENT_INCOMPLETE'));
     assert.ok(reasons(prepare({ ...source(), type: [] }, { manualCategory: 'music' })).includes('SOURCE_TYPES_MISSING'));
+  });
+
+  it('admits a private draft without description, producer, photo or GPS when the commune is verified', () => {
+    const place = source().isLocatedAt[0];
+    const candidate = prepare({ ...source(), hasDescription: [], hasBeenCreatedBy: {},
+      isLocatedAt: [{ address: place.address }] });
+    assert.equal(candidate.kind, 'accepted');
+    assert.equal(candidate.event.editorial.description, '');
+    assert.equal(candidate.event.attribution.producer, null);
+    assert.deepEqual(candidate.event.location, { city: 'Vannes', department: '56', position: null, precision: 'commune_only' });
+    assert.equal(candidate.event.publication.state, 'draft');
+    assert.equal(isExternalEvent(candidate.event), true);
+    assert.equal(prepare({ ...source(), isLocatedAt: [{ ...place, geo: { latitude: null, longitude: null } }] }).kind, 'accepted');
+    assert.ok(reasons(prepare({ ...source(), isLocatedAt: [{ ...place, geo: { latitude: 47.657 } }] })).includes('LOCATION_UNUSABLE'));
+  });
+
+  it('keeps structured starting hours and exact bounded instants in private sources', () => {
+    const startOnly = prepare(source([{ startDate: '2026-10-25', endDate: '2026-10-25', startTime: '18:30' }]));
+    assert.equal(startOnly.kind, 'accepted');
+    assert.deepEqual(startOnly.event.periods[0], { timePrecision: 'date', startDay: '2026-10-25', endDay: '2026-10-25', startTime: '18:30' });
+    assert.equal(isExternalEvent(startOnly.event), true);
+    const bounded = prepare(source([{ startDate: '2026-10-25', endDate: '2026-10-25', startTime: '18:30', endTime: '20:00' }]));
+    assert.equal(bounded.kind, 'accepted');
+    assert.deepEqual(bounded.event.periods[0], { timePrecision: 'datetime', startAt: '2026-10-25T17:30:00.000Z', endAt: '2026-10-25T19:00:00.000Z' });
+    assert.equal(isExternalEvent(bounded.event), true);
   });
 
   it('requires review for ambiguous types and preserves an explicit manual correction', () => {

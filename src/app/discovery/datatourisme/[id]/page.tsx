@@ -12,8 +12,10 @@ import { externalOccurrenceFinished } from '../../../../../functions/src/discove
 import type { ExternalDiscoveryResultDto } from '../../../../../functions/src/discovery-search-contract';
 
 function periodLabel(event: ExternalDiscoveryResultDto): string {
-  if (event.timePrecision === 'date') return event.startDay === event.endDay
-    ? event.startDay : `${event.startDay} – ${event.endDay}`;
+  if (event.timePrecision === 'date') {
+    const day = event.startDay === event.endDay ? event.startDay : `${event.startDay} – ${event.endDay}`;
+    return `${day}${event.startTime ? ` · début ${event.startTime}, fin horaire inconnue` : ''}`;
+  }
   const format = new Intl.DateTimeFormat('fr-FR', {
     dateStyle: 'long', timeStyle: 'short', timeZone: event.timezone,
   });
@@ -74,8 +76,8 @@ export default function DatatourismeDiscoveryDetail() {
       <p>{category?.label ?? 'Autre'}{event.editorialType ? ` · ${event.editorialType}` : ''}</p>
       <p>{periodLabel(event)} · {event.timezone}</p>
       <p>{event.city} ({event.department}) · Coordonnées fournies par la source</p>
-      <p className="whitespace-pre-line">{event.description}</p>
-      <p className="text-sm">Source : DATAtourisme · Producteur : {event.attribution.producer}
+      {event.description && <p className="whitespace-pre-line">{event.description}</p>}
+      <p className="text-sm">Source : DATAtourisme{event.attribution.producer ? ` · Producteur : ${event.attribution.producer}` : ''}
         {event.attribution.publisher ? ` · Éditeur : ${event.attribution.publisher}` : ''}</p>
       {event.sourceUrl && <a href={event.sourceUrl} target="_blank" rel="noopener noreferrer"
         className="inline-block text-sm font-medium text-primary underline">Voir la fiche source</a>}
