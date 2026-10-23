@@ -1,0 +1,6 @@
+{
+  "name": "datatourisme-callables-emulator-fixture",
+  "private": true,
+  "main": "index.cjs",
+  "engines": { "node": "22" }
+}
