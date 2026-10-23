@@ -222,6 +222,7 @@ export function DiscoveryClient() {
   const [demoEvents, setDemoEvents] = useState<ExternalDemoEvent[]>([]);
   const [completedQuery, setCompletedQuery] = useState<DisplaySearchContext | null>(null);
   const [visibleCount, setVisibleCount] = useState(20);
+  const [resultsOpen, setResultsOpen] = useState(true);
   const [selectedClusterIds, setSelectedClusterIds] = useState<string[]>([]);
   const requestSequenceRef = useRef(0);
   const demoOfflineRef = useRef(false);
@@ -465,8 +466,8 @@ export function DiscoveryClient() {
           </div>}
         </div>
 
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <section className="box-border w-full min-w-0 rounded-2xl border bg-card p-4 shadow-sm sm:p-5 lg:row-span-2 lg:self-start" aria-label="Recherche d’événements">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(320px,380px)_minmax(0,1fr)] lg:items-start">
+          <section className="box-border w-full min-w-0 rounded-2xl border bg-card p-4 shadow-sm sm:p-5 lg:col-start-1 lg:row-start-1" aria-label="Recherche d’événements">
             <div className="lg:hidden">
               <p className="text-sm font-semibold">Votre recherche</p>
               <p className="mt-1 break-words text-sm text-muted-foreground" aria-live="polite">{locationSummary} · {whenSummary} · {categorySummary}</p>
@@ -561,49 +562,7 @@ export function DiscoveryClient() {
             </div>
           </section>
 
-          <section className="min-w-0 lg:col-start-2" aria-labelledby="results-heading" aria-live="polite">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 id="results-heading" className="text-xl font-semibold">À découvrir</h2>
-              <Button type="button" variant="outline" size="sm" onClick={showMap}>
-                <MapPin className="h-4 w-4" /> Voir sur la carte
-              </Button>
-            </div>
-            {session.pendingBounds && <p className="mt-2 text-sm text-muted-foreground">La carte a changé. Lancez « Rechercher dans cette zone » pour actualiser les résultats.</p>}
-            {session.pendingBounds && !searchResult && <p className="mt-2 text-sm text-muted-foreground">Les résultats précédents ne sont pas restaurés après navigation. Confirmez cette zone pour afficher les événements.</p>}
-            {!session.pendingBounds && status === 'idle' && !searchResult && <p className="mt-2 text-sm text-muted-foreground">Choisissez un lieu ou utilisez votre position pour commencer.</p>}
-            {status === 'loading' && <p className="mt-3 flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> Recherche des événements…</p>}
-            {message && <p role="alert" className="mt-3 rounded-xl border bg-card p-4 text-sm">{message}</p>}
-            {previousResults && <p className="mt-2 text-sm text-muted-foreground">Résultats de la dernière recherche validée.</p>}
-            {!session.pendingBounds && status === 'error' && session.context &&
-              <Button type="button" variant="outline" onClick={retrySearch} className="mt-3">Réessayer</Button>}
-            {results.length === 0 && searchResult?.meta.complete &&
-              <p className="mt-3 text-sm text-muted-foreground">{previousResults
-                ? 'Aucun événement lors de la dernière recherche.'
-                : `Aucun événement trouvé dans cette zone ${emptyTimeLabel}.`}</p>}
-            {status === 'success' && searchResult && !searchResult.meta.complete &&
-              <p className="mt-3 text-sm text-muted-foreground">Résultats partiels pour cette zone.</p>}
-            {status === 'success' && searchResult && !searchResult.meta.complete && session.context &&
-              <Button type="button" variant="outline" onClick={retrySearch} className="mt-3">Relancer la recherche</Button>}
-            {results.length > 0 && <>
-              <p className="mt-3 text-sm text-muted-foreground">{Math.min(visibleCount, results.length)} sur {results.length} résultats chargés affichés dans la liste.</p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {results.slice(0, visibleCount).map((result) => result.origin === 'native'
-                  ? <EventResult key={result.id} result={result.native} selected={selectedId === result.id}
-                      onSelect={() => selectResult(result)} eventHref={discoveryEventHref(result.native.slug, returnToken)} onOpenEvent={() => recordEventOpen(result.native.slug)} />
-                  : result.origin === 'datatourisme'
-                    ? <DatatourismeResult key={result.id} result={result.external} selected={selectedId === result.id}
-                        onSelect={() => selectResult(result)} />
-                    : <ExternalResult key={result.id} result={result} selected={selectedId === result.id}
-                        onSelect={() => selectResult(result)} />)}
-              </div>
-              {visibleCount < results.length && <Button type="button" variant="outline" className="mt-4 w-full"
-                onClick={() => setVisibleCount((count) => Math.min(count + 20, results.length))}>
-                Afficher les {nextResultsCount(visibleCount, results.length)} suivants
-              </Button>}
-            </>}
-          </section>
-
-          <section ref={mapSectionRef} tabIndex={-1} aria-label="Carte des événements" className="relative h-[40vh] min-h-[280px] overflow-hidden rounded-2xl border bg-muted shadow-sm sm:h-[560px] lg:col-start-2">
+          <section ref={mapSectionRef} tabIndex={-1} aria-label="Carte des événements" className="relative h-[40vh] min-h-[280px] overflow-hidden rounded-2xl border bg-muted shadow-sm sm:h-[560px] lg:sticky lg:top-4 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:h-[calc(100dvh-10rem)] lg:min-h-[320px] lg:self-start">
             {!hydrated ? (
               <div className="flex h-full items-center justify-center gap-2 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /> Chargement de la carte…</div>
             ) : mapUnavailable ? (
@@ -638,6 +597,55 @@ export function DiscoveryClient() {
                   onClick={() => selectResult(item)}>{item.title}{item.origin === 'external_demo' ? ' · fictif' : item.origin === 'datatourisme' ? ' · DATAtourisme' : ''}</button>
               </li>)}</ul>
             </div>}
+          </section>
+
+          <section className="min-w-0 lg:col-start-1 lg:row-start-2 lg:max-h-[calc(100dvh-10rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-2" aria-labelledby="results-heading" aria-live="polite">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 id="results-heading" className="text-xl font-semibold">À découvrir</h2>
+              {results.length > 0 && <Button type="button" variant="outline" size="sm" className="lg:hidden"
+                aria-expanded={resultsOpen} aria-controls="discovery-results" onClick={() => setResultsOpen((open) => !open)}>
+                {resultsOpen ? 'Replier les résultats' : 'Afficher les résultats'}
+                <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform ${resultsOpen ? 'rotate-180' : ''}`} />
+              </Button>}
+              <Button type="button" variant="outline" size="sm" className="hidden lg:inline-flex" onClick={showMap}>
+                <MapPin className="h-4 w-4" /> Voir sur la carte
+              </Button>
+            </div>
+            {session.pendingBounds && <p className="mt-2 text-sm text-muted-foreground">La carte a changé. Lancez « Rechercher dans cette zone » pour actualiser les résultats.</p>}
+            {session.pendingBounds && !searchResult && <p className="mt-2 text-sm text-muted-foreground">Les résultats précédents ne sont pas restaurés après navigation. Confirmez cette zone pour afficher les événements.</p>}
+            {!session.pendingBounds && status === 'idle' && !searchResult && <p className="mt-2 text-sm text-muted-foreground">Choisissez un lieu ou utilisez votre position pour commencer.</p>}
+            {status === 'loading' && <p className="mt-3 flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> Recherche des événements…</p>}
+            {message && <p role="alert" className="mt-3 rounded-xl border bg-card p-4 text-sm">{message}</p>}
+            {previousResults && <p className="mt-2 text-sm text-muted-foreground">Résultats de la dernière recherche validée.</p>}
+            {!session.pendingBounds && status === 'error' && session.context &&
+              <Button type="button" variant="outline" onClick={retrySearch} className="mt-3">Réessayer</Button>}
+            {results.length === 0 && searchResult?.meta.complete &&
+              <p className="mt-3 text-sm text-muted-foreground">{previousResults
+                ? 'Aucun événement lors de la dernière recherche.'
+                : `Aucun événement trouvé dans cette zone ${emptyTimeLabel}.`}</p>}
+            {status === 'success' && searchResult && !searchResult.meta.complete &&
+              <p className="mt-3 text-sm text-muted-foreground">Résultats partiels pour cette zone.</p>}
+            {status === 'success' && searchResult && !searchResult.meta.complete && session.context &&
+              <Button type="button" variant="outline" onClick={retrySearch} className="mt-3">Relancer la recherche</Button>}
+            {results.length > 0 && <>
+              <p className="mt-3 text-sm text-muted-foreground">{Math.min(visibleCount, results.length)} sur {results.length} résultats chargés disponibles dans la liste.</p>
+              <div id="discovery-results" className={resultsOpen ? '' : 'hidden lg:block'}>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                  {results.slice(0, visibleCount).map((result) => result.origin === 'native'
+                    ? <EventResult key={result.id} result={result.native} selected={selectedId === result.id}
+                        onSelect={() => selectResult(result)} eventHref={discoveryEventHref(result.native.slug, returnToken)} onOpenEvent={() => recordEventOpen(result.native.slug)} />
+                    : result.origin === 'datatourisme'
+                      ? <DatatourismeResult key={result.id} result={result.external} selected={selectedId === result.id}
+                          onSelect={() => selectResult(result)} />
+                      : <ExternalResult key={result.id} result={result} selected={selectedId === result.id}
+                          onSelect={() => selectResult(result)} />)}
+                </div>
+                {visibleCount < results.length && <Button type="button" variant="outline" className="mt-4 w-full"
+                  onClick={() => setVisibleCount((count) => Math.min(count + 20, results.length))}>
+                  Afficher les {nextResultsCount(visibleCount, results.length)} suivants
+                </Button>}
+              </div>
+            </>}
           </section>
         </div>
       </div>
