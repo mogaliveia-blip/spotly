@@ -666,3 +666,8 @@ export const updatePoiReviewStatsOnRatingChange = onDocumentUpdated(
     }
   }
 );
+
+export {
+  importOrSyncDatatourismeEvent,
+  publishOrHideDatatourismeEvent
+} from './datatourisme-admin-callables';

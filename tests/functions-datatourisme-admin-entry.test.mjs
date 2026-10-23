@@ -113,11 +113,11 @@ describe('inactive owner DATAtourisme command boundary', () => {
   });
 });
 
-describe('prepared, unregistered DATAtourisme callables', () => {
-  it('keeps deployment registration separate and binds distinct service identities', async () => {
+describe('exported DATAtourisme callables', () => {
+  it('exports exactly the two expected names and binds distinct service identities', async () => {
     const { readFile } = await import('node:fs/promises');
     const index = await readFile(new URL('../functions/src/index.ts', import.meta.url), 'utf8');
-    assert.doesNotMatch(index, /datatourisme-admin-callables|importOrSyncDatatourismeEvent|publishOrHideDatatourismeEvent/);
+    assert.match(index, /export\s*\{\s*importOrSyncDatatourismeEvent,\s*publishOrHideDatatourismeEvent\s*\}\s*from\s*['"]\.\/datatourisme-admin-callables['"]/);
     assert.equal(importOrSyncDatatourismeEvent.__endpoint.region[0], 'europe-west1');
     assert.equal(importOrSyncDatatourismeEvent.__endpoint.serviceAccountEmail,
       'datatourisme-import@spotly-app-events.iam.gserviceaccount.com');
