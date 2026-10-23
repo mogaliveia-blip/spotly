@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useReducer, useState } from 'react';
+import React, { useReducer, useRef, useState } from 'react';
 import { FirebaseError } from 'firebase/app';
 import { Database, EyeOff, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -13,6 +13,8 @@ import type { AnalysisCandidate, AnalysisResult } from '@/lib/datatourisme-analy
 import { PILOT_DEPARTMENTS } from '@/lib/datatourisme-admin-demo';
 import type { PilotDepartment } from '@/lib/datatourisme-admin-demo';
 import { classifyDatatourisme } from '@/lib/datatourisme-classification';
+import { requestDatatourismeSyncPreview } from '@/lib/datatourisme-sync-preview';
+import type { SyncPreview } from '../../../functions/src/datatourisme-operations';
 import { discoveryCategories } from '@/lib/event-discovery';
 import type { DiscoveryCategoryId } from '@/lib/event-discovery';
 import {
@@ -39,6 +41,119 @@ function errorMessage(error: unknown): string {
   if (code === 'functions/failed-precondition') return 'La connexion DATAtourisme n’est pas encore configurée.';
   if (code === 'functions/resource-exhausted') return 'Limite DATAtourisme atteinte. Réessayez plus tard.';
   return 'Analyse indisponible pour le moment. Réessayez plus tard.';
+}
+
+function syncErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message === 'INVALID_UUID') return 'Saisissez un UUID DATAtourisme valide.';
+  if (error instanceof Error && error.message === 'INVALID_DEPARTMENT') return 'Choisissez un département breton valide.';
+  const code = error instanceof FirebaseError ? error.code : '';
+  if (code === 'functions/unauthenticated') return 'Connectez-vous pour prévisualiser cette synchronisation.';
+  if (code === 'functions/permission-denied') return 'Cette prévisualisation est réservée au propriétaire de la plateforme.';
+  if (code === 'functions/invalid-argument') return 'UUID ou département non valide.';
+  if (code === 'functions/deadline-exceeded' || code === 'functions/unavailable') return 'Service temporairement indisponible. Réessayez plus tard.';
+  return 'Prévisualisation indisponible. Aucune modification enregistrée.';
+}
+
+function syncDeferredMessage(reason: string): string {
+  if (reason === 'SOURCE_NOT_IMPORTED') return 'Cette source n’a pas encore été importée. Aucune fiche n’a été créée.';
+  if (reason === 'DETAIL_NOT_FOUND') return 'La fiche DATAtourisme est introuvable.';
+  if (reason.startsWith('DETAIL_')) return 'Le détail DATAtourisme est indisponible ou invalide.';
+  if (reason.startsWith('PERIOD_') || reason === 'TEMPORAL_EXHAUSTIVENESS_UNPROVEN') {
+    return 'La période de cette fiche ne permet pas une synchronisation fiable.';
+  }
+  return 'Cette fiche ne peut pas être prévisualisée dans son état actuel. Aucune modification enregistrée.';
+}
+
+const previewFields = [
+  ['title', 'Titre'], ['venueName', 'Nom du lieu'], ['address', 'Adresse'],
+  ['city', 'Commune'], ['department', 'Département'], ['producer', 'Producteur'],
+  ['sourceUpdatedAt', 'Dernière mise à jour source'],
+] as const;
+const previewStatusLabels = {
+  new: 'Nouveau', modified: 'Modifié', unchanged: 'Inchangé', unavailable: 'Non disponible',
+} as const;
+const publicationLabels = { draft: 'Brouillon', approved: 'Publié', hidden: 'Masqué' } as const;
+
+export function SyncPreviewResult({ preview }: { preview: SyncPreview }) {
+  return <section aria-label="Prévisualisation de la synchronisation" className="space-y-3 rounded-xl border p-4">
+    <h3 className="text-lg font-semibold">Prévisualisation de la synchronisation</h3>
+    <p><span className="font-medium">Événement : </span>{preview.fields.title.current ?? 'Titre non renseigné'}</p>
+    <p><span className="font-medium">État actuel : </span>{publicationLabels[preview.publicationState]} — {preview.publicationState}</p>
+    <p className="break-all text-xs text-muted-foreground">Source : {preview.sourceId}</p>
+    <div className="space-y-2">{previewFields.map(([key, label]) => {
+      const field = preview.fields[key];
+      return <div key={key} className="grid gap-1 rounded-lg border p-3 text-sm sm:grid-cols-3 sm:gap-3">
+        <div className="font-medium">{label} <Badge variant="outline" className="ml-1">{previewStatusLabels[field.status]}</Badge></div>
+        <div><span className="text-muted-foreground">Actuel : </span>{field.current ?? 'Non renseigné'}</div>
+        <div><span className="text-muted-foreground">Proposé : </span>{field.proposed ?? 'Non disponible dans la source'}</div>
+      </div>;
+    })}</div>
+    <p className="font-medium">{preview.hasFieldChanges ? 'Changements confirmés dans les champs affichés.' : 'Aucun changement confirmé dans les champs affichés.'}</p>
+    {preview.privateFieldsCleared.length > 0 && <Alert>
+      <Info className="h-4 w-4" aria-hidden="true" />
+      <AlertTitle>Attention : donnée absente du nouveau détail</AlertTitle>
+      <AlertDescription>Une future synchronisation effacerait dans la source privée : {preview.privateFieldsCleared.map((field) =>
+        previewFields.find(([key]) => key === field)?.[1] ?? field).join(', ')}.</AlertDescription>
+    </Alert>}
+    {preview.publicProjectionChanges.length > 0 && <Alert>
+      <Info className="h-4 w-4" aria-hidden="true" />
+      <AlertTitle>Attention : impact possible sur la fiche publique</AlertTitle>
+      <AlertDescription><ul className="list-inside list-disc">{preview.publicProjectionChanges.map((change) => {
+        const label = previewFields.find(([key]) => key === change.field)?.[1] ?? change.field;
+        const outcome = change.status === 'removed' ? 'la valeur serait retirée de la fiche publique' :
+          change.status === 'new' ? 'une valeur serait ajoutée à la fiche publique' : 'la valeur serait modifiée sur la fiche publique';
+        return <li key={change.field}>{label} : {outcome}.</li>;
+      })}</ul></AlertDescription>
+    </Alert>}
+    <p className="text-sm text-muted-foreground">Aucune modification enregistrée. L’absence d’une valeur dans la source ne signifie pas toujours sa suppression du document privé.</p>
+  </section>;
+}
+
+function SyncPreviewSection() {
+  const [uuid, setUuid] = useState('');
+  const [department, setDepartment] = useState<PilotDepartment>('22');
+  const [loading, setLoading] = useState(false);
+  const [preview, setPreview] = useState<SyncPreview | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const inFlight = useRef(false);
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setLoading(true);
+    setPreview(null);
+    setMessage(null);
+    try {
+      const result = await requestDatatourismeSyncPreview(uuid, department);
+      if (result.preview) setPreview(result.preview);
+      else setMessage(result.status === 'deferred' ? syncDeferredMessage(result.reason) : 'Prévisualisation indisponible. Aucune modification enregistrée.');
+    } catch (error) {
+      setMessage(syncErrorMessage(error));
+    } finally {
+      inFlight.current = false;
+      setLoading(false);
+    }
+  };
+
+  return <Card><CardHeader><CardTitle>Synchronisation d’une source importée</CardTitle>
+    <CardDescription>Saisissez l’UUID de la fiche DATAtourisme et son département. La prévisualisation ne sauvegarde ni ne publie aucun changement.</CardDescription></CardHeader>
+    <CardContent className="space-y-4">
+      <form onSubmit={(event) => void submit(event)} className="flex flex-wrap items-end gap-3">
+        <div className="min-w-0 flex-1 basis-64 space-y-1"><label htmlFor="sync-source-uuid" className="text-sm font-medium">UUID de la source déjà importée</label>
+          <input id="sync-source-uuid" className="flex h-10 w-full rounded-md border bg-background px-3 text-sm" value={uuid} disabled={loading}
+            autoComplete="off" spellCheck={false} required onChange={(event) => { setUuid(event.target.value); setPreview(null); setMessage(null); }} /></div>
+        <div className="space-y-1"><label htmlFor="sync-department" className="text-sm font-medium">Département</label>
+          <select id="sync-department" className="flex h-10 rounded-md border bg-background px-3 text-sm" value={department} disabled={loading}
+            onChange={(event) => { setDepartment(event.target.value as PilotDepartment); setPreview(null); setMessage(null); }}>
+            {PILOT_DEPARTMENTS.map((item) => <option key={item.code} value={item.code}>{item.code} — {item.name}</option>)}
+          </select></div>
+        <Button type="submit" disabled={loading}>{loading ? 'Prévisualisation en cours…' : 'Prévisualiser la synchronisation'}</Button>
+      </form>
+      {message && <Alert variant="destructive" role="alert"><AlertTitle>Prévisualisation impossible</AlertTitle><AlertDescription>{message}</AlertDescription></Alert>}
+      {preview && <SyncPreviewResult preview={preview} />}
+    </CardContent>
+  </Card>;
 }
 
 function rejectionReviewKey(candidate: AnalysisCandidate, department: PilotDepartment): string {
@@ -207,6 +322,7 @@ export function DatatourismeAdminPreview() {
         examinedDepartment={entry.examinedDepartment} selected={entry} rejectionReviewed={true} {...cardActions} />)}</div> :
         <p className="rounded-xl border p-5 text-sm text-muted-foreground">Aucune fiche sélectionnée. Analysez une page, puis examinez et sélectionnez des candidats.</p>}
     </section>
+    <SyncPreviewSection />
     <Card><CardHeader><CardTitle>Opérations futures</CardTitle><CardDescription>Ces actions restent désactivées.</CardDescription></CardHeader><CardContent className="space-y-3">
       {['Importer', 'Publier dans Discovery', 'Synchroniser'].map((action) => <div key={action} className="flex items-center justify-between gap-3 rounded-xl border p-3"><span className="font-medium">{action}</span><Button type="button" variant="outline" disabled>{action}</Button></div>)}
       <div className="flex items-center justify-between gap-3 rounded-xl border p-3"><span className="flex items-center gap-2 font-medium"><EyeOff className="h-4 w-4" />Masquer les événements externes dans Discovery</span><Switch disabled checked={false} aria-label="Masquage global non disponible" /></div>

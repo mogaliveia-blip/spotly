@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
-import { DatatourismeAdminPreview } from '../components/admin/datatourisme-admin-preview';
+import { DatatourismeAdminPreview, SyncPreviewResult } from '../components/admin/datatourisme-admin-preview';
 import { canAccessPlatformAdmin } from './access-control';
 import { DEMO_CANDIDATES, PILOT_DEPARTMENTS, demoCandidatesForDepartments } from './datatourisme-admin-demo';
 
@@ -33,8 +33,76 @@ describe('DATAtourisme Super Admin prototype', () => {
     assert.match(html, /Aucune sauvegarde Firestore, aucune importation et aucune publication/);
     assert.doesNotMatch(html, /événements examinés sur cette page/);
     assert.match(html, /Masquage global non disponible/);
+    assert.match(html, /Prévisualiser la synchronisation/);
+    assert.match(html, /UUID de la source déjà importée/);
+    assert.doesNotMatch(html, /<button[^>]*>Appliquer<\/button>/);
     const buttons = html.match(/<button[^>]*>/g) ?? [];
     assert.equal(buttons.filter((tag) => /\sdisabled=""/.test(tag)).length, 4);
+  });
+
+  it('renders current and proposed fields, availability, and the no-write notice', () => {
+    const field = (current: string | null, proposed: string | null,
+      status: 'new' | 'modified' | 'unchanged' | 'unavailable') => ({ current, proposed, status });
+    const html = renderToStaticMarkup(createElement(SyncPreviewResult, { preview: {
+      sourceId: 'dt_' + 'a'.repeat(64), publicationState: 'approved', hasFieldChanges: true,
+      privateFieldsCleared: [],
+      publicProjectionChanges: [],
+      fields: {
+        title: field('Concert fictif', 'Concert fictif', 'unchanged'),
+        venueName: field(null, 'Salle fictive', 'new'),
+        address: field(null, null, 'unavailable'),
+        city: field('Vannes', 'Vannes', 'unchanged'),
+        department: field('56', '56', 'unchanged'),
+        producer: field('Producteur fictif', 'Producteur fictif', 'unchanged'),
+        sourceUpdatedAt: field(null, '2026-10-22', 'new'),
+      },
+    } }));
+    assert.match(html, /Publié — approved/);
+    assert.match(html, /Salle fictive/);
+    assert.match(html, /Non disponible dans la source/);
+    assert.match(html, /Nouveau/);
+    assert.match(html, /Changements confirmés dans les champs affichés/);
+    assert.match(html, /Aucune modification enregistrée/);
+    assert.doesNotMatch(html, /<button/);
+  });
+
+  it('warns about a public address removal even without a confirmed private field change', () => {
+    const unchanged = (value: string) => ({ current: value, proposed: value, status: 'unchanged' as const });
+    const html = renderToStaticMarkup(createElement(SyncPreviewResult, { preview: {
+      sourceId: 'dt_' + 'b'.repeat(64), publicationState: 'approved', hasFieldChanges: false,
+      privateFieldsCleared: [],
+      publicProjectionChanges: [{ field: 'address', current: '6 rue du Port, 56000',
+        proposed: null, status: 'removed' }],
+      fields: {
+        title: unchanged('Concert fictif'), venueName: unchanged('Salle fictive'),
+        address: { current: '6 rue du Port, 56000', proposed: null, status: 'unavailable' },
+        city: unchanged('Vannes'), department: unchanged('56'), producer: unchanged('Producteur fictif'),
+        sourceUpdatedAt: { current: null, proposed: null, status: 'unavailable' },
+      },
+    } }));
+    assert.match(html, /Aucun changement confirmé dans les champs affichés/);
+    assert.match(html, /Attention : impact possible sur la fiche publique/);
+    assert.match(html, /Adresse : la valeur serait retirée de la fiche publique/);
+    assert.match(html, /Non disponible dans la source/);
+    assert.match(html, /Aucune modification enregistrée/);
+  });
+
+  it('distinguishes a private date clearing from an unavailable public address', () => {
+    const unchanged = (value: string) => ({ current: value, proposed: value, status: 'unchanged' as const });
+    const html = renderToStaticMarkup(createElement(SyncPreviewResult, { preview: {
+      sourceId: 'dt_' + 'c'.repeat(64), publicationState: 'approved', hasFieldChanges: false,
+      privateFieldsCleared: ['sourceUpdatedAt'],
+      publicProjectionChanges: [{ field: 'address', current: '6 rue du Port, 56000',
+        proposed: null, status: 'removed' }],
+      fields: {
+        title: unchanged('Concert fictif'), venueName: unchanged('Salle fictive'),
+        address: { current: '6 rue du Port, 56000', proposed: null, status: 'unavailable' },
+        city: unchanged('Vannes'), department: unchanged('56'), producer: unchanged('Producteur fictif'),
+        sourceUpdatedAt: { current: '2026-10-22', proposed: null, status: 'unavailable' },
+      },
+    } }));
+    assert.match(html, /Une future synchronisation effacerait dans la source privée : Dernière mise à jour source/);
+    assert.match(html, /Adresse : la valeur serait retirée de la fiche publique/);
   });
 
   it('uses the existing platform owner gate for the route and navigation', () => {

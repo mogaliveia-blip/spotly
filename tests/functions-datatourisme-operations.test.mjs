@@ -170,6 +170,136 @@ describe('inactive DATAtourisme transactions against an optimistic fake store', 
     assert.equal(store.writes.length, 0);
   });
 
+  it('previews normalized source fields on sync without changing an approved source, projection or counter', async () => {
+    const store = new FakeFirestore();
+    await importOrSyncExternalTransaction(store, input(uuid, { intent: 'import' }));
+    await decideExternalPublicationTransaction(store, sourceId, 'approve', start, 'apply');
+    const beforeSource = structuredClone(store.docs.get(sourcePath));
+    const beforeProjection = store.docs.get(publicPath);
+    const writes = store.writes.length;
+    const changedPoi = { ...poi(), label: { '@fr': 'Autre concert fictif' },
+      lastUpdate: '2026-10-22T14:00:00+02:00',
+      isLocatedAt: [{ label: { '@fr': 'Salle du port' }, address: [{
+        hasAddressCity: { label: { '@fr': 'Vannes' }, isPartOfDepartment: { insee: '56' } },
+        streetAddress: '6 rue du Port', postalCode: '56000',
+      }], geo: { latitude: 47.657, longitude: -2.76 } }],
+    };
+    const result = await importOrSyncExternalTransaction(store, input(uuid, {
+      intent: 'sync', mode: 'dry-run', detail: await attested(uuid, changedPoi),
+    }));
+    assert.equal(result.status, 'would_apply');
+    assert.equal(result.preview.sourceId, sourceId);
+    assert.equal(result.preview.publicationState, 'approved');
+    assert.equal(result.preview.fields.title.status, 'modified');
+    assert.deepEqual(result.preview.fields.venueName, {
+      current: null, proposed: 'Salle du port', status: 'new',
+    });
+    assert.equal(result.preview.fields.address.proposed, '6 rue du Port, 56000');
+    assert.equal(result.preview.fields.sourceUpdatedAt.proposed, '2026-10-22T12:00:00.000Z');
+    assert.equal(result.preview.fields.city.status, 'unchanged');
+    assert.equal(result.preview.hasFieldChanges, true);
+    assert.deepEqual(result.preview.privateFieldsCleared, []);
+    assert.deepEqual(store.docs.get(sourcePath), beforeSource);
+    assert.equal(store.docs.get(publicPath), beforeProjection);
+    assert.equal(store.docs.get(DATATOURISME_PILOT_CONTROL_PATH).sourceCount, 1);
+    assert.equal(store.writes.length, writes);
+    assert.equal(store.writes.some((write) => write.path.startsWith('events/')), false);
+  });
+
+  it('shows absent and equivalent source fields accurately while rejecting an incoherent address', async () => {
+    const store = new FakeFirestore(1);
+    const existing = fixtureSource();
+    store.seed(sourcePath, { ...existing, sync: { ...existing.sync,
+      sourceUpdatedAt: '2026-10-22T12:00:00.000Z' } });
+    const equivalent = { ...poi(), lastUpdate: '2026-10-22T14:00:00+02:00' };
+    const same = await importOrSyncExternalTransaction(store, input(uuid, {
+      intent: 'sync', mode: 'dry-run', detail: await attested(uuid, equivalent),
+    }));
+    assert.equal(same.preview.fields.sourceUpdatedAt.status, 'unchanged');
+    assert.equal(same.preview.fields.venueName.status, 'unavailable');
+    assert.equal(same.preview.hasFieldChanges, false);
+    const invalid = { ...equivalent, lastUpdate: 'not-a-date',
+      isLocatedAt: [{ label: { '@fr': 'Lieu à vérifier' }, address: [{
+        hasAddressCity: { label: { '@fr': 'Vannes' }, isPartOfDepartment: { insee: '56' } },
+        streetAddress: '6 rue du Port', postalCode: '75001',
+      }], geo: { latitude: 47.657, longitude: -2.76 } }],
+    };
+    const result = await importOrSyncExternalTransaction(store, input(uuid, {
+      intent: 'sync', mode: 'dry-run', detail: await attested(uuid, invalid),
+    }));
+    assert.deepEqual(result.preview.fields.address, {
+      current: null, proposed: null, status: 'unavailable',
+    });
+    assert.equal(result.preview.fields.venueName.proposed, null);
+    assert.equal(result.preview.fields.sourceUpdatedAt.proposed, null);
+    assert.equal(result.preview.hasFieldChanges, false);
+    assert.deepEqual(result.preview.privateFieldsCleared, ['sourceUpdatedAt']);
+    assert.equal(store.writes.length, 0);
+    assert.equal(store.docs.get(sourcePath).sync.sourceUpdatedAt, '2026-10-22T12:00:00.000Z');
+    assert.equal(store.docs.get(DATATOURISME_PILOT_CONTROL_PATH).sourceCount, 1);
+    const applied = await importOrSyncExternalTransaction(store, input(uuid, {
+      intent: 'sync', mode: 'apply', detail: await attested(uuid, equivalent),
+    }));
+    assert.equal('preview' in applied, false);
+  });
+
+  it('separates absent source fields from confirmed changes and public projection removals', async () => {
+    const store = new FakeFirestore();
+    const located = { ...poi(), isLocatedAt: [{ label: { '@fr': 'Salle du port' }, address: [{
+      hasAddressCity: { label: { '@fr': 'Vannes' }, isPartOfDepartment: { insee: '56' } },
+      streetAddress: '6 rue du Port', postalCode: '56000',
+    }], geo: { latitude: 47.657, longitude: -2.76 } }] };
+    await importOrSyncExternalTransaction(store, input(uuid, { intent: 'import', detail: await attested(uuid, located) }));
+    await decideExternalPublicationTransaction(store, sourceId, 'approve', start, 'apply');
+    const beforeSource = store.docs.get(sourcePath);
+    const beforeProjection = store.docs.get(publicPath);
+    const writes = store.writes.length;
+    const preview = async (body) => importOrSyncExternalTransaction(store, input(uuid, {
+      intent: 'sync', mode: 'dry-run', detail: await attested(uuid, body),
+    }));
+
+    const absent = await preview(poi());
+    assert.equal(absent.preview.fields.address.status, 'unavailable');
+    assert.equal(absent.preview.fields.address.current, '6 rue du Port, 56000');
+    assert.equal(absent.preview.fields.address.proposed, null);
+    assert.equal(absent.preview.hasFieldChanges, false);
+    assert.deepEqual(absent.preview.privateFieldsCleared, []);
+    assert.deepEqual(absent.preview.publicProjectionChanges.map(({ field, status }) => [field, status]), [
+      ['venueName', 'removed'], ['address', 'removed'],
+    ]);
+    assert.equal(absent.changes.publish, true);
+
+    const changed = await preview({ ...located, isLocatedAt: [{ ...located.isLocatedAt[0],
+      address: [{ ...located.isLocatedAt[0].address[0], streetAddress: '8 rue du Port' }],
+    }] });
+    assert.deepEqual(changed.preview.fields.address, {
+      current: '6 rue du Port, 56000', proposed: '8 rue du Port, 56000', status: 'modified',
+    });
+    assert.equal(changed.preview.hasFieldChanges, true);
+    assert.deepEqual(changed.preview.publicProjectionChanges.map(({ field, status }) => [field, status]), [
+      ['address', 'modified'],
+    ]);
+
+    const identical = await preview(located);
+    assert.equal(identical.preview.fields.address.status, 'unchanged');
+    assert.equal(identical.preview.hasFieldChanges, false);
+    assert.deepEqual(identical.preview.publicProjectionChanges, []);
+
+    const mixed = await preview({ ...poi(), label: { '@fr': 'Autre concert fictif' } });
+    assert.equal(mixed.preview.fields.title.status, 'modified');
+    assert.equal(mixed.preview.fields.address.status, 'unavailable');
+    assert.equal(mixed.preview.hasFieldChanges, true);
+    assert.ok(mixed.preview.publicProjectionChanges.some(({ field, status }) =>
+      field === 'title' && status === 'modified'));
+    assert.ok(mixed.preview.publicProjectionChanges.some(({ field, status }) =>
+      field === 'address' && status === 'removed'));
+    assert.equal(store.writes.length, writes);
+    assert.equal(store.docs.get(sourcePath), beforeSource);
+    assert.equal(store.docs.get(publicPath), beforeProjection);
+    assert.equal(store.docs.get(sourcePath).publication.state, 'approved');
+    assert.equal(store.docs.get(DATATOURISME_PILOT_CONTROL_PATH).sourceCount, 1);
+  });
+
   it('imports a sparse commune-only draft but refuses its cartographic publication', async () => {
     const store = new FakeFirestore();
     const sparse = { ...poi(), hasDescription: [], hasBeenCreatedBy: {},
@@ -424,6 +554,20 @@ describe('inactive DATAtourisme transactions on local Firestore', {
   after(async () => {
     if (environment) await environment.cleanup();
     if (app) await deleteApp(app);
+  });
+
+  it('confirms omitted private map fields survive merge while omitted public fields disappear on replacement', async () => {
+    const sourceRef = db.doc(sourcePath);
+    const projectionRef = db.doc(publicPath);
+    await sourceRef.set({ location: { city: 'Vannes', address: '6 rue du Port, 56000' } });
+    await projectionRef.set({ city: 'Vannes', address: '6 rue du Port, 56000' });
+    await db.runTransaction(async (tx) => {
+      tx.set(sourceRef, { location: { city: 'Vannes' } }, { merge: true });
+      tx.set(projectionRef, { city: 'Vannes' });
+    });
+    assert.equal((await sourceRef.get()).data().location.address, '6 rue du Port, 56000');
+    assert.equal('address' in (await projectionRef.get()).data(), false);
+    assert.equal((await db.collection('events').get()).size, 0);
   });
 
   it('serializes competing imports on the control document at 99', async () => {

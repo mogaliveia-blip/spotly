@@ -60,7 +60,9 @@ describe('inactive owner DATAtourisme command boundary', () => {
       { code: 'unauthenticated' });
     await assert.rejects(executeOwnerDatatourismeDetailCommand(db, 'owner-1', detailCommand, key, fetcher, now),
       { code: 'permission-denied' });
-    assert.deepEqual(reads, ['users/owner-1']);
+    await assert.rejects(executeOwnerDatatourismeDetailCommand(db, 'owner-1',
+      { ...detailCommand, action: 'sync' }, key, fetcher, now), { code: 'permission-denied' });
+    assert.deepEqual(reads, ['users/owner-1', 'users/owner-1']);
     assert.deepEqual([keyCalls, fetchCalls], [0, 0]);
   });
 
@@ -278,6 +280,34 @@ describe('prepared handlers against local Firestore', { skip: !process.env.FIRES
     assert.equal((await db.doc(publicPath).get()).exists, false);
     assert.equal((await db.doc(sourcePath).get()).data().editorial.editorialType, 'Concert édité');
     assert.equal((await db.collection('events').get()).size, 0);
+  });
+
+  it('previews one approved source against Firestore without changing its documents', async () => {
+    await detail({ ...detailCommand, mode: 'apply' });
+    await handleDatatourismePublication(request({ ...publicationCommand, mode: 'apply' }), guardedDb, now);
+    const beforeSource = await db.doc(sourcePath).get();
+    const beforeProjection = await db.doc(publicPath).get();
+    const beforeCounter = await db.doc('datatourisme_control/bretagne_pilot').get();
+    const changed = { ...poi(), lastUpdate: '2026-10-22T12:00:00Z',
+      isLocatedAt: [{ label: { '@fr': 'Salle fictive' }, address: [{
+        hasAddressCity: { label: { '@fr': 'Vannes' }, isPartOfDepartment: { insee: '56' } },
+        streetAddress: '6 rue du Port', postalCode: '56000',
+      }], geo: { latitude: 47.657, longitude: -2.76 } }],
+    };
+    const result = await handleDatatourismeImportOrSync(request({
+      action: 'sync', uuid, department: '56', mode: 'dry-run',
+    }), guardedDb, () => 'simulated-key', async () => Response.json(changed), now);
+    assert.equal(result.status, 'would_apply');
+    assert.equal(result.preview.publicationState, 'approved');
+    assert.equal(result.preview.fields.venueName.proposed, 'Salle fictive');
+    assert.equal(result.preview.fields.address.proposed, '6 rue du Port, 56000');
+    assert.equal(result.preview.fields.sourceUpdatedAt.proposed, '2026-10-22T12:00:00.000Z');
+    assert.equal((await db.doc(sourcePath).get()).updateTime.isEqual(beforeSource.updateTime), true);
+    assert.equal((await db.doc(publicPath).get()).updateTime.isEqual(beforeProjection.updateTime), true);
+    assert.equal((await db.doc('datatourisme_control/bretagne_pilot').get()).updateTime.isEqual(beforeCounter.updateTime), true);
+    assert.equal((await db.doc(sourcePath).get()).data().publication.state, 'approved');
+    assert.equal((await db.collection('events').get()).size, 0);
+    assert.ok(accessed.every((path) => !path.startsWith('events/')));
   });
 
   it('refuses a foreign projection without changing either document', async () => {

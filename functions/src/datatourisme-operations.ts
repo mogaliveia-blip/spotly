@@ -8,16 +8,37 @@ import {
 } from './datatourisme-external';
 import type { ExternalEvent, PrepareInput } from './datatourisme-external';
 import { buildDatatourismeDiscoveryProjection } from './datatourisme-discovery-projection';
+import { normalizeSourceUpdatedAt } from './datatourisme-source-date';
 import { calendarDayInTimezone } from './event-time';
 
 export const DATATOURISME_PILOT_CONTROL_PATH = 'datatourisme_control/bretagne_pilot';
 export const DATATOURISME_PILOT_LIMIT = 100;
 export type OperationMode = 'dry-run' | 'apply';
 export type OperationChanges = { create: boolean; update: boolean; publish: boolean; withdraw: boolean };
+export type SyncPreviewField = {
+  current: string | null; proposed: string | null;
+  status: 'new' | 'modified' | 'unchanged' | 'unavailable';
+};
+export type SyncPreview = {
+  sourceId: string; publicationState: ExternalEvent['publication']['state'];
+  fields: {
+    title: SyncPreviewField; venueName: SyncPreviewField; address: SyncPreviewField;
+    city: SyncPreviewField; department: SyncPreviewField;
+    producer: SyncPreviewField; sourceUpdatedAt: SyncPreviewField;
+  };
+  hasFieldChanges: boolean;
+  privateFieldsCleared: Array<'producer' | 'sourceUpdatedAt'>;
+  publicProjectionChanges: Array<{
+    field: 'title' | 'venueName' | 'address' | 'city' | 'department' | 'producer' | 'sourceUpdatedAt';
+    current: string | null; proposed: string | null;
+    status: 'new' | 'modified' | 'removed';
+  }>;
+};
 export type OperationResult = {
   status: 'would_apply' | 'applied' | 'unchanged' | 'deferred' | 'purge_candidate';
   reason: string;
   changes: OperationChanges;
+  preview?: SyncPreview;
 };
 export type OperationSummary = {
   examined: number; creations: number; updates: number; publications: number;
@@ -54,6 +75,48 @@ function linkedProjection(source: ExternalEvent | null, projectionExists: boolea
 function sourceChanged(previous: ExternalEvent, next: ExternalEvent): boolean {
   return !isDeepStrictEqual(Object.fromEntries(Object.keys(next).map((key) =>
     [key, (previous as unknown as Record<string, unknown>)[key]])), next);
+}
+function previewField(current: string | null | undefined, proposed: string | null | undefined): SyncPreviewField {
+  const before = current ?? null;
+  const after = proposed ?? null;
+  return { current: before, proposed: after, status: after === null ? 'unavailable' :
+    before === null ? 'new' : before === after ? 'unchanged' : 'modified' };
+}
+function syncPreview(existing: ExternalEvent, next: ExternalEvent, publicData: unknown,
+  nextProjection: ReturnType<typeof buildDatatourismeDiscoveryProjection>): SyncPreview {
+  const fields = {
+    title: previewField(existing.editorial.title, next.editorial.title),
+    venueName: previewField(existing.location.venueName, next.location.venueName),
+    address: previewField(existing.location.address, next.location.address),
+    city: previewField(existing.location.city, next.location.city),
+    department: previewField(existing.location.department, next.location.department),
+    producer: previewField(existing.attribution.producer, next.attribution.producer),
+    sourceUpdatedAt: previewField(normalizeSourceUpdatedAt(existing.sync.sourceUpdatedAt),
+      normalizeSourceUpdatedAt(next.sync.sourceUpdatedAt)),
+  };
+  const publicProjectionChanges: SyncPreview['publicProjectionChanges'] = [];
+  if (nextProjection && publicData && typeof publicData === 'object' && !Array.isArray(publicData)) {
+    const currentProjection = publicData as Record<string, unknown>;
+    for (const field of ['title', 'venueName', 'address', 'city', 'department', 'producer', 'sourceUpdatedAt'] as const) {
+      const attribution = currentProjection.attribution;
+      const rawCurrent = field === 'producer'
+        ? attribution && typeof attribution === 'object' && !Array.isArray(attribution)
+          ? (attribution as Record<string, unknown>).producer : undefined
+        : currentProjection[field];
+      const rawProposed = field === 'producer' ? nextProjection.data.attribution.producer : nextProjection.data[field];
+      const current = field === 'sourceUpdatedAt' ? normalizeSourceUpdatedAt(rawCurrent) :
+        typeof rawCurrent === 'string' ? rawCurrent.trim() || null : null;
+      const proposed = field === 'sourceUpdatedAt' ? normalizeSourceUpdatedAt(rawProposed) :
+        typeof rawProposed === 'string' ? rawProposed.trim() || null : null;
+      if (current !== proposed) publicProjectionChanges.push({ field, current, proposed,
+        status: proposed === null ? 'removed' : current === null ? 'new' : 'modified' });
+    }
+  }
+  return { sourceId: existing.id, publicationState: existing.publication.state, fields,
+    hasFieldChanges: Object.values(fields).some((field) => field.status === 'new' || field.status === 'modified'),
+    privateFieldsCleared: (['producer', 'sourceUpdatedAt'] as const).filter((field) =>
+      fields[field].current !== null && fields[field].proposed === null),
+    publicProjectionChanges };
 }
 function writeSource(tx: Transaction, reference: ReturnType<Firestore['doc']>, source: ExternalEvent): void {
   // Merge preserves unrelated private fields; every contract field in source is explicit.
@@ -123,7 +186,12 @@ export async function importOrSyncExternalTransaction(firestore: Firestore, inpu
     const create = !existing;
     const update = !!existing && sourceChanged(existing, next);
     const refresh = !!nextProjection && !isDeepStrictEqual(publicSnap.data(), nextProjection.data);
-    if (!create && !update && !refresh) return unchanged('NO_USEFUL_CHANGE');
+    const preview = input.intent === 'sync' && input.mode === 'dry-run' && existing
+      ? syncPreview(existing, next, publicSnap.data(), nextProjection) : undefined;
+    if (!create && !update && !refresh) {
+      const result = unchanged('NO_USEFUL_CHANGE');
+      return preview ? { ...result, preview } : result;
+    }
     if (input.mode === 'apply') {
       if (create) {
         tx.create(sourceRef, next);
@@ -131,8 +199,9 @@ export async function importOrSyncExternalTransaction(firestore: Firestore, inpu
       } else if (update) writeSource(tx, sourceRef, next);
       if (refresh && nextProjection) tx.set(publicRef, nextProjection.data);
     }
-    return changed(input.mode, create ? 'SOURCE_CREATED' : 'SOURCE_SYNCHRONIZED',
+    const result = changed(input.mode, create ? 'SOURCE_CREATED' : 'SOURCE_SYNCHRONIZED',
       { create, update, publish: refresh });
+    return preview ? { ...result, preview } : result;
   });
 }
 
