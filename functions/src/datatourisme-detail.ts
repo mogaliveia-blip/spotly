@@ -4,7 +4,7 @@ import { pilotTemporalIssue } from './datatourisme-periods';
 const API_ORIGIN = 'https://api.datatourisme.fr';
 const DETAIL_FIELDS = [
   'uuid', 'uri', 'label', 'type', 'hasTheme', 'takesPlaceAt',
-  'isLocatedAt.address', 'isLocatedAt.geo', 'hasDescription',
+  'isLocatedAt.label', 'isLocatedAt.address', 'isLocatedAt.geo', 'hasDescription',
   'hasBeenCreatedBy.legalName', 'hasBeenCreatedBy.identifier',
   'hasBeenPublishedBy.legalName', 'hasBeenPublishedBy.identifier',
   'lastUpdate', 'lastUpdateDatatourisme',

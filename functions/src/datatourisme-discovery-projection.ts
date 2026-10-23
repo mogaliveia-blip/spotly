@@ -10,6 +10,7 @@ type PublicExternalProjection = {
   contentType: 'event'; origin: 'datatourisme'; sourceId: string;
   title: string; description: string; editorialType: string | null;
   city: string; department: string; positionPrecision: 'source_coordinates';
+  venueName?: string; address?: string; sourceUpdatedAt?: string;
   attribution: { source: 'DATAtourisme'; producer: string | null; publisher: string | null };
   sourceUrl: string | null;
   position: { lat: number; lng: number }; geohash: string;
@@ -74,6 +75,9 @@ export function buildDatatourismeDiscoveryProjection(source: unknown, now: Date)
     data.endDay = period.endDay!;
     if (period.startTime) data.startTime = period.startTime;
   }
+  if (source.location.venueName) data.venueName = source.location.venueName;
+  if (source.location.address) data.address = source.location.address;
+  if (source.sync.sourceUpdatedAt) data.sourceUpdatedAt = source.sync.sourceUpdatedAt;
   // The same allowlist also validates the payload that search and detail may disclose.
   externalProjectionResultDto(id, data as unknown as Record<string, unknown>);
   return { id, data };

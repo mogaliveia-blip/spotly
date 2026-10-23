@@ -4,11 +4,13 @@ import external from '../functions/lib/datatourisme-external.js';
 import projection from '../functions/lib/datatourisme-discovery-projection.js';
 import search from '../functions/lib/discovery-search.js';
 import time from '../functions/lib/discovery-time.js';
+import contract from '../functions/lib/discovery-search-contract.js';
 
 const { prepareDatatourismeCandidate } = external;
 const { buildDatatourismeDiscoveryProjection } = projection;
 const { projectionResultDto, executeDiscoverySearch } = search;
 const { externalOccurrenceFinished } = time;
+const { isDiscoveryResultDto } = contract;
 const uuid = '11111111-2222-3333-4444-555555555555';
 const now = new Date('2026-10-22T12:00:00.000Z');
 const poi = (periods = [{ startDate: '2026-10-25', endDate: '2026-10-25' }]) => ({
@@ -52,12 +54,28 @@ describe('pure external Discovery projection', () => {
     const dto = projectionResultDto(built);
     assert.equal(dto.origin, 'datatourisme');
     assert.equal(dto.slug, undefined);
+    assert.equal(dto.venueName, undefined);
+    assert.equal(dto.address, undefined);
+    assert.equal(dto.sourceUpdatedAt, undefined);
     const found = await executeDiscoverySearch(request('2026-10-25'), instant(now), [['a', 'z']],
       reader([built]));
     assert.deepEqual(found.results.map((result) => result.id), [built.id]);
     const between = await executeDiscoverySearch(request('2026-10-26'), instant(now), [['a', 'z']],
       reader([built]));
     assert.equal(between.results.length, 0);
+  });
+
+  it('passes optional source venue, address and producer update through the public allowlist', () => {
+    const base = approvedSource();
+    const source = { ...base, location: { ...base.location, venueName: 'Salle du port', address: '6 rue du Port, 56000' },
+      sync: { ...base.sync, sourceUpdatedAt: '2026-10-20T10:00:00.000Z' } };
+    const built = buildDatatourismeDiscoveryProjection(source, now);
+    assert.ok(built);
+    const dto = projectionResultDto(built);
+    assert.equal(dto.venueName, 'Salle du port');
+    assert.equal(dto.address, '6 rue du Port, 56000');
+    assert.equal(dto.sourceUpdatedAt, '2026-10-20T10:00:00.000Z');
+    assert.equal('sync' in dto, false);
   });
 
   it('excludes disjoint sessions and uncertain sources instead of making a continuous interval', () => {
@@ -137,6 +155,7 @@ describe('pure external Discovery projection', () => {
     assert.equal(native.id, 'event_source');
     assert.equal(native.slug, 'event-natif');
     assert.equal(native.origin, undefined);
+    assert.equal(isDiscoveryResultDto({ ...native, venueName: 'Lieu externe' }), false);
   });
 
   it('omits a non-HTTPS source link and never copies private source metadata', () => {

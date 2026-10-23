@@ -7,22 +7,10 @@ import { doc, getDocFromServer } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { discoveryCategories } from '@/lib/event-discovery';
 import { discoveryDatatourismeHref } from '@/lib/discovery-return';
+import { datatourismePeriodLabel, datatourismeSourceUpdatedLabel } from '@/lib/datatourisme-display';
 import { externalProjectionResultDto } from '../../../../../functions/src/discovery-search-contract';
 import { externalOccurrenceFinished } from '../../../../../functions/src/discovery-time';
 import type { ExternalDiscoveryResultDto } from '../../../../../functions/src/discovery-search-contract';
-
-function periodLabel(event: ExternalDiscoveryResultDto): string {
-  if (event.timePrecision === 'date') {
-    const day = event.startDay === event.endDay ? event.startDay : `${event.startDay} – ${event.endDay}`;
-    return `${day}${event.startTime ? ` · début ${event.startTime}, fin horaire inconnue` : ''}`;
-  }
-  const format = new Intl.DateTimeFormat('fr-FR', {
-    dateStyle: 'long', timeStyle: 'short', timeZone: event.timezone,
-  });
-  const start = new Date(event.windowStartAt.seconds * 1000);
-  const end = new Date(event.windowEndAt.seconds * 1000);
-  return `${format.format(start)} – ${format.format(end)}`;
-}
 
 /** Reads only the public projection; no private DATAtourisme source or native Event document. */
 export default function DatatourismeDiscoveryDetail() {
@@ -74,11 +62,17 @@ export default function DatatourismeDiscoveryDetail() {
       <p className="text-sm font-medium text-teal-800">Événement externe · DATAtourisme</p>
       <h1 className="text-3xl font-bold">{event.title}</h1>
       <p>{category?.label ?? 'Autre'}{event.editorialType ? ` · ${event.editorialType}` : ''}</p>
-      <p>{periodLabel(event)} · {event.timezone}</p>
-      <p>{event.city} ({event.department}) · Coordonnées fournies par la source</p>
-      {event.description && <p className="whitespace-pre-line">{event.description}</p>}
-      <p className="text-sm">Source : DATAtourisme{event.attribution.producer ? ` · Producteur : ${event.attribution.producer}` : ''}
-        {event.attribution.publisher ? ` · Éditeur : ${event.attribution.publisher}` : ''}</p>
+      <p>{datatourismePeriodLabel(event)}</p>
+      <section aria-label="Lieu" className="rounded-xl border bg-card p-4">
+        <h2 className="font-semibold">Lieu</h2>
+        {event.venueName && <p className="mt-2">{event.venueName}</p>}
+        {event.address && <p>Adresse indiquée par DATAtourisme : {event.address}</p>}
+        <p>{event.city} ({event.department})</p>
+      </section>
+      {event.description && <p className="whitespace-pre-line leading-relaxed">{event.description}</p>}
+      <p className="text-sm text-muted-foreground">Source : DATAtourisme{event.attribution.producer ? ` · Producteur : ${event.attribution.producer}` : ''}
+        {event.attribution.publisher ? ` · Éditeur : ${event.attribution.publisher}` : ''}
+        {event.sourceUpdatedAt ? ` · Donnée mise à jour le ${datatourismeSourceUpdatedLabel(event.sourceUpdatedAt)}` : ''}</p>
       {event.sourceUrl && <a href={event.sourceUrl} target="_blank" rel="noopener noreferrer"
         className="inline-block text-sm font-medium text-primary underline">Voir la fiche source</a>}
     </article>}

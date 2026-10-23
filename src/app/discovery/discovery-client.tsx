@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useGeolocation } from '@/providers/geolocation-provider';
 import { mapsConfig } from '@/lib/firebase-config';
+import { datatourismePeriodLabel, datatourismeSourceUpdatedLabel } from '@/lib/datatourisme-display';
 import { searchDiscovery } from '@/lib/discovery-search';
 import { createDiscoveryReturnToken, discoveryDatatourismeHref, discoveryEventHref, discoveryReturnIntent, DISCOVERY_RETURN_SESSION_KEY } from '@/lib/discovery-return';
 import {
@@ -126,25 +127,21 @@ function DatatourismeResult({ result, selected, onSelect }: {
   const category = discoveryCategories.find((item) => item.id === result.categoryId);
   const appearance = category ? categoryAppearance[category.id] : unknownCategoryAppearance;
   const ended = externalOccurrenceFinished(result, new Date());
-  const date = result.timePrecision === 'date'
-    ? `${result.startDay === result.endDay ? result.startDay : `${result.startDay} – ${result.endDay}`}${result.startTime ? ` · début ${result.startTime}, fin horaire inconnue` : ''}`
-    : (() => {
-      const format = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short', timeZone: result.timezone });
-      return `${format.format(result.windowStartAt.toDate())} – ${format.format(result.windowEndAt.toDate())}`;
-    })();
-  return <article className={`flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-l-4 bg-card shadow-sm ${appearance.border} ${selected ? 'border-primary ring-2 ring-primary' : 'border-border'}`}>
+  const date = datatourismePeriodLabel(result);
+  return <article id={`discovery-result-${result.id}`} tabIndex={-1}
+    className={`flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-l-4 bg-card shadow-sm ${appearance.border} ${selected ? 'border-primary ring-2 ring-primary' : 'border-border'}`}>
     <button type="button" onClick={onSelect} className="w-full min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       aria-label={`Localiser ${result.title} sur la carte`}>
       <div className={`flex h-20 items-center justify-center ${appearance.image}`}><CalendarDays aria-hidden="true" className="h-9 w-9" /></div>
       <div className="space-y-2 p-3">
-        <span className="inline-flex rounded-full bg-teal-100 px-2.5 py-1 text-xs font-semibold text-teal-950">Événement DATAtourisme</span>
         {ended && <span className="ml-2 inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-950">Occurrence terminée</span>}
         <div><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${appearance.badge}`}>{category?.label ?? 'Autre'}</span></div>
         <h3 className="break-words font-semibold leading-snug">{result.title}</h3>
         {result.editorialType && <p className="text-sm font-medium">{result.editorialType}</p>}
         <p className="text-sm">{date} · {result.city} ({result.department})</p>
         {result.description && <p className="line-clamp-3 text-sm text-muted-foreground">{result.description}</p>}
-        <p className="text-xs text-muted-foreground">Source : DATAtourisme{result.attribution.producer ? ` · Producteur : ${result.attribution.producer}` : ''}</p>
+        <p className="text-xs text-muted-foreground">Source : DATAtourisme{result.attribution.producer ? ` · Producteur : ${result.attribution.producer}` : ''}
+          {result.sourceUpdatedAt ? ` · Donnée mise à jour le ${datatourismeSourceUpdatedLabel(result.sourceUpdatedAt)}` : ''}</p>
         <span className="inline-flex items-center gap-1 text-sm font-medium text-teal-800 underline-offset-2 hover:underline dark:text-teal-300">
           <MapPin aria-hidden="true" className="h-4 w-4" /> Localiser sur la carte
         </span>
@@ -223,6 +220,7 @@ export function DiscoveryClient() {
   const [completedQuery, setCompletedQuery] = useState<DisplaySearchContext | null>(null);
   const [visibleCount, setVisibleCount] = useState(20);
   const [resultsOpen, setResultsOpen] = useState(true);
+  const [resultToReveal, setResultToReveal] = useState<string | null>(null);
   const [selectedClusterIds, setSelectedClusterIds] = useState<string[]>([]);
   const requestSequenceRef = useRef(0);
   const demoOfflineRef = useRef(false);
@@ -253,6 +251,7 @@ export function DiscoveryClient() {
     selectedCategory: DiscoveryCategorySelection = categoryRef.current,
   ) => {
     const sequence = ++requestSequenceRef.current;
+    setResultToReveal(null);
     dispatchSearch({ type: 'start' });
     try {
       const response: DiscoverySearchResult = demoOfflineRef.current
@@ -433,7 +432,22 @@ export function DiscoveryClient() {
   };
 
   const results = displayDiscoveryEvents(searchResult, completedQuery, demoEvents, demoEnabled, parisDay());
+  useEffect(() => {
+    if (!resultToReveal || !resultsOpen) return;
+    const target = document.getElementById(`discovery-result-${resultToReveal}`);
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+    setResultToReveal(null);
+  }, [resultToReveal, resultsOpen, visibleCount]);
   const selectedResult = results.find((result) => result.id === selectedId) ?? null;
+  const revealDatatourismeResult = (id: string) => {
+    const index = results.findIndex((result) => result.id === id && result.origin === 'datatourisme');
+    if (index < 0) return;
+    setVisibleCount((count) => Math.max(count, index + 1));
+    setResultsOpen(true);
+    setResultToReveal(id);
+  };
   const selectedCluster = selectedClusterIds.map((id) => results.find((result) => result.id === id))
     .filter((result): result is DiscoveryDisplayEvent => !!result);
   const selectedDate = when.kind === 'date' ? calendarDate(when.day) : undefined;
@@ -584,7 +598,8 @@ export function DiscoveryClient() {
                   onContextMenu={() => recordEventOpen(selectedResult.native.slug)}
                   className="mt-2 inline-block text-sm font-medium text-primary underline">Découvrir l’événement</Link>
                   : selectedResult.origin === 'datatourisme'
-                    ? <Link href={discoveryDatatourismeHref(selectedResult.id)} className="mt-2 inline-block text-sm font-medium text-teal-800 underline">Voir le détail DATAtourisme</Link>
+                    ? <button type="button" onClick={() => revealDatatourismeResult(selectedResult.id)}
+                        className="mt-2 inline-block text-sm font-medium text-teal-800 underline">Voir dans les résultats</button>
                     : <p className="mt-1 text-xs text-muted-foreground">Donnée fictive · {selectedResult.city} · {positionLabel(selectedResult.positionPrecision)}</p>}
               </div>
             )}
@@ -594,7 +609,7 @@ export function DiscoveryClient() {
               <p className="text-xs text-muted-foreground">{selectedCluster.filter((item) => item.origin === 'external_demo' && item.positionPrecision !== 'source_gps').length} positions estimées ou approximatives.</p>
               <ul className="mt-2 space-y-1">{selectedCluster.map((item) => <li key={item.id}>
                 <button type="button" className="w-full rounded p-1 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => selectResult(item)}>{item.title}{item.origin === 'external_demo' ? ' · fictif' : item.origin === 'datatourisme' ? ' · DATAtourisme' : ''}</button>
+                  onClick={() => selectResult(item)}>{item.title}{item.origin === 'external_demo' ? ' · fictif' : ''}</button>
               </li>)}</ul>
             </div>}
           </section>

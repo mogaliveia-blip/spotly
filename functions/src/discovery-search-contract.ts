@@ -2,6 +2,7 @@ import { discoveryCategories, discoveryTags, eventDiscoveryTypes, isCatalogId, i
 import type { DiscoveryCategoryId, DiscoveryTagId, EventDiscoveryTypeId } from './event-discovery';
 import { isCalendarRange, isIanaTimezone } from './event-time';
 import { isEventName, isEventSlug } from './event-public-identity';
+import { isCanonicalSourceUpdatedAt } from './datatourisme-source-date';
 
 /** JSON transport only: neither runtime relies on an SDK instance crossing the callable. */
 export type TimestampDto = { seconds: number; nanoseconds: number };
@@ -30,6 +31,7 @@ export type NativeDiscoveryResultDto = DiscoveryResultBase & { origin?: 'native'
 export type ExternalDiscoveryResultDto = DiscoveryResultBase & {
   origin: 'datatourisme'; description: string; editorialType: string | null; startTime?: string;
   city: string; department: string; positionPrecision: 'source_coordinates';
+  venueName?: string; address?: string; sourceUpdatedAt?: string;
   attribution: { source: 'DATAtourisme'; producer: string | null; publisher: string | null };
   sourceUrl: string | null;
 } & DiscoveryResultTime;
@@ -93,6 +95,7 @@ export function isDiscoveryResultDto(value: unknown): value is DiscoveryResultDt
     'id', 'contentType', 'origin', 'sourceId', 'title', 'slug', 'description', 'editorialType',
     'city', 'department', 'positionPrecision', 'attribution', 'sourceUrl', 'position', 'typeId', 'categoryId', 'tags',
     'timePrecision', 'timezone', 'windowStartAt', 'windowEndAt', 'startDay', 'endDay', 'startTime', 'thumbnail', 'distanceMeters',
+    'venueName', 'address', 'sourceUpdatedAt',
   ])) return false;
   if (value.contentType !== 'event' || typeof value.sourceId !== 'string' || !value.sourceId ||
       value.sourceId.includes('/') || !isEventName(value.title) || !isDiscoveryPosition(value.position) ||
@@ -117,9 +120,13 @@ export function isDiscoveryResultDto(value: unknown): value is DiscoveryResultDt
         !(value.attribution.publisher === null || (typeof value.attribution.publisher === 'string' &&
           !!value.attribution.publisher.trim() && value.attribution.publisher.length <= 200)) ||
         !(value.sourceUrl === null || isSafeExternalSourceUrl(value.sourceUrl))) return false;
+    if (!(value.venueName === undefined || typeof value.venueName === 'string' && !!value.venueName.trim() && value.venueName.length <= 120) ||
+        !(value.address === undefined || typeof value.address === 'string' && !!value.address.trim() && value.address.length <= 220) ||
+        !(value.sourceUpdatedAt === undefined || isCanonicalSourceUpdatedAt(value.sourceUpdatedAt))) return false;
   } else if ((value.origin !== undefined && value.origin !== 'native') ||
       value.id !== `event_${value.sourceId}` || !isEventSlug(value.slug) ||
-      ['description', 'editorialType', 'city', 'department', 'positionPrecision', 'attribution', 'sourceUrl', 'startTime']
+      ['description', 'editorialType', 'city', 'department', 'positionPrecision', 'attribution', 'sourceUrl', 'startTime',
+        'venueName', 'address', 'sourceUpdatedAt']
         .some((key) => key in value)) return false;
   if (value.tags !== undefined && (!Array.isArray(value.tags) || value.tags.length > discoveryTags.length ||
       new Set(value.tags).size !== value.tags.length || !value.tags.every((tag) => isCatalogId(discoveryTags, tag)))) return false;
@@ -160,6 +167,9 @@ export function externalProjectionResultDto(id: string, source: Record<string, u
     value.endDay = source.endDay;
     if (source.startTime !== undefined) value.startTime = source.startTime;
   }
+  if (source.venueName !== undefined) value.venueName = source.venueName;
+  if (source.address !== undefined) value.address = source.address;
+  if (source.sourceUpdatedAt !== undefined) value.sourceUpdatedAt = source.sourceUpdatedAt;
   if (source.tags !== undefined) value.tags = source.tags;
   if (source.thumbnail !== undefined) value.thumbnail = source.thumbnail;
   if (!isDiscoveryResultDto(value) || value.origin !== 'datatourisme') throw new Error('INVALID_DISCOVERY_PROJECTION');

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { classifyDatatourisme } from './datatourisme-classification';
 import { canonicalDatatourismeUuid } from './datatourisme-detail';
+import { isCanonicalSourceUpdatedAt, normalizeSourceUpdatedAt } from './datatourisme-source-date';
 import { assessDatatourismePeriods, definitiveExpirationAt, normalizeDatatourismePeriods, pilotTemporalIssue } from './datatourisme-periods';
 import type { NormalizedExternalPeriod } from './datatourisme-periods';
 import { discoveryCategories, isCatalogId, isDiscoveryPosition } from './event-discovery';
@@ -23,7 +24,7 @@ export type ExternalEvent = {
     sourceTypes: Term[]; sourceThemes: Term[];
   };
   location: { city: string; department: Department; position: { lat: number; lng: number } | null;
-    precision: 'source_coordinates' | 'commune_only' };
+    precision: 'source_coordinates' | 'commune_only'; venueName?: string; address?: string };
   timezone: string;
   periods: NormalizedExternalPeriod[];
   completeness: 'complete' | 'incomplete';
@@ -127,7 +128,9 @@ export function isExternalEvent(value: unknown): value is ExternalEvent {
       !['complete', 'incomplete'].includes(String(event.completeness)) ||
       !['complete', 'incomplete', 'error'].includes(String(record(event.sync).state)) ||
       !(record(event.sync).lastSuccessfulAt === null || validIso(record(event.sync).lastSuccessfulAt)) ||
-      !(record(event.sync).sourceUpdatedAt === null || validIso(record(event.sync).sourceUpdatedAt)) ||
+      !(record(event.sync).sourceUpdatedAt === null || isCanonicalSourceUpdatedAt(record(event.sync).sourceUpdatedAt)) ||
+      !(record(event.location).venueName === undefined || short(record(event.location).venueName, 120) === record(event.location).venueName) ||
+      !(record(event.location).address === undefined || short(record(event.location).address, 220) === record(event.location).address) ||
       !['draft', 'approved', 'hidden'].includes(String(record(event.publication).state)) ||
       !Array.isArray(event.projectionIds) || event.projectionIds.length > 1 ||
       !event.projectionIds.every((id) => id === `datatourisme_${event.id}`) ||
@@ -198,6 +201,15 @@ export function prepareDatatourismeCandidate(input: PrepareInput): PreparedCandi
   const address = addresses.find((item) => departmentOf(item) === input.expectedDepartment) ?? record(first(place.address));
   const city = localized(record(address.hasAddressCity).label) ?? short(address.addressLocality);
   const department = departmentOf(address);
+  const uniqueLocation = places.length === 1 && addresses.length === 1 && department === input.expectedDepartment;
+  const postalCode = uniqueLocation ? short(address.postalCode, 10) : null;
+  const postalCoherent = address.postalCode == null || address.postalCode === '' ||
+    postalCode !== null && /^\d{5}$/.test(postalCode) && postalCode.startsWith(input.expectedDepartment);
+  const rawVenueName = uniqueLocation ? localized(place.label) : null;
+  const venueName = postalCoherent && rawVenueName && rawVenueName.length <= 120 ? rawVenueName : null;
+  const rawStreet = uniqueLocation ? short(address.streetAddress, 300) : null;
+  const street = postalCoherent && rawStreet && rawStreet.length <= 200 ? rawStreet : null;
+  const addressLine = street ? `${street}${postalCode && /^\d{5}$/.test(postalCode) ? `, ${postalCode}` : ''}` : null;
   const geo = record(place.geo);
   const hasCoordinates = geo.latitude != null || geo.longitude != null;
   const coordinates = { lat: geo.latitude, lng: geo.longitude };
@@ -223,9 +235,10 @@ export function prepareDatatourismeCandidate(input: PrepareInput): PreparedCandi
       categoryMode: manual ? 'manual' : 'automatic', sourceTypes: types, sourceThemes: themes,
     },
     location: { city, department: department as Department, position,
-      precision: position ? 'source_coordinates' : 'commune_only' },
+      precision: position ? 'source_coordinates' : 'commune_only',
+      ...(venueName ? { venueName } : {}), ...(addressLine ? { address: addressLine } : {}) },
     timezone: input.timezone, periods: normalized, completeness: 'complete',
-    sync: { state: 'complete', lastSuccessfulAt: input.now.toISOString(), sourceUpdatedAt: validIso(poi.lastUpdate) ? poi.lastUpdate : null },
+    sync: { state: 'complete', lastSuccessfulAt: input.now.toISOString(), sourceUpdatedAt: normalizeSourceUpdatedAt(poi.lastUpdate) },
     publication: { state: 'draft' }, projectionIds: [],
     expiresAt: definitiveExpirationAt(normalized, input.timezone),
   };

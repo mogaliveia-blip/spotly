@@ -24,6 +24,7 @@ describe('inactive DATAtourisme detail adapter', () => {
       assert.equal(url.searchParams.get('lang'), 'fr,en');
       assert.match(url.searchParams.get('fields'), /takesPlaceAt/);
       assert.match(url.searchParams.get('fields'), /hasDescription/);
+      assert.match(url.searchParams.get('fields'), /isLocatedAt\.label/);
       assert.equal(url.href.includes('top-secret'), false);
       assert.equal(options.headers['X-API-Key'], 'top-secret');
       assert.equal(options.redirect, 'error');

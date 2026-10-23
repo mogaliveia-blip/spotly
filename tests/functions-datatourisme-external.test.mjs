@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import external from '../functions/lib/datatourisme-external.js';
+import sourceDate from '../functions/lib/datatourisme-source-date.js';
 
 const { externalEventId, externalEventPath, matchesExternalIdentity, isExternalEvent,
   prepareDatatourismeCandidate, reconcileExternalCandidate, decideExternalCleanup } = external;
+const { normalizeSourceUpdatedAt } = sourceDate;
 const uuid = '11111111-2222-3333-4444-555555555555';
 const at = (value) => new Date(value);
 const now = at('2026-10-22T12:00:00Z');
@@ -73,6 +75,57 @@ describe('private DATAtourisme source candidate', () => {
     assert.equal(isExternalEvent(candidate.event), true);
     assert.equal(prepare({ ...source(), isLocatedAt: [{ ...place, geo: { latitude: null, longitude: null } }] }).kind, 'accepted');
     assert.ok(reasons(prepare({ ...source(), isLocatedAt: [{ ...place, geo: { latitude: 47.657 } }] })).includes('LOCATION_UNUSABLE'));
+  });
+
+  it('keeps only an unambiguous source venue and address', () => {
+    const place = { ...source().isLocatedAt[0], label: { '@fr': 'Salle du port' },
+      address: [{ ...source().isLocatedAt[0].address[0], streetAddress: '6 rue du Port', postalCode: '56000' }] };
+    const candidate = prepare({ ...source(), isLocatedAt: [place] });
+    assert.equal(candidate.kind, 'accepted');
+    assert.equal(candidate.event.location.venueName, 'Salle du port');
+    assert.equal(candidate.event.location.address, '6 rue du Port, 56000');
+    assert.equal(isExternalEvent(candidate.event), true);
+    const ambiguous = prepare({ ...source(), isLocatedAt: [place, place] });
+    assert.equal(ambiguous.kind, 'accepted');
+    assert.equal(ambiguous.event.location.venueName, undefined);
+    assert.equal(ambiguous.event.location.address, undefined);
+    assert.equal(prepare().event.location.venueName, undefined);
+  });
+
+  it('keeps a Breton postal address only when its code matches the department', () => {
+    const address = { hasAddressCity: { label: { '@fr': 'Pont-Croix' }, isPartOfDepartment: { insee: '29' } },
+      streetAddress: '6 rue de la Prison', postalCode: '29790' };
+    const place = { label: { '@fr': 'Librairie fictive' }, address: [address] };
+    const candidate = (postalCode) => prepare({ ...source(), isLocatedAt: [{ ...place,
+      address: [{ ...address, ...(postalCode === undefined ? { postalCode: undefined } : { postalCode }) }] }] },
+      { expectedDepartment: '29' });
+    const matching = candidate('29790');
+    assert.equal(matching.kind, 'accepted');
+    assert.equal(matching.event.location.address, '6 rue de la Prison, 29790');
+    assert.equal(matching.event.location.venueName, 'Librairie fictive');
+    const mismatched = candidate('75001');
+    assert.equal(mismatched.kind, 'accepted');
+    assert.deepEqual(mismatched.event.location, {
+      city: 'Pont-Croix', department: '29', position: null, precision: 'commune_only',
+    });
+    const missing = candidate(undefined);
+    assert.equal(missing.kind, 'accepted');
+    assert.equal(missing.event.location.address, '6 rue de la Prison');
+    assert.equal(missing.event.location.venueName, 'Librairie fictive');
+  });
+
+  it('normalizes only the producer LastUpdate, never the platform update date', () => {
+    assert.equal(normalizeSourceUpdatedAt('2026-10-20'), '2026-10-20');
+    assert.equal(normalizeSourceUpdatedAt('2026-10-20T10:00:00Z'), '2026-10-20T10:00:00.000Z');
+    assert.equal(normalizeSourceUpdatedAt('2026-10-20T12:00:00.123+02:00'), '2026-10-20T10:00:00.123Z');
+    for (const invalid of ['2026-02-30', '2026-10-20T10:00:00', '2026-10-20T25:00:00Z', 'yesterday']) {
+      assert.equal(normalizeSourceUpdatedAt(invalid), null);
+    }
+    const withDate = prepare({ ...source(), lastUpdate: '2026-10-20T10:00:00Z' });
+    assert.equal(withDate.event.sync.sourceUpdatedAt, '2026-10-20T10:00:00.000Z');
+    assert.equal(withDate.event.sync.lastSuccessfulAt, now.toISOString());
+    const platformOnly = prepare({ ...source(), lastUpdateDatatourisme: '2026-10-21T10:00:00Z' });
+    assert.equal(platformOnly.event.sync.sourceUpdatedAt, null);
   });
 
   it('keeps structured starting hours and exact bounded instants in private sources', () => {
